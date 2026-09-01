@@ -1,0 +1,56 @@
+schema_version: "1"
+stage_id: stage-v0.1.33-aliyun-20260830
+recorded_at: "2026-09-01T14:16:03+08:00"
+project: xingyunyi-agentpost
+stage_purpose: freeze_current_aliyun_production_before_task_centric_redesign
+
+production:
+  provider: aliyun
+  product: simple-application-server
+  public_origin: https://agentpost.me
+  package_version: 0.1.33
+  git_commit: 765ec5ac5dc800b7dc81f0049cb708b28ee973b6
+  alembic_revision: 0026_message_attachment_links
+  evidence_status: deployed_https_verified
+  production_accepted: false
+
+artifacts:
+  source_sha256: a3f2dce70a2331295f8da24298efb8c0310d0d1e1eb318018e3a1499b17daadf
+  connector_wheel_url: https://agentpost.me/downloads/agentpost-0.1.33-py3-none-any.whl
+  connector_wheel_sha256: e85ec3f0d1db321a91126e62475a669fcb1bca909667761316e29b66d231bcfb
+  workbench_bundle_sha256: 8c5bc38f4bd95817e5b946ffe0713c4f53644388cf30370edaf78298184ad926
+
+public_reverification_2026_09_01:
+  health: passed_version_0_1_33
+  ready: passed_version_0_1_33
+  auth_config_connector_release: passed_version_0_1_33
+  protocol_contract: passed_agentpost_agent_integration_0_1
+  connector_wheel_hash: passed_exact_match
+  unknown_wheel: passed_http_404
+  production_internal_inventory: not_reverified_this_run
+
+historical_deployment_evidence_2026_08_30:
+  immutable_release_path: /opt/agentpost/releases/765ec5a
+  pre_release_backup: /opt/agentpost/backups/20260830-085052-765ec5a-pre-033/
+  migration_rehearsal: 0025_to_0026_to_0025_to_0026_passed
+  switch_status: deploy_status_ok
+  postflight_status: postflight_status_ok
+  counts:
+    agents: 62
+    messages: 285
+    deliveries: 285
+    attachments: 27
+    humans: 16
+  caveat: historical_evidence_not_current_live_server_inventory
+
+protected_services:
+  - agentpost.service
+  - nginx
+  - postgresql
+  - private_attachment_storage
+
+next_stage:
+  direction: task_centric_multi_human_multi_agent_collaboration
+  github_exploration_commit: e881a14158a993b11ea2553aa3aae1de4e677776
+  exploration_status: fetched_not_merged_not_deployed
+  handoff_document: docs/星云驿阶段版本0.1.33交接与任务中心重构起点_20260901.md

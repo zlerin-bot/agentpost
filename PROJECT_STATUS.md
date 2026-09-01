@@ -1,8 +1,26 @@
 # 星云驿 Project Status
 
-Last updated: 2026-08-30
+Last updated: 2026-09-01
 
-Current handoff stage: `v0.1.33-multi-human-agent-loop-prototype-sent`; pinned production release: `0.1.33`
+Current handoff stage: `v0.1.33-aliyun-stage-frozen-before-task-centric-redesign`; pinned production release: `0.1.33`
+
+## Aliyun 0.1.33 stage freeze and task-centric redesign starting point (2026-09-01)
+
+The deployed production baseline is frozen at Git commit `765ec5a`, package `0.1.33`, and Alembic
+revision `0026_message_attachment_links`, with the recovery tag
+`stage-v0.1.33-aliyun-20260830`. Current public read-only checks confirm health/readiness 0.1.33,
+the public protocol contract, the exact published wheel digest, and 404 for an unknown wheel. The
+status remains `deployed_https_verified`, not `production_accepted`; server-internal counts, process
+identities, and backup paths were not re-read on 2026-09-01 and remain dated deployment evidence.
+
+The next product direction is task-centric: after registration, a Human connects one or more owned
+Agents and adds Human friends; a concrete Task then invites friends, and every participating Human
+chooses one or more of their own Agents to join. GitHub commit `e881a14` is an unmerged, undeployed
+Project/Friends exploration whose persistence and invitation work may be reused, but the Task model,
+owned-Agent selection, Thread/Event/Delivery relationship, real Agent wakeup, and mobile information
+architecture must be frozen before implementation. See
+`docs/星云驿阶段版本0.1.33交接与任务中心重构起点_20260901.md` and
+`docs/stages/agentpost-0.1.33-aliyun-stage.yaml`.
 
 ## Multi-Human, multi-Agent collaboration loop conclusion (prototype sent, 2026-08-30)
 
