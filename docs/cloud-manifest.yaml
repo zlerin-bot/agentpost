@@ -1,18 +1,7 @@
 schema_version: "1"
-project: xingyunyi-agentpost
-evidence_status: new_agent_naming_deployed_https_verified
-verified_at: "2026-08-28T09:13:00+08:00"
-
-local_stage:
-  prior_tag: v0.1.12-local.1
-  committed_svg_baseline: 43796a1
-  feature_commit: 7073a77
-  release_commit: 1bc986a
-  package_version: 0.1.23
-  production_change: true
-  validation_snapshot: clean_git_archive
-  evidence_status: new_agent_naming_deployed_https_verified
-  excludes_preserved_uncommitted_png_experiment: false
+project: agentpost
+evidence_status: deployed_https_verified
+verified_at: "2026-09-01T18:42:00+08:00"
 
 provider:
   name: aliyun
@@ -22,231 +11,39 @@ provider:
   operating_system: ubuntu-24.04
 
 release:
-  git_commit: 1bc986a
+  git_commit: 51a6bf4c0fbd85d45408e9dac3c6d1441e4f0b9b
+  package_version: 0.1.35
+  alembic_revision: 0027_tasks
   current_path: /opt/agentpost/current
-  immutable_path: /opt/agentpost/releases/1bc986a
-  virtualenv_path: /opt/agentpost/venvs/1bc986a
-  alembic_revision: 0024_human_default_agent
-  package_version: 0.1.23
-  connector_wheel_sha256: 031a144c2a1077e5b259611b325f192dc068f01a5ad6c409567fbcef962b20f0
-  schema_change: false
+  immutable_path: /opt/agentpost/releases/51a6bf4
+  virtualenv_path: /opt/agentpost/venvs/51a6bf4
+  connector_wheel_sha256: 7e80a6eea9bcc63111f4eb943811f2c3dbf4db4195b528888c757cce1040a2b8
+  schema_change_from_prior: false
 
 topology:
   reverse_proxy: nginx
-  application:
-    service: agentpost.service
-    listen: 127.0.0.1:8000
-  database:
-    engine: postgresql-16
-    listen: 127.0.0.1:5432
-    source_of_truth: true
-  attachments:
-    backend: private-local-filesystem
-    path: /var/lib/agentpost/attachments
-  public_ports:
-    - 22
-    - 80
-    - 443
-
-origin:
-  public_ipv4: 112.124.33.54
-  health_url: https://agentpost.me/health
-  ready_url: https://agentpost.me/ready
-  orbit_url: https://agentpost.me/orbit
-
-domain:
-  production_hostname: agentpost.me
-  icp: approved_verified_in_aliyun_console
-  dns: root_a_record_to_112.124.33.54_verified
-  https: letsencrypt_certificate_deployed
-  http_redirect: enabled
-  certificate:
-    subject_alt_names:
-      - agentpost.me
-    issuer: "Let's Encrypt YE1"
-    not_before: "2026-08-24T01:18:43Z"
-    not_after: "2026-11-22T01:18:42Z"
-    automatic_renewal_dry_run: passed
-
-feature_gates:
-  human_self_service: true
-  open_registration: true
-  pairing: true
-  remote_mcp_oauth: false
-  doubao_work_remote_mcp: false
-  enterprise_oidc: false
-  host_setup_platforms:
-    codex:
-      - mac
-      - linux
-      - windows
-    workbuddy:
-      - mac
-      - linux
-      - windows
-    openclaw:
-      - mac
-      - linux
-      - windows
-    hermes:
-      - mac
-      - linux
-      - windows
-    doubao_work:
-      - mac
-      - linux
-      - windows
-    manus:
-      - mac
-      - linux
-      - windows
-  reason: all_six_published_adapters_are_installable_on_mac_linux_windows_real_host_acceptance_is_tracked_separately
+  application_service: agentpost.service
+  application_listen: 127.0.0.1:8000
+  database_engine: postgresql-16
+  database_listen: 127.0.0.1:5432
+  attachment_path: /var/lib/agentpost/attachments
+  public_origin: https://agentpost.me
 
 rollback:
-  provider_snapshot:
-    id: s-bp15au6if7ffxt547ltn
-    name: agentpost-pre-https-20260824
-    fresh_0_1_3_attempt: failed_snapshot_limit_exceeded
-    existing_snapshots_preserved: true
-  application_backup: /opt/agentpost/backups/20260824-https
-  current_update_backup: /opt/agentpost/backups/20260828-091243-1bc986a-pre-023
-  incomplete_backups_preserved:
-    - /opt/agentpost/backups/20260825-1746-e378a7e-pre-016
-    - /opt/agentpost/backups/20260825-1747-e378a7e-pre-016
-    - /opt/agentpost/backups/20260826-1313-f15df99-pre-013
-    - /opt/agentpost/backups/20260827-080230-8429a41-pre-018
-    - /opt/agentpost/backups/20260827-080509-8429a41-pre-018
-  prior_release: /opt/agentpost/releases/aa1d98d
-  prior_unit: /opt/agentpost/backups/20260828-091243-1bc986a-pre-023/agentpost.service
-  immediate_script: /opt/agentpost/backups/20260828-091243-1bc986a-pre-023/rollback-immediate-0.1.23.sh
+  backup: /opt/agentpost/backups/20260901-184106-51a6bf4-pre-035
+  immediate_script: /opt/agentpost/backups/20260901-184106-51a6bf4-pre-035/rollback-immediate-0.1.35.sh
   database_dump_verified: true
   attachment_archive_verified: true
+  protected_configuration_verified: true
 
 acceptance:
-  services_active:
-    - agentpost
-    - nginx
-    - postgresql
-  public_health: passed
-  public_ready: passed
-  orbit_render: passed
-  orbit_pairing_guide: ordinary_user_six_host_choice_and_connection_code_deployed
-  orbit_tool_switching: workbuddy_doubao_work_openclaw_hermes_codex_manus_fixed_order
-  orbit_manual_pairing_fallback: operator_only
-  orbit_pairing_address_validation: passed
-  orbit_authenticated_existing_agent_view: passed_fresh_0_1_22_production_tab
-  orbit_codex_0_1_1_guide: superseded_by_connection_code_v1
-  orbit_frontend_errors: none
-  pinned_connector_wheel: passed
-  public_connector_wheel_version: 0.1.23
-  clean_public_wheel_install: passed
-  server_sdk_mcp_package_versions: aligned_0.1.23
-  public_protocol_contract: passed_version_0_1_and_postflight_verified
-  orbit_human_agent_presentation_split: passed_authenticated_production_smoke
-  package_boundary_regression: passed
-  recipient_resolver_api_sdk_cli_mcp_skill_ui: deployed
-  recipient_handle_editor: deployed_authenticated_production_acceptance_pending
-  recipient_existing_history_visible: passed
-  isolated_postgresql_acceptance: 0019_to_0020_to_0019_to_0020_passed
-  production_migration_0019_agent_handles: superseded_by_0020
-  production_migration_0020_pairing_agent_intent: passed
-  orbit_multi_agent_controls: passed
-  orbit_current_connectors_only_by_default: passed
-  orbit_historical_connectors_folded: passed_3_records_on_authenticated_mars_account
-  orbit_real_agent_cards: passed_2_agents_on_authenticated_mars_account
-  orbit_delete_agent_button_visible: passed_without_click
-  orbit_empty_json_labelled_204_response: passed_local_and_deployed_asset_verified
-  orbit_delete_soft_delete_api: passed_local
-  orbit_delete_real_agent: pending_human_confirmation
-  orbit_authenticated_agents_after_fix: passed_2_active_2_connected
-  orbit_awaiting_agent_state: superseded_by_current_healthy_workbuddy
-  orbit_connected_count_requires_first_heartbeat: passed
-  workbuddy_host_config_before_first_heartbeat: passed_locally
-  workbuddy_safe_machine_readable_setup_failure: passed_locally
-  openclaw_linux_release_gate: passed_live_contract_from_real_openclaw_server
-  openclaw_mcp_preflight_before_pairing: passed_locally
-  openclaw_secure_credential_failure_code: passed_locally
-  openclaw_headless_session_vault_probe: passed_write_read_delete_as_gateway_user
-  openclaw_headless_session_vault_plaintext_fallback: prohibited
-  openclaw_gateway_process_preserved_during_deploy: passed_same_pid
-  openclaw_host_reboot_reauthorization: required_by_design
-  openclaw_linux_real_pairing_send_receive_restart: pending_human_retry
-  hermes_release_gate_mac_linux: passed_live_contract
-  hermes_connection_code_real_orbit: passed_without_copy_or_pairing
-  hermes_real_pairing_send_receive_restart: pending_human_test
-  manus_remote_mcp_gate: disabled_experimental_fallback
-  manus_local_folder_adapter: deployed_public_asset_and_postflight_passed
-  manus_local_folder_macos_real_message_delivery: external_feedback_confirmed
-  manus_native_custom_mcp_tools_list: unconfirmed
-  manus_windows_local_folder_real_host: pending_human_test
-  doubao_work_remote_mcp_gate: unavailable_409_fail_closed
-  doubao_work_local_stdio_gate: released_mac_linux_windows
-  doubao_work_launcher_os_vault_only: passed
-  doubao_work_windows_packaging_and_unit_contract: passed_real_host_pending
-  doubao_work_macos_real_save_tools_list_send_receive: pending_human_test
-  doubao_work_linux_gate: published_real_host_acceptance_pending
-  production_counts_after_0_1_13: 24_agents_54_messages_54_deliveries_4_attachments_9_current_bindings
-  orbit_conversations_grouped_by_thread: passed_21_threads_authenticated_production
-  orbit_human_agent_sender_recipient_labels: passed_authenticated_production
-  orbit_html_attachment_sandbox_preview: passed_real_authenticated_attachment
-  orbit_pdf_attachment_open: passed_local_contract_production_click_pending
-  orbit_mobile_390_production: pending
-  orbit_header_desktop_public: passed_40px_logo_34px_left_inset_no_centre_navigation
-  orbit_header_mobile_390_public: passed_36px_logo_12px_left_inset_no_overflow
-  orbit_conversation_parent_and_thread_cards: deployed
-  orbit_human_unread_red_dot: deployed_backend_and_ui_cross_human_acceptance_pending
-  orbit_human_thread_view_independent_from_agent_state: passed_postgresql
-  production_migration_0021_human_thread_views: passed
-  production_migration_0022_oauth_authorization_code: passed_after_upgrade_downgrade_upgrade_rehearsal
-  production_counts_after_0_1_14: 24_agents_56_messages_56_deliveries_4_attachments_9_current_bindings_6_humans
-  production_counts_after_0_1_15: 25_agents_58_messages_58_deliveries_4_attachments_7_humans
-  production_counts_after_0_1_16: 29_agents_66_messages_66_deliveries_4_attachments_9_humans
-  production_counts_after_0_1_17: 32_agents_83_messages_83_deliveries_15_attachments_12_humans
-  production_counts_after_0_1_18: 33_agents_92_messages_92_deliveries_15_attachments_13_humans
-  production_counts_after_0_1_19: 40_agents_99_messages_99_deliveries_15_attachments_14_humans
-  production_counts_after_0_1_20: 42_agents_105_messages_105_deliveries_15_attachments_14_humans
-  production_counts_after_0_1_21: 57_agents_147_messages_147_deliveries_16_attachments_15_humans
-  production_counts_after_0_1_22: 57_agents_163_messages_163_deliveries_21_attachments_15_humans
-  production_counts_after_0_1_23: 57_agents_166_messages_166_deliveries_21_attachments_15_humans
-  production_migration_0023_human_usernames: passed_after_upgrade_downgrade_upgrade_rehearsal
-  orbit_module_branding: passed_authenticated_fresh_production_page
-  connector_online_status_semantics: deployed_authenticated_wording_verified_live_state_transition_pending
-  human_username_recipient_resolution: deployed_cross_human_end_to_end_pending
-  task_round_completion_semantics: deployed_authenticated_production_acceptance_pending
-  relationship_scoped_agent_directory: deployed_authenticated_production_acceptance_pending
-  mobile_startrail_shortcuts: deployed_authenticated_390px_production_acceptance_pending
-  guarded_0_1_16_switch: passed
-  guarded_0_1_17_switch: passed
-  guarded_0_1_18_switch: passed_after_full_0021_0022_0021_0022_rehearsal
-  guarded_0_1_20_switch: passed_schema_unchanged_0023_human_usernames
-  guarded_0_1_21_switch: passed_after_0023_0024_0023_0024_rehearsal
-  guarded_0_1_22_switch: passed_schema_unchanged_0024_human_default_agent
-  guarded_0_1_23_switch: passed_schema_unchanged_0024_human_default_agent
-  guarded_0_1_15_rollback: passed_postflight_permission_failure_restored_0_1_14
-  production_counts_after_0_1_12: 23_agents_51_messages_51_deliveries_9_current_bindings
-  workbuddy_020_current_connector: healthy_current
-  workbuddy_020_message_to_mars: msg_3904d107573943528aea85861ffbaa09_delivered
-  workbuddy_mars_connection: healthy_current
-  orbit_multi_agent_real_user_experience: pending
-  existing_agent_reconnect_same_identity: passed
-  expired_pairing_retry: passed_without_new_agent
-  requested_recipient_resolution_sends: 2_delivered
-  requested_recipient_message_020: msg_b6a4a837574c4b4aadf52d2f068118b8
-  requested_recipient_message_ianw: msg_1cc63d9025774d159b2df15b0a1f7724
-  post_cutover_journal_errors: 0
-  recipient_real_user_cases: pending
-  codex_setup_platform_mac: passed
-  natural_language_first_use_human_observation: pending
-  ordinary_user_connection_code_source: local_automated_tests_passed
-  ordinary_user_connection_code_copy: local_automated_tests_passed
-  ordinary_user_host_choice: one_required_choice
-  ordinary_user_os_choice: absent
-  connected_reuse_human_observation: pending
-  schema_error_field_guidance: passed
-  dns_resolution: passed
-  https_certificate: passed
-  http_to_https_redirect: passed
-  automatic_certificate_renewal: passed
-  postgresql_migration: passed
-  offline_send_restart_read_ack_reply: passed
+  deployment: passed
+  postflight: passed
+  public_health_ready: passed
+  schema: passed
+  artifact_hashes: passed
+  unknown_wheel_404: passed
+  production_counts_preserved: passed
+  anonymous_agentpost_brand: passed
+  authenticated_real_user_task_flow: pending
   production_accepted: false

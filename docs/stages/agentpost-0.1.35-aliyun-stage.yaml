@@ -1,0 +1,62 @@
+schema_version: "1"
+stage_id: v0.1.35-task-center-deployed-https-verified
+recorded_at: "2026-09-01T18:42:00+08:00"
+project: agentpost
+stage_purpose: task_center_and_agentpost_rebrand
+
+production:
+  provider: aliyun
+  product: simple-application-server
+  public_origin: https://agentpost.me
+  package_version: 0.1.35
+  git_commit: 51a6bf4c0fbd85d45408e9dac3c6d1441e4f0b9b
+  alembic_revision: 0027_tasks
+  evidence_status: deployed_https_verified
+  production_accepted: false
+
+artifacts:
+  source_sha256: 11c902e64c585b143e7a150b5821d2311fad1afa9dc43785d76bd51be2aad096
+  connector_wheel_url: https://agentpost.me/downloads/agentpost-0.1.35-py3-none-any.whl
+  connector_wheel_sha256: 7e80a6eea9bcc63111f4eb943811f2c3dbf4db4195b528888c757cce1040a2b8
+  workbench_bundle_sha256: 521394758ffa45f6a2a3367a1ad5b2d4b990ef18de531b75b01b3fb7784b8f33
+
+deployment:
+  prior_release: /opt/agentpost/releases/7f92abe
+  immutable_release: /opt/agentpost/releases/51a6bf4
+  backup: /opt/agentpost/backups/20260901-184106-51a6bf4-pre-035
+  switch_status: deploy_status_ok
+  switch_duration_seconds: 38
+  postflight_status: postflight_status_ok
+  postflight_duration_seconds: 2
+  rollback_script: /opt/agentpost/backups/20260901-184106-51a6bf4-pre-035/rollback-immediate-0.1.35.sh
+
+production_counts:
+  agents: 63
+  messages: 471
+  deliveries: 471
+  attachments: 45
+  humans: 16
+
+processes:
+  agentpost_pid: 353349
+  nginx_pid: 245451
+  postgresql_pid: 321670
+  protected_services_preserved: true
+
+verification:
+  local_ruff: passed
+  local_orbit_javascript: 29_passed
+  local_non_postgresql: 471_passed_1_sandbox_skip_5_postgresql_deselected
+  production_schema: passed_0027_tasks
+  production_backup_checksums: passed
+  production_public_health_ready: passed_0_1_35
+  production_public_wheel_hash: passed_exact_match
+  production_unknown_wheel: passed_http_404
+  production_counts_not_decreased: passed
+  production_warning_log: clean
+  anonymous_brand_and_navigation: passed_agentpost_four_entries_no_legacy_brand_terms
+
+acceptance_pending:
+  - authenticated_cross_human_friend_confirmation
+  - real_connected_agent_claim_heartbeat_reclaim_and_result
+  - real_human_final_acceptance
