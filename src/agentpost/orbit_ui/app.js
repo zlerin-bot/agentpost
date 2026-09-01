@@ -93,8 +93,6 @@ const elements = {
   humanName: document.querySelector("#human-name"),
   humanEmail: document.querySelector("#human-email"),
   humanAvatar: document.querySelector("#human-avatar"),
-  approvalQuickCount: document.querySelector("#approval-quick-count"),
-  taskQuickCount: document.querySelector("#task-quick-count"),
   approvalMobileCount: document.querySelector("#approval-mobile-count"),
   taskMobileCount: document.querySelector("#task-mobile-count"),
   profileName: document.querySelector("#profile-name"),
@@ -178,11 +176,19 @@ const elements = {
   taskAssignmentAgent: document.querySelector("#task-assignment-agent"),
   taskAssignmentInstruction: document.querySelector("#task-assignment-instruction"),
   taskAssignmentOutput: document.querySelector("#task-assignment-output"),
-  taskAcceptanceControls: document.querySelector("#task-acceptance-controls"),
+  taskAssignmentOutputInherited: document.querySelector("#task-assignment-output-inherited"),
+  taskSubmissionControls: document.querySelector("#task-submission-controls"),
+  taskSubmissionForm: document.querySelector("#task-submission-form"),
   taskFinalSummary: document.querySelector("#task-final-summary"),
+  taskSubmissionHelp: document.querySelector("#task-submission-help"),
   taskSubmitFinal: document.querySelector("#task-submit-final"),
+  taskReviewControls: document.querySelector("#task-review-controls"),
+  taskReviewSummary: document.querySelector("#task-review-summary"),
+  taskReviewNote: document.querySelector("#task-review-note"),
   taskRequestChanges: document.querySelector("#task-request-changes"),
   taskAcceptFinal: document.querySelector("#task-accept-final"),
+  taskCompletedResult: document.querySelector("#task-completed-result"),
+  taskCompletedSummary: document.querySelector("#task-completed-summary"),
   friendBrowser: document.querySelector("#friend-browser"),
   friendBrowserCount: document.querySelector("#friend-browser-count"),
   friendSearchInput: document.querySelector("#friend-search-input"),
@@ -555,8 +561,8 @@ function filteredProjects() {
   const query = state.projectQuery.trim().toLowerCase();
   return state.projects.filter((project) => {
     const matchesFilter = state.projectFilter === "all"
-      || (state.projectFilter === "active" && project.status !== "archived")
-      || (state.projectFilter === "archived" && project.status === "archived");
+      || (state.projectFilter === "active" && ["active", "paused"].includes(project.status))
+      || project.status === state.projectFilter;
     const searchable = [
       project.title,
       project.goal || "",
@@ -778,13 +784,24 @@ function renderProjectDetail() {
   elements.projectInvite.disabled = project.status === "archived";
   elements.projectMemberInvite.disabled = project.status === "archived";
   elements.projectArchive.hidden = !ownerAccess;
-  elements.taskOwnerControls.hidden = !ownerAccess || project.status !== "active";
-  elements.taskAcceptanceControls.hidden = !ownerAccess
-    || !["active", "awaiting_acceptance"].includes(project.status);
-  elements.taskSubmitFinal.hidden = project.status !== "active";
-  elements.taskAcceptFinal.hidden = project.status !== "awaiting_acceptance";
-  elements.taskRequestChanges.hidden = project.status !== "awaiting_acceptance";
+  const canSubmit = ownerAccess && project.status === "active";
+  const canReview = ownerAccess && project.status === "awaiting_acceptance";
+  elements.taskOwnerControls.hidden = !canSubmit;
+  elements.taskSubmissionControls.hidden = !canSubmit;
+  elements.taskReviewControls.hidden = !canReview;
+  elements.taskCompletedResult.hidden = project.status !== "completed";
   elements.taskFinalSummary.value = project.final_summary || "";
+  elements.taskReviewSummary.textContent = project.final_summary || "尚未填写交付说明";
+  elements.taskCompletedSummary.textContent = project.final_summary || "任务结果已验收通过。";
+  elements.taskReviewNote.value = "";
+  elements.taskAssignmentOutputInherited.textContent = project.expected_output;
+  const unfinishedAssignments = (project.assignments || []).filter(
+    (assignment) => !["completed", "cancelled"].includes(assignment.status),
+  ).length;
+  elements.taskSubmitFinal.disabled = unfinishedAssignments > 0;
+  elements.taskSubmissionHelp.textContent = unfinishedAssignments > 0
+    ? `还有 ${unfinishedAssignments} 个 AI 执行单元未完成，完成或取消后才能提交任务结果。`
+    : "提交后任务进入“待验收”，不能再创建新的 AI 执行单元。";
   elements.taskAssignmentAgent.replaceChildren();
   project.members.filter((member) => member.status === "active").forEach((member) => {
     (member.agents || []).forEach((agent) => {
@@ -992,7 +1009,9 @@ function renderFriendDetail() {
     row.append(copy, arrow);
     row.addEventListener("click", async () => {
       state.selectedProjectId = project.task_id;
-      state.projectFilter = project.status === "archived" ? "archived" : "active";
+      state.projectFilter = ["awaiting_acceptance", "completed"].includes(project.status)
+        ? project.status
+        : (project.status === "archived" || project.status === "cancelled" ? "all" : "active");
       elements.projectFilters.forEach((button) => {
         const active = button.dataset.projectFilter === state.projectFilter;
         button.classList.toggle("active", active);
@@ -1265,7 +1284,7 @@ async function createTaskAssignment(event) {
         responsible_human_user_id: option.dataset.humanUserId,
         assignee_agent_id: option.value,
         instruction: elements.taskAssignmentInstruction.value.trim(),
-        expected_output: elements.taskAssignmentOutput.value.trim(),
+        expected_output: elements.taskAssignmentOutput.value.trim() || null,
       }),
     });
     elements.taskAssignmentForm.reset();
@@ -1276,7 +1295,8 @@ async function createTaskAssignment(event) {
   }
 }
 
-async function submitTaskForAcceptance() {
+async function submitTaskForAcceptance(event) {
+  event.preventDefault();
   const project = state.selectedProject;
   const summary = elements.taskFinalSummary.value.trim();
   if (!project || !summary) {
@@ -1298,14 +1318,20 @@ async function submitTaskForAcceptance() {
 
 async function decideTaskAcceptance(decision) {
   const project = state.selectedProject;
+  const note = elements.taskReviewNote.value.trim();
   if (!project) {
+    return;
+  }
+  if (decision === "request_changes" && !note) {
+    elements.projectActionResult.textContent = "请说明需要修改的内容。";
+    elements.taskReviewNote.focus();
     return;
   }
   try {
     state.selectedProject = await requestJson(`/api/v1/tasks/${encodeURIComponent(project.task_id)}/acceptance`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-CSRF-Token": state.csrfToken },
-      body: JSON.stringify({ decision, note: elements.taskFinalSummary.value.trim() || null }),
+      body: JSON.stringify({ decision, note: note || null }),
     });
     renderProjectDetail();
     elements.projectActionResult.textContent = decision === "accept" ? "Human 已验收通过。" : "已退回修改。";
@@ -1356,7 +1382,7 @@ function initializeCollaborationModules() {
   elements.projectInviteClose.addEventListener("click", closeProjectInviteDialog);
   elements.projectInviteCancel.addEventListener("click", closeProjectInviteDialog);
   elements.taskAssignmentForm.addEventListener("submit", createTaskAssignment);
-  elements.taskSubmitFinal.addEventListener("click", submitTaskForAcceptance);
+  elements.taskSubmissionForm.addEventListener("submit", submitTaskForAcceptance);
   elements.taskAcceptFinal.addEventListener("click", () => decideTaskAcceptance("accept"));
   elements.taskRequestChanges.addEventListener("click", () => decideTaskAcceptance("request_changes"));
   elements.projectMobileBack.addEventListener("click", () => {
@@ -5425,11 +5451,8 @@ function renderDashboard(dashboard) {
     "此设备未提供",
   );
   const pendingApprovals = Number(dashboard.metrics?.pending_approval_count || 0);
-  elements.approvalQuickCount.textContent = String(pendingApprovals);
-  elements.approvalQuickCount.hidden = pendingApprovals === 0;
   elements.approvalMobileCount.textContent = String(pendingApprovals);
   const pendingTasks = Number(dashboard.metrics?.pending_task_count || 0);
-  elements.taskQuickCount.textContent = String(pendingTasks);
   elements.taskMobileCount.textContent = String(pendingTasks);
   renderAgents(agents);
   renderTasks(tasks);

@@ -176,11 +176,11 @@ def test_confirmed_friends_task_agent_selection_run_and_human_acceptance(
                 "responsible_human_user_id": member["user"]["id"],
                 "assignee_agent_id": member_agent_id,
                 "instruction": "完成风险分析",
-                "expected_output": "风险清单",
             },
         )
         assert assigned.status_code == 200, assigned.text
         assert assigned.json()["assignments"][0]["status"] == "queued"
+        assert assigned.json()["assignments"][0]["expected_output"] == "一份可验收的方案"
 
         claim = client.post(
             "/api/v1/task-runs/claim",
@@ -234,6 +234,12 @@ def test_confirmed_friends_task_agent_selection_run_and_human_acceptance(
         )
         assert submitted.status_code == 200, submitted.text
         assert submitted.json()["status"] == "awaiting_acceptance"
+        missing_change_note = client.post(
+            f"/api/v1/tasks/{task_id}/acceptance",
+            headers={"X-CSRF-Token": owner_csrf},
+            json={"decision": "request_changes"},
+        )
+        assert missing_change_note.status_code == 422, missing_change_note.text
         completed = client.post(
             f"/api/v1/tasks/{task_id}/acceptance",
             headers={"X-CSRF-Token": owner_csrf},

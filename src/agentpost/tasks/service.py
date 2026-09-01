@@ -850,7 +850,7 @@ def create_assignment(
         assignee_agent_id=payload.assignee_agent_id,
         created_by_human_user_id=user.id,
         instruction=payload.instruction,
-        expected_output=payload.expected_output,
+        expected_output=payload.expected_output or task.expected_output,
         due_at=payload.due_at,
         status="queued",
     )

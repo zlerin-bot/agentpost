@@ -76,13 +76,20 @@ class TaskAssignmentCreate(TaskModel):
     responsible_human_user_id: UUID
     assignee_agent_id: UUID
     instruction: str = Field(min_length=1, max_length=10_000)
-    expected_output: str = Field(min_length=1, max_length=10_000)
+    expected_output: str | None = Field(default=None, max_length=10_000)
     due_at: datetime | None = None
 
-    @field_validator("instruction", "expected_output")
+    @field_validator("instruction")
     @classmethod
     def clean_assignment_text(cls, value: str) -> str:
         return value.strip()
+
+    @field_validator("expected_output")
+    @classmethod
+    def clean_optional_expected_output(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return value.strip() or None
 
     @field_validator("due_at")
     @classmethod
@@ -97,6 +104,19 @@ class TaskFinalSubmission(TaskModel):
 class TaskAcceptanceDecision(TaskModel):
     decision: Literal["accept", "request_changes"]
     note: str | None = Field(default=None, max_length=5000)
+
+    @field_validator("note")
+    @classmethod
+    def clean_acceptance_note(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return value.strip() or None
+
+    @model_validator(mode="after")
+    def require_change_request_note(self) -> TaskAcceptanceDecision:
+        if self.decision == "request_changes" and self.note is None:
+            raise ValueError("note is required when requesting changes")
+        return self
 
 
 class FriendRequestCreate(TaskModel):

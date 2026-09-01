@@ -52,6 +52,25 @@ test("tasks and formal friends are separate API-backed collaboration modules", (
   assert.doesNotMatch(`${html}\n${script}`, /李月|张冠群|崔孝林|胡曦元|zhangziliang|panyongtong/);
 });
 
+test("task workspace removes duplicate shortcuts and separates assignment, submission, and review", () => {
+  assert.doesNotMatch(html, /class="sidebar-quick"/);
+  assert.doesNotMatch(html, /id="approval-quick-count"|id="task-quick-count"/);
+  const projectNavigation = html.match(/<div data-context-module="projects" hidden>([\s\S]*?)<\/div>/)?.[1] || "";
+  assert.doesNotMatch(projectNavigation, /任务中心/);
+  assert.match(html, /data-project-filter="awaiting_acceptance"[^>]*>待验收</);
+  assert.match(html, /data-project-filter="completed"[^>]*>已完成</);
+  assert.match(html, /让 AI 做什么/);
+  assert.match(html, /单独设置本次交付要求（可选）/);
+  assert.match(html, /id="task-assignment-output"[^>]*placeholder="仅在这次执行需要不同格式或内容时填写"[^>]*><\/textarea>/);
+  assert.match(html, /id="task-submission-controls"/);
+  assert.match(html, /id="task-review-controls"/);
+  assert.match(html, /id="task-completed-result"/);
+  assert.match(script, /expected_output: elements\.taskAssignmentOutput\.value\.trim\(\) \|\| null/);
+  assert.match(script, /decision === "request_changes" && !note/);
+  assert.match(script, /还有 \$\{unfinishedAssignments\} 个 AI 执行单元未完成/);
+  assert.match(script, /elements\.taskSubmitFinal\.disabled = unfinishedAssignments > 0/);
+});
+
 test("module and selected view survive navigation and browser history", () => {
   assert.match(script, /searchParams\.set\("module", module\)/);
   assert.match(script, /searchParams\.set\("view", section\)/);
