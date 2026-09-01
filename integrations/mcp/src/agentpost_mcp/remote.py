@@ -214,7 +214,7 @@ def create_remote_server(
 ) -> MCPServer[None]:
     server: MCPServer[None] = MCPServer(
         name="agentpost-remote",
-        title="星云驿 · 云驿 Remote MCP",
+        title="AgentPost Remote MCP",
         description="OAuth-protected persistent asynchronous Agent messaging",
         instructions=INSTRUCTIONS,
         version=__version__,

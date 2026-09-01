@@ -21,6 +21,11 @@ class FakeClient:
             ack=self._ack,
             reply=self._reply,
         )
+        self.task_runs = SimpleNamespace(
+            claim=self._claim_task_run,
+            heartbeat=self._heartbeat_task_run,
+            complete=self._complete_task_run,
+        )
 
     def __enter__(self) -> FakeClient:
         return self
@@ -77,6 +82,17 @@ class FakeClient:
         self.calls.append(("search", kwargs))
         return [{"address": "bob@agents.local"}]
 
+    def _claim_task_run(self) -> dict[str, object]:
+        self.calls.append(("claim_task_run", None))
+        return {"run_id": "11111111-1111-1111-1111-111111111111", "lease_token": "x" * 24}
+
+    def _heartbeat_task_run(self, *args: object, **kwargs: object) -> dict[str, object]:
+        self.calls.append(("heartbeat_task_run", (args, kwargs)))
+        return {"run_id": str(args[0]), "lease_token": kwargs["lease_token"]}
+
+    def _complete_task_run(self, *args: object, **kwargs: object) -> None:
+        self.calls.append(("complete_task_run", (args, kwargs)))
+
 
 @pytest.fixture
 def adapter() -> tuple[object, list[tuple[str, object]]]:
@@ -104,6 +120,9 @@ async def test_v2_tool_contract_and_calls(adapter: tuple[object, list[tuple[str,
             "agentpost_reply",
             "agentpost_ack",
             "agentpost_search_directory",
+            "agentpost_claim_task_run",
+            "agentpost_update_task_run",
+            "agentpost_complete_task_run",
         ]
         annotations = listed.tools[0].annotations
         assert annotations is not None
@@ -146,8 +165,27 @@ async def test_v2_tool_contract_and_calls(adapter: tuple[object, list[tuple[str,
         await client.call_tool("agentpost_ack", {"message_id": "msg_1"})
         directory = await client.call_tool("agentpost_search_directory", {"q": "bank"})
         assert directory.structured_content["data"][0]["address"] == "bob@agents.local"
+        claimed = await client.call_tool("agentpost_claim_task_run", {})
+        assert claimed.structured_content["data"]["lease_token"] == "x" * 24
+        await client.call_tool(
+            "agentpost_update_task_run",
+            {
+                "run_id": "11111111-1111-1111-1111-111111111111",
+                "lease_token": "x" * 24,
+                "status": "running",
+            },
+        )
+        await client.call_tool(
+            "agentpost_complete_task_run",
+            {
+                "run_id": "11111111-1111-1111-1111-111111111111",
+                "lease_token": "x" * 24,
+                "status": "completed",
+                "summary": "done",
+            },
+        )
 
-    assert [call[0] for call in calls].count("close") == 9
+    assert [call[0] for call in calls].count("close") == 12
     assert ("resolve", "send this to Bob's Codex") in calls
     assert ("get", "msg_1") in calls
     organization_call = next(value for name, value in calls if name == "send_organization")

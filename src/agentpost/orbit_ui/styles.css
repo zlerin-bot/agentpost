@@ -5269,6 +5269,10 @@ footer {
   gap: 16px;
 }
 
+.prototype-detail[hidden] {
+  display: none;
+}
+
 #project-invitation-actions {
   align-items: center;
   justify-content: space-between;
@@ -5743,6 +5747,13 @@ footer {
   .project-mobile-back,
   .friend-mobile-back {
     display: inline-flex;
+  }
+
+  .project-workspace-mode.project-detail-open #project-browser,
+  .friend-workspace-mode.friend-detail-open #friend-browser,
+  .project-workspace-mode:not(.project-detail-open) #project-board,
+  .friend-workspace-mode:not(.friend-detail-open) #friend-directory {
+    display: none;
   }
 }
 

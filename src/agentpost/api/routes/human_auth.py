@@ -88,7 +88,7 @@ def _set_session_cookie(response: Response, settings: SettingsDep, raw_token: st
         key=HUMAN_SESSION_COOKIE,
         value=raw_token,
         max_age=settings.human_session_ttl_seconds,
-        path="/api/v1/orbit",
+        path="/api/v1",
         secure=settings.is_production,
         httponly=True,
         samesite="strict",

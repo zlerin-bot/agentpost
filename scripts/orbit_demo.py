@@ -243,44 +243,6 @@ def _seed(settings: Settings) -> None:
             200,
         )
 
-        project = _require(
-            client.post(
-                "/api/v1/orbit/projects",
-                headers={"X-CSRF-Token": csrf_token},
-                json={
-                    "title": "算力项目联合研究",
-                    "description": "共同整理行业信息，形成可用于内部讨论的项目判断材料。",
-                },
-            ),
-            201,
-        )
-        _require(
-            client.post(
-                f"/api/v1/orbit/projects/{project['project_id']}/members",
-                headers={"X-CSRF-Token": csrf_token},
-                json={
-                    "human_user_ids": [
-                        collaborator_users[0]["user"]["id"],
-                        collaborator_users[1]["user"]["id"],
-                    ]
-                },
-            ),
-            200,
-        )
-        collaborator_session = _require(
-            client.post(
-                "/api/v1/auth/login",
-                json={"email": "partner-a@agentpost.local", "password": DEMO_PASSWORD},
-            ),
-            200,
-        )
-        _require(
-            client.post(
-                f"/api/v1/orbit/projects/{project['project_id']}/accept",
-                headers={"X-CSRF-Token": collaborator_session["csrf_token"]},
-            ),
-            200,
-        )
         owner_session = _require(
             client.post(
                 "/api/v1/auth/login",
@@ -298,7 +260,7 @@ def _seed(settings: Settings) -> None:
                     "type": "message",
                     "subject": "行业资料摘要已经提交",
                     "content": {"format": "text", "body": "来源和适用范围已经完成核对。"},
-                    "metadata": {"project_id": project["project_id"]},
+                    "metadata": {"demo_kind": "status_update"},
                 },
             ),
             201,
@@ -521,7 +483,7 @@ def _seed(settings: Settings) -> None:
                 connector_type="codex",
                 display_name="这台 Mac 上的 Codex",
                 device_name="当前设备",
-                client_version="agentpost-connect/0.1.33",
+                client_version="agentpost-connect/0.1.34",
                 status="active",
                 health_status="healthy",
                 created_at=now - timedelta(days=2),
@@ -550,7 +512,7 @@ def _seed(settings: Settings) -> None:
                 connector_type="workbuddy",
                 display_name="这台 Mac 上的 WorkBuddy",
                 device_name="等待完成设置",
-                client_version="agentpost-connect/0.1.33",
+                client_version="agentpost-connect/0.1.34",
                 status="active",
                 health_status="unknown",
                 created_at=now - timedelta(minutes=8),
@@ -601,15 +563,15 @@ def _settings(data_dir: Path, port: int) -> Settings:
         email_delivery_mode="test",
         rate_limit_enabled=False,
         public_base_url=f"http://127.0.0.1:{port}",
-        connector_release_version="0.1.33",
-        connector_wheel_url="https://agentpost.me/downloads/agentpost-0.1.33-py3-none-any.whl",
+        connector_release_version="0.1.34",
+        connector_wheel_url="https://agentpost.me/downloads/agentpost-0.1.34-py3-none-any.whl",
         connector_wheel_sha256="5fc73121ec6cca641649194ca2a040a033c9da80d59b62e0fbc9a607b68ed6a9",
         log_level="WARNING",
     )
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run an isolated local 星云驿 UI demo")
+    parser = argparse.ArgumentParser(description="Run an isolated local AgentPost UI demo")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--data-dir", type=Path)
@@ -633,7 +595,7 @@ def main() -> None:
     runtime_database = Database(settings.database_url)
     app = create_app(settings=settings, database=runtime_database)
 
-    print("\n星云驿本地体验页已准备：")
+    print("\nAgentPost 本地体验页已准备：")
     print(f"  地址：http://127.0.0.1:{args.port}/orbit")
     print(f"  邮箱：{DEMO_EMAIL}")
     print(f"  密码：{DEMO_PASSWORD}")

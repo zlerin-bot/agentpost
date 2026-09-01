@@ -225,7 +225,7 @@ def create_orbit_session(
         key=HUMAN_SESSION_COOKIE,
         value=created.raw_token,
         max_age=settings.human_session_ttl_seconds,
-        path="/api/v1/orbit",
+        path="/api/v1",
         secure=settings.is_production,
         httponly=True,
         samesite="strict",
@@ -320,7 +320,7 @@ def delete_orbit_session(
         )
     response.delete_cookie(
         key=HUMAN_SESSION_COOKIE,
-        path="/api/v1/orbit",
+        path="/api/v1",
         secure=settings.is_production,
         httponly=True,
         samesite="strict",

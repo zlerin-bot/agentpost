@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agentpost"
-version = "0.1.33"
-description = "星云驿: durable Agent messaging through 云驿 and Human governance through 星轨"
+version = "0.1.34"
+description = "AgentPost: durable Human and Agent task collaboration"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

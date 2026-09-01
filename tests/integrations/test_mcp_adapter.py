@@ -46,6 +46,9 @@ EXPECTED_TOOLS = {
     "agentpost_reply",
     "agentpost_ack",
     "agentpost_search_directory",
+    "agentpost_claim_task_run",
+    "agentpost_update_task_run",
+    "agentpost_complete_task_run",
 }
 
 
@@ -141,7 +144,7 @@ def structured(result: Any) -> dict[str, Any]:
     return payload
 
 
-def test_exact_nine_tools_have_strict_public_parameters_and_v2_annotations() -> None:
+def test_exact_tools_have_strict_public_parameters_and_v2_annotations() -> None:
     mcp, _ = registered_tools(
         lambda request: httpx.Response(200, json={"items": []}, request=request)
     )
@@ -165,7 +168,7 @@ def test_exact_nine_tools_have_strict_public_parameters_and_v2_annotations() -> 
         }:
             assert annotations.read_only_hint is True
             assert annotations.idempotent_hint is True
-        elif name == "agentpost_ack":
+        elif name in {"agentpost_ack", "agentpost_update_task_run"}:
             assert annotations.read_only_hint is False
             assert annotations.idempotent_hint is True
         else:

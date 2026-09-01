@@ -328,6 +328,60 @@ class _ConnectorResource:
         return rotation
 
 
+class _TaskRunsResource:
+    def __init__(self, owner: AgentPost) -> None:
+        self._owner = owner
+
+    def claim(self) -> dict[str, Any] | None:
+        data = self._owner._request("POST", "/task-runs/claim")
+        if data is None:
+            return None
+        if not isinstance(data, dict):
+            raise ProtocolError("Malformed task run claim", code="MALFORMED_TASK_RUN")
+        return data
+
+    def heartbeat(
+        self,
+        run_id: UUID | str,
+        *,
+        lease_token: str,
+        status: str,
+        checkpoint: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        data = self._owner._request(
+            "POST",
+            f"/task-runs/{run_id}/heartbeat",
+            json={
+                "lease_token": lease_token,
+                "status": status,
+                "checkpoint": dict(checkpoint or {}),
+            },
+        )
+        if not isinstance(data, dict):
+            raise ProtocolError("Malformed task run heartbeat", code="MALFORMED_TASK_RUN")
+        return data
+
+    def complete(
+        self,
+        run_id: UUID | str,
+        *,
+        lease_token: str,
+        status: str,
+        summary: str,
+        output: Mapping[str, Any] | None = None,
+    ) -> None:
+        self._owner._request(
+            "POST",
+            f"/task-runs/{run_id}/result",
+            json={
+                "lease_token": lease_token,
+                "status": status,
+                "summary": summary,
+                "output": dict(output or {}),
+            },
+        )
+
+
 class AgentPost:
     """Synchronous AgentPost client. Message content remains untrusted input."""
 
@@ -360,6 +414,7 @@ class AgentPost:
         self.attachments = _AttachmentsResource(self)
         self.approvals = _ApprovalsResource(self)
         self.connector = _ConnectorResource(self)
+        self.task_runs = _TaskRunsResource(self)
 
     @classmethod
     def begin_pairing(

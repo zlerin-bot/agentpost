@@ -11,7 +11,7 @@ const [html, script, stylesheet] = await Promise.all([
   readFile(resolve(repositoryRoot, "src/agentpost/orbit_ui/styles.css"), "utf8"),
 ]);
 
-test("Orbit exposes five named primary entrances including projects and friends", () => {
+test("AgentPost exposes exactly task, friends, AI, and settings", () => {
   const primaryNavigation = html.slice(
     html.indexOf('id="primary-navigation"'),
     html.indexOf("</nav>", html.indexOf('id="primary-navigation"')),
@@ -19,26 +19,25 @@ test("Orbit exposes five named primary entrances including projects and friends"
   const modules = [...primaryNavigation.matchAll(/data-module="([^"]+)"/g)]
     .map((match) => match[1]);
 
-  assert.deepEqual(modules, ["orbit", "relay", "projects", "friends", "settings"]);
-  assert.match(primaryNavigation, />星轨</);
-  assert.match(primaryNavigation, />云驿</);
-  assert.match(primaryNavigation, />项目</);
+  assert.deepEqual(modules, ["projects", "friends", "relay", "settings"]);
+  assert.match(primaryNavigation, />任务</);
   assert.match(primaryNavigation, />好友</);
+  assert.match(primaryNavigation, />AI</);
   assert.match(primaryNavigation, />设置</);
-  assert.match(primaryNavigation, /我的对话/);
-  assert.match(primaryNavigation, /Agent 与连接/);
-  assert.match(primaryNavigation, /一对一与多人协作/);
+  assert.match(primaryNavigation, /Human 与 AI 协作/);
   assert.match(primaryNavigation, /联系人与协作邀请/);
+  assert.match(primaryNavigation, /身份与连接/);
   assert.match(primaryNavigation, /账户与平台/);
 });
 
-test("projects and friends are separate API-backed collaboration modules", () => {
+test("tasks and formal friends are separate API-backed collaboration modules", () => {
   assert.match(html, /data-module="projects" data-section="board"/);
   assert.match(html, /data-module="friends" data-section="directory"/);
-  assert.match(script, /把一对一和多人协作都作为项目管理/);
-  assert.match(script, /维护自己的协作好友清单/);
-  assert.match(script, /\/api\/v1\/orbit\/projects/);
-  assert.match(script, /\/api\/v1\/orbit\/friends/);
+  assert.match(script, /一个任务对应一条 Thread/);
+  assert.match(script, /好友必须双向确认/);
+  assert.match(script, /\/api\/v1\/tasks/);
+  assert.match(script, /\/api\/v1\/friends/);
+  assert.match(script, /\/api\/v1\/friend-requests/);
   assert.match(script, /initializeCollaborationModules\(\)/);
   assert.match(script, /human_user_ids: selected/);
   assert.match(script, /input\.type = "checkbox"/);
@@ -47,7 +46,8 @@ test("projects and friends are separate API-backed collaboration modules", () =>
   assert.match(script, /activateRoute\("friends", "directory"/);
   assert.doesNotMatch(`${html}\n${script}`, /本地体验|本地演示|交互原型|不连接生产|演示项目/);
   assert.doesNotMatch(html, /id="project-create-friend"|首位协作好友/);
-  assert.doesNotMatch(html, /当前进度|交付与验收|project-progress|project-task-list/);
+  assert.match(html, /执行与验收/);
+  assert.match(html, /选择参与的 AI（至少一个）/);
   assert.doesNotMatch(script, /DEMO_FRIENDS|demoProjects|confirmDemoAcceptance|inviteDemoFriend/);
   assert.doesNotMatch(`${html}\n${script}`, /李月|张冠群|崔孝林|胡曦元|zhangziliang|panyongtong/);
 });
@@ -67,14 +67,14 @@ test("Star Orbit opens directly on conversations without a duplicate overview", 
   assert.match(script, /orbit: "communications"/);
 });
 
-test("header matches the approved compact Xingyunyi lockup without centre navigation", () => {
+test("header uses the AgentPost brand without centre navigation", () => {
   const header = html.match(/<header class="topbar">[\s\S]*?<\/header>/)?.[0] || "";
   assert.match(html, /class="brand-mark"/);
   assert.match(html, /id="brand-mark-gradient"/);
   assert.match(html, /M11 25c6-13 13-14 18-7/);
-  assert.match(html, /<strong>星云驿<\/strong>/);
-  assert.match(html, /<small id="brand-section">AgentPost · 星轨<\/small>/);
-  assert.match(script, /elements\.brandSection\.textContent = `AgentPost · \$\{definition\.label\}`/);
+  assert.match(html, /<strong>AgentPost<\/strong>/);
+  assert.match(html, /<small id="brand-section">任务<\/small>/);
+  assert.match(script, /elements\.brandSection\.textContent = definition\.label/);
   assert.doesNotMatch(header, /plane-switch/);
   assert.doesNotMatch(header, /星轨看协作/);
   assert.doesNotMatch(header, /云驿管 Agent/);
@@ -93,7 +93,7 @@ test("footer exposes the official ICP filing record on every view", () => {
   assert.match(stylesheet, /\.filing-record/);
 });
 
-test("mobile navigation remains a five-entry bottom bar", () => {
+test("mobile navigation remains a four-entry bottom bar", () => {
   assert.match(stylesheet, /@media \(max-width: 860px\)/);
   assert.match(stylesheet, /\.workspace-sidebar \{[\s\S]*?position: fixed;[\s\S]*?inset: auto 0 0;/);
   assert.match(stylesheet, /\.primary-navigation \{[\s\S]*?display: flex;/);
@@ -141,7 +141,7 @@ test("opening a conversation remains read-only for Agent state", () => {
 });
 
 test("Orbit conversations are Thread-based, searchable, and deep-linkable", () => {
-  assert.match(html, /按每个对话查看 Agent 之间的全部往来/);
+  assert.match(script, /按每个对话查看 Agent 之间的全部往来/);
   assert.match(html, /主题、Agent、正文或附件名/);
   assert.doesNotMatch(html, /新动态 · 待接入|待我处理 · 待接入/);
   assert.match(script, /\/api\/v1\/orbit\/threads\?/);
@@ -221,7 +221,7 @@ test("archived conversations move to Settings and hide from owned Agents without
   assert.match(html, /data-module="settings" data-section="archives"/);
   assert.match(html, /id="settings-archive-list"/);
   assert.match(html, /id="thread-archive"[^>]*>从我的对话删除</);
-  assert.match(html, /你和你名下的 Agent 都不会再从星云驿看到这条完整对话/);
+  assert.match(html, /你和你名下的 AI 都不会再从 AgentPost 看到这条完整对话/);
   assert.match(html, /设置 → 已归档对话/);
   assert.match(script, /parameters\.set\("archived", "true"\)/);
   assert.match(script, /loadArchivedThreadsForSettings/);
@@ -364,48 +364,14 @@ test("profile username is editable while unavailable settings stay explanatory",
   }
 });
 
-test("organization management prioritizes organizations, members, and their Agents", () => {
-  const organizationsStart = html.indexOf('id="organizations"');
-  const organizationsEnd = html.indexOf("</section>", organizationsStart);
-  const organizationsPanel = html.slice(organizationsStart, organizationsEnd);
-  assert.match(organizationsPanel, /查看你加入的组织、组织成员和每位成员带入协作的 Agent/);
-  assert.doesNotMatch(organizationsPanel, /治理组织|管理日常成员|参与组织协作|仅查看元数据/);
-  assert.doesNotMatch(html, /class="organization-role-guide"/);
-  assert.match(html, /成员与 Agent/);
-  assert.match(html, /未手动选择时使用默认 Agent/);
-  assert.match(script, /member\.human_display_name/);
-  assert.match(script, /const memberAgents = Array\.isArray\(member\.agents\)/);
-  assert.match(script, /memberAgent\.participation_source === "default"/);
-  assert.match(script, /thread_id: `organization:\$\{organization\.id\}`/);
-  assert.match(script, /群聊已建立。成员未指定 Agent 时，默认 Agent 会自动参与/);
-  assert.match(script, /待确认归属的 Agent/);
-  assert.match(script, /manage\.textContent = "查看组织"/);
-
-  assert.match(html, /id="organization-invitation-dialog"/);
-  assert.match(html, /加入前请确认组织、角色和权限范围/);
-  assert.match(html, /个人 Agent、个人对话和直接 Agent 授权不会因加入组织而自动共享/);
-  assert.match(script, /maybePreviewOrganizationInvitation/);
-  assert.doesNotMatch(script, /maybeAcceptOrganizationInvitation/);
-  assert.match(script, /\/api\/v1\/orbit\/organization-invitations\/preview/);
-  assert.match(script, /organizationInvitationForm\.addEventListener\("submit", acceptOrganizationInvitation\)/);
-  assert.match(html, /id="organization-pending-list"/);
-  assert.match(html, /不需要再到邮箱确认/);
-  assert.match(html, /id="organization-invite-username"/);
-  assert.match(html, /id="organization-invite-contact"/);
-  assert.match(html, /只显示你名下 Agent 有过真实沟通/);
-  assert.match(script, /\/api\/v1\/orbit\/organization-invitations\/\$\{encodeURIComponent\(invitation\.invitation_id\)\}\/accept/);
-  assert.match(html, /id="organization-nav-invite-count"/);
-  assert.match(script, /accept\.textContent = "接受并进入组织"/);
-  assert.match(script, /invited_by_display_name/);
-  assert.match(script, /username: elements\.organizationInviteUsername\.value/);
-  assert.match(script, /\/invitation-candidates/);
-  assert.match(script, /renderOrganizationInvitationCandidates/);
-  assert.match(script, /organizationInviteUsername\.value = elements\.organizationInviteContact\.value/);
-  assert.match(script, /agent\.role === "owner" && agent\.status === "active"/);
-  assert.match(script, /已在本组织/);
-  assert.match(script, /不能重复加入/);
-  assert.doesNotMatch(script, /agent\.role === "owner" && !agent\.organization/);
-  assert.doesNotMatch(html, /邀请邮箱/);
+test("organizations no longer appear in the primary product navigation", () => {
+  const settingsNavigation = html.slice(
+    html.indexOf('data-context-module="settings"'),
+    html.indexOf("</div>", html.indexOf('data-context-module="settings"')),
+  );
+  assert.doesNotMatch(settingsNavigation, /organizations|组织与成员/);
+  assert.doesNotMatch(script, /renderPendingOrganizationInvitations\(Array\.isArray\(invitations\.items\)/);
+  assert.match(script, /sections: Object\.freeze\(\[[\s\S]*?"profile"[\s\S]*?"security"/);
 });
 
 test("organization role controls mirror the server authorization boundary", () => {

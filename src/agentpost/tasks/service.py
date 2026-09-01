@@ -1,0 +1,1199 @@
+from __future__ import annotations
+
+import hashlib
+import secrets
+from datetime import UTC, datetime, timedelta
+from uuid import UUID
+
+from sqlalchemy import func, or_, select
+from sqlalchemy.orm import Session
+
+from agentpost.control.human_security import add_human_action_audit
+from agentpost.control.models import AgentOwnership, HumanUser
+from agentpost.identity.models import Agent, utc_now
+from agentpost.messaging.models import Delivery, Message
+from agentpost.tasks.models import (
+    AgentRun,
+    Friendship,
+    Task,
+    TaskActivity,
+    TaskAgentParticipant,
+    TaskAssignment,
+    TaskMembership,
+)
+from agentpost.tasks.schemas import (
+    AgentChoice,
+    AgentRunClaim,
+    AgentRunResult,
+    AgentRunUpdate,
+    AgentSummary,
+    FriendResponse,
+    TaskAcceptanceDecision,
+    TaskActivityResponse,
+    TaskAssignmentCreate,
+    TaskAssignmentResponse,
+    TaskCreate,
+    TaskDetail,
+    TaskFinalSubmission,
+    TaskMember,
+    TaskSummary,
+)
+
+RUN_LEASE_SECONDS = 90
+
+
+class TaskNotFoundError(Exception):
+    pass
+
+
+class TaskOwnerRequiredError(Exception):
+    pass
+
+
+class TaskStateConflictError(Exception):
+    pass
+
+
+class TaskAgentSelectionError(Exception):
+    pass
+
+
+class FriendshipNotFoundError(Exception):
+    pass
+
+
+class FriendshipConflictError(Exception):
+    pass
+
+
+class AgentRunNotFoundError(Exception):
+    pass
+
+
+class AgentRunLeaseError(Exception):
+    pass
+
+
+def _as_utc(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+def _pair(first: UUID, second: UUID) -> tuple[UUID, UUID]:
+    return tuple(sorted((first, second), key=str))  # type: ignore[return-value]
+
+
+def _friendship_for(session: Session, first: UUID, second: UUID, *, lock: bool = False):
+    human_a_id, human_b_id = _pair(first, second)
+    statement = select(Friendship).where(
+        Friendship.human_a_id == human_a_id,
+        Friendship.human_b_id == human_b_id,
+    )
+    if lock:
+        statement = statement.with_for_update()
+    return session.scalar(statement)
+
+
+def _human_agent(session: Session, human_id: UUID, agent_id: UUID) -> Agent | None:
+    return session.scalar(
+        select(Agent)
+        .join(AgentOwnership, AgentOwnership.agent_id == Agent.id)
+        .where(
+            Agent.id == agent_id,
+            AgentOwnership.human_user_id == human_id,
+            Agent.status == "active",
+        )
+    )
+
+
+def _validate_agent_choice(session: Session, *, human_id: UUID, choice: AgentChoice) -> list[Agent]:
+    rows = list(
+        session.scalars(
+            select(Agent)
+            .join(AgentOwnership, AgentOwnership.agent_id == Agent.id)
+            .where(
+                Agent.id.in_(choice.agent_ids),
+                AgentOwnership.human_user_id == human_id,
+                Agent.status == "active",
+            )
+        )
+    )
+    if {agent.id for agent in rows} != set(choice.agent_ids):
+        raise TaskAgentSelectionError
+    return rows
+
+
+def _agent_summary(agent: Agent, *, role: str | None = None) -> AgentSummary:
+    return AgentSummary(
+        agent_id=agent.id,
+        display_name=agent.display_name,
+        address=agent.address,
+        capabilities=[item for item in agent.capabilities if isinstance(item, str)],
+        role=role,  # type: ignore[arg-type]
+    )
+
+
+def list_friend_suggestions(
+    session: Session, *, user: HumanUser, query: str | None = None, limit: int = 20
+) -> list[FriendResponse]:
+    owned_ids = set(
+        session.scalars(
+            select(AgentOwnership.agent_id).where(AgentOwnership.human_user_id == user.id)
+        )
+    )
+    if not owned_ids:
+        return []
+    contacted: dict[UUID, datetime] = {}
+    rows = session.execute(
+        select(Delivery.recipient_agent_id, func.max(Message.created_at))
+        .join(Message, Message.id == Delivery.message_id)
+        .where(Message.sender_agent_id.in_(owned_ids))
+        .group_by(Delivery.recipient_agent_id)
+    ).all()
+    rows += session.execute(
+        select(Message.sender_agent_id, func.max(Message.created_at))
+        .join(Delivery, Delivery.message_id == Message.id)
+        .where(Delivery.recipient_agent_id.in_(owned_ids))
+        .group_by(Message.sender_agent_id)
+    ).all()
+    for agent_id, contacted_at in rows:
+        if agent_id in owned_ids or contacted_at is None:
+            continue
+        current = contacted.get(agent_id)
+        if current is None or contacted_at > current:
+            contacted[agent_id] = contacted_at
+    if not contacted:
+        return []
+    candidates = session.execute(
+        select(Agent, HumanUser)
+        .join(AgentOwnership, AgentOwnership.agent_id == Agent.id)
+        .join(HumanUser, HumanUser.id == AgentOwnership.human_user_id)
+        .where(
+            Agent.id.in_(contacted),
+            Agent.status == "active",
+            HumanUser.status == "active",
+            HumanUser.id != user.id,
+        )
+    ).all()
+    normalized = query.strip().casefold() if query else ""
+    grouped: dict[UUID, tuple[HumanUser, datetime]] = {}
+    for agent, human in candidates:
+        if normalized and normalized not in f"{human.username} {human.display_name}".casefold():
+            continue
+        last_contact = contacted[agent.id]
+        previous = grouped.get(human.id)
+        if previous is None or last_contact > previous[1]:
+            grouped[human.id] = (human, last_contact)
+    result: list[FriendResponse] = []
+    for human, last_contact in sorted(grouped.values(), key=lambda item: item[1], reverse=True):
+        friendship = _friendship_for(session, user.id, human.id)
+        if friendship is not None and friendship.status in {"pending", "accepted"}:
+            continue
+        result.append(
+            FriendResponse(
+                human_user_id=human.id,
+                username=human.username,
+                display_name=human.display_name,
+                relation_status="suggested",
+                last_contact_at=_as_utc(last_contact),
+            )
+        )
+        if len(result) >= limit:
+            break
+    return result
+
+
+def list_friends(
+    session: Session, *, user: HumanUser, query: str | None = None, limit: int = 100
+) -> list[FriendResponse]:
+    friendships = list(
+        session.scalars(
+            select(Friendship)
+            .where(
+                or_(Friendship.human_a_id == user.id, Friendship.human_b_id == user.id),
+                Friendship.status.in_(["pending", "accepted"]),
+            )
+            .order_by(Friendship.updated_at.desc())
+            .limit(limit)
+        )
+    )
+    other_ids = {
+        friendship.human_b_id if friendship.human_a_id == user.id else friendship.human_a_id
+        for friendship in friendships
+    }
+    humans = {
+        human.id: human
+        for human in session.scalars(select(HumanUser).where(HumanUser.id.in_(other_ids)))
+    }
+    normalized = query.strip().casefold() if query else ""
+    response: list[FriendResponse] = []
+    for friendship in friendships:
+        other_id = (
+            friendship.human_b_id if friendship.human_a_id == user.id else friendship.human_a_id
+        )
+        human = humans.get(other_id)
+        if human is None:
+            continue
+        if normalized and normalized not in f"{human.username} {human.display_name}".casefold():
+            continue
+        if friendship.status == "accepted":
+            relation = "accepted"
+        elif friendship.requested_by_human_id == user.id:
+            relation = "pending_outgoing"
+        else:
+            relation = "pending_incoming"
+        agents: list[AgentSummary] = []
+        if friendship.status == "accepted" and human.default_agent_id:
+            agent = _human_agent(session, human.id, human.default_agent_id)
+            if agent is not None:
+                agents.append(_agent_summary(agent))
+        response.append(
+            FriendResponse(
+                friendship_id=friendship.id,
+                human_user_id=human.id,
+                username=human.username,
+                display_name=human.display_name,
+                relation_status=relation,  # type: ignore[arg-type]
+                agents=agents,
+            )
+        )
+    return response
+
+
+def request_friendship(
+    session: Session,
+    *,
+    user: HumanUser,
+    username: str,
+    human_session_id: UUID | None,
+    request_id: str | None,
+) -> FriendResponse:
+    target = session.scalar(
+        select(HumanUser).where(
+            HumanUser.username == username.strip().casefold(), HumanUser.status == "active"
+        )
+    )
+    if target is None or target.id == user.id:
+        raise FriendshipNotFoundError
+    existing = _friendship_for(session, user.id, target.id, lock=True)
+    now = utc_now()
+    if existing is not None and existing.status in {"pending", "accepted"}:
+        raise FriendshipConflictError
+    human_a_id, human_b_id = _pair(user.id, target.id)
+    friendship = existing or Friendship(
+        human_a_id=human_a_id,
+        human_b_id=human_b_id,
+        requested_at=now,
+    )
+    friendship.requested_by_human_id = user.id
+    friendship.status = "pending"
+    friendship.requested_at = now
+    friendship.responded_at = None
+    friendship.updated_at = now
+    session.add(friendship)
+    session.flush()
+    add_human_action_audit(
+        session,
+        human_user_id=user.id,
+        human_session_id=human_session_id,
+        action="friendship.requested",
+        target_type="friendship",
+        target_id=str(friendship.id),
+        outcome="success",
+        request_id=request_id,
+        audit_metadata={"target_human_user_id": str(target.id)},
+    )
+    session.commit()
+    return FriendResponse(
+        friendship_id=friendship.id,
+        human_user_id=target.id,
+        username=target.username,
+        display_name=target.display_name,
+        relation_status="pending_outgoing",
+    )
+
+
+def decide_friendship(
+    session: Session,
+    *,
+    user: HumanUser,
+    friendship_id: UUID,
+    accept: bool,
+    human_session_id: UUID | None,
+    request_id: str | None,
+) -> FriendResponse:
+    friendship = session.scalar(
+        select(Friendship).where(Friendship.id == friendship_id).with_for_update()
+    )
+    if (
+        friendship is None
+        or friendship.status != "pending"
+        or friendship.requested_by_human_id == user.id
+        or user.id not in {friendship.human_a_id, friendship.human_b_id}
+    ):
+        raise FriendshipNotFoundError
+    now = utc_now()
+    friendship.status = "accepted" if accept else "declined"
+    friendship.responded_at = now
+    friendship.updated_at = now
+    other_id = friendship.human_b_id if friendship.human_a_id == user.id else friendship.human_a_id
+    other = session.get(HumanUser, other_id)
+    if other is None:
+        raise FriendshipNotFoundError
+    add_human_action_audit(
+        session,
+        human_user_id=user.id,
+        human_session_id=human_session_id,
+        action="friendship.accepted" if accept else "friendship.declined",
+        target_type="friendship",
+        target_id=str(friendship.id),
+        outcome="success",
+        request_id=request_id,
+        audit_metadata={"other_human_user_id": str(other.id)},
+    )
+    session.commit()
+    return FriendResponse(
+        friendship_id=friendship.id,
+        human_user_id=other.id,
+        username=other.username,
+        display_name=other.display_name,
+        relation_status="accepted" if accept else "pending_incoming",
+    )
+
+
+def remove_friendship(
+    session: Session,
+    *,
+    user: HumanUser,
+    friendship_id: UUID,
+    human_session_id: UUID | None,
+    request_id: str | None,
+) -> None:
+    friendship = session.scalar(
+        select(Friendship).where(Friendship.id == friendship_id).with_for_update()
+    )
+    if (
+        friendship is None
+        or friendship.status != "accepted"
+        or user.id not in {friendship.human_a_id, friendship.human_b_id}
+    ):
+        raise FriendshipNotFoundError
+    friendship.status = "removed"
+    friendship.updated_at = utc_now()
+    add_human_action_audit(
+        session,
+        human_user_id=user.id,
+        human_session_id=human_session_id,
+        action="friendship.removed",
+        target_type="friendship",
+        target_id=str(friendship.id),
+        outcome="success",
+        request_id=request_id,
+        audit_metadata={},
+    )
+    session.commit()
+
+
+def _task_context(
+    session: Session, *, task_id: UUID, user: HumanUser, lock: bool = False
+) -> tuple[Task, TaskMembership]:
+    statement = select(Task).where(Task.id == task_id)
+    if lock:
+        statement = statement.with_for_update()
+    task = session.scalar(statement)
+    membership = session.scalar(
+        select(TaskMembership).where(
+            TaskMembership.task_id == task_id,
+            TaskMembership.human_user_id == user.id,
+            TaskMembership.status.in_(["active", "invited"]),
+        )
+    )
+    if task is None or membership is None:
+        raise TaskNotFoundError
+    return task, membership
+
+
+def _require_owner(task: Task, membership: TaskMembership) -> None:
+    if membership.role != "owner" or membership.status != "active":
+        raise TaskOwnerRequiredError
+    if task.owner_human_user_id != membership.human_user_id:
+        raise TaskOwnerRequiredError
+
+
+def _add_activity(
+    session: Session,
+    *,
+    task_id: UUID,
+    kind: str,
+    actor_type: str,
+    actor_human_id: UUID | None = None,
+    actor_agent_id: UUID | None = None,
+    target_human_id: UUID | None = None,
+    metadata: dict[str, object] | None = None,
+    external: bool = False,
+) -> None:
+    session.add(
+        TaskActivity(
+            task_id=task_id,
+            activity_type=kind,
+            actor_type=actor_type,
+            actor_human_user_id=actor_human_id,
+            actor_agent_id=actor_agent_id,
+            target_human_user_id=target_human_id,
+            activity_metadata=metadata or {},
+            security_label="external_agent_content" if external else "platform_event",
+        )
+    )
+
+
+def _task_detail(session: Session, *, task: Task, viewer_membership: TaskMembership) -> TaskDetail:
+    membership_rows = session.execute(
+        select(TaskMembership, HumanUser)
+        .join(HumanUser, HumanUser.id == TaskMembership.human_user_id)
+        .where(
+            TaskMembership.task_id == task.id,
+            TaskMembership.status.in_(["active", "invited"]),
+        )
+        .order_by(TaskMembership.role, TaskMembership.invited_at)
+    ).all()
+    human_ids = {human.id for _, human in membership_rows}
+    humans = {human.id: human for _, human in membership_rows}
+    agent_rows = session.execute(
+        select(TaskAgentParticipant, Agent)
+        .join(Agent, Agent.id == TaskAgentParticipant.agent_id)
+        .where(TaskAgentParticipant.task_id == task.id, TaskAgentParticipant.active.is_(True))
+    ).all()
+    agents = {agent.id: agent for _, agent in agent_rows}
+    agents_by_human: dict[UUID, list[AgentSummary]] = {human_id: [] for human_id in human_ids}
+    for participant, agent in agent_rows:
+        agents_by_human.setdefault(participant.human_user_id, []).append(
+            _agent_summary(agent, role=participant.role)
+        )
+    members = [
+        TaskMember(
+            human_user_id=human.id,
+            username=human.username,
+            display_name=human.display_name,
+            role=membership.role,  # type: ignore[arg-type]
+            status=membership.status,  # type: ignore[arg-type]
+            primary_agent_id=membership.primary_agent_id,
+            agents=agents_by_human.get(human.id, []),
+            invited_at=_as_utc(membership.invited_at),
+            joined_at=_as_utc(membership.joined_at),
+        )
+        for membership, human in membership_rows
+    ]
+    assignment_rows = list(
+        session.scalars(
+            select(TaskAssignment)
+            .where(TaskAssignment.task_id == task.id)
+            .order_by(TaskAssignment.created_at.desc())
+        )
+    )
+    latest_run: dict[UUID, AgentRun] = {}
+    if assignment_rows:
+        for run in session.scalars(
+            select(AgentRun)
+            .where(AgentRun.assignment_id.in_([item.id for item in assignment_rows]))
+            .order_by(AgentRun.attempt.desc())
+        ):
+            latest_run.setdefault(run.assignment_id, run)
+    assignments = [
+        TaskAssignmentResponse(
+            assignment_id=item.id,
+            responsible_human_user_id=item.responsible_human_user_id,
+            responsible_human_display_name=humans[item.responsible_human_user_id].display_name,
+            assignee_agent_id=item.assignee_agent_id,
+            assignee_agent_display_name=agents[item.assignee_agent_id].display_name,
+            instruction=item.instruction,
+            expected_output=item.expected_output,
+            due_at=_as_utc(item.due_at),
+            status=item.status,
+            result_status=item.result_status,
+            result_summary=item.result_summary,
+            run_status=(latest_run[item.id].status if item.id in latest_run else None),
+            created_at=_as_utc(item.created_at),
+        )
+        for item in assignment_rows
+    ]
+    activity_rows = list(
+        session.scalars(
+            select(TaskActivity)
+            .where(TaskActivity.task_id == task.id)
+            .order_by(TaskActivity.created_at.desc())
+            .limit(200)
+        )
+    )
+    activity_agent_ids = {item.actor_agent_id for item in activity_rows if item.actor_agent_id}
+    activity_agents = {
+        agent.id: agent
+        for agent in session.scalars(select(Agent).where(Agent.id.in_(activity_agent_ids)))
+    }
+    activities = []
+    for item in activity_rows:
+        actor_name = None
+        if item.actor_human_user_id in humans:
+            actor_name = humans[item.actor_human_user_id].display_name
+        elif item.actor_agent_id in activity_agents:
+            actor_name = activity_agents[item.actor_agent_id].display_name
+        target_name = (
+            humans[item.target_human_user_id].display_name
+            if item.target_human_user_id in humans
+            else None
+        )
+        activities.append(
+            TaskActivityResponse(
+                activity_id=item.id,
+                kind=item.activity_type,
+                actor_type=item.actor_type,  # type: ignore[arg-type]
+                actor_display_name=actor_name,
+                target_display_name=target_name,
+                metadata=item.activity_metadata,
+                security_label=item.security_label,  # type: ignore[arg-type]
+                created_at=_as_utc(item.created_at),
+            )
+        )
+    owner = session.get(HumanUser, task.owner_human_user_id)
+    if owner is None:
+        raise TaskNotFoundError
+    pending_count = sum(item.status not in {"completed", "cancelled"} for item in assignment_rows)
+    return TaskDetail(
+        task_id=task.id,
+        thread_id=task.thread_id,
+        title=task.title,
+        goal=task.goal,
+        expected_output=task.expected_output,
+        status=task.status,
+        due_at=_as_utc(task.due_at),
+        revision=task.revision,
+        owner_human_user_id=task.owner_human_user_id,
+        owner_display_name=owner.display_name,
+        coordinator_agent_id=task.coordinator_agent_id,
+        membership_role=viewer_membership.role,  # type: ignore[arg-type]
+        membership_status=viewer_membership.status,  # type: ignore[arg-type]
+        active_member_count=sum(item.status == "active" for item, _ in membership_rows),
+        invited_member_count=sum(item.status == "invited" for item, _ in membership_rows),
+        assignment_count=len(assignment_rows),
+        pending_assignment_count=pending_count,
+        final_summary=task.final_summary,
+        created_at=_as_utc(task.created_at),
+        updated_at=_as_utc(task.updated_at),
+        members=members,
+        assignments=assignments,
+        activities=activities,
+    )
+
+
+def list_tasks(session: Session, *, user: HumanUser, limit: int = 100) -> list[TaskSummary]:
+    rows = session.execute(
+        select(Task, TaskMembership)
+        .join(TaskMembership, TaskMembership.task_id == Task.id)
+        .where(
+            TaskMembership.human_user_id == user.id,
+            TaskMembership.status.in_(["active", "invited"]),
+        )
+        .order_by(Task.updated_at.desc())
+        .limit(limit)
+    ).all()
+    return [
+        TaskSummary.model_validate(
+            _task_detail(session, task=task, viewer_membership=membership).model_dump(
+                exclude={"members", "assignments", "activities"}
+            )
+        )
+        for task, membership in rows
+    ]
+
+
+def get_task(session: Session, *, user: HumanUser, task_id: UUID) -> TaskDetail:
+    task, membership = _task_context(session, task_id=task_id, user=user)
+    return _task_detail(session, task=task, viewer_membership=membership)
+
+
+def create_task(
+    session: Session,
+    *,
+    user: HumanUser,
+    payload: TaskCreate,
+    human_session_id: UUID | None,
+    request_id: str,
+) -> TaskDetail:
+    agents = _validate_agent_choice(session, human_id=user.id, choice=payload)
+    now = utc_now()
+    task = Task(
+        owner_human_user_id=user.id,
+        coordinator_agent_id=payload.primary_agent_id,
+        title=payload.title,
+        goal=payload.goal,
+        expected_output=payload.expected_output,
+        due_at=payload.due_at,
+        status="active",
+        created_at=now,
+        updated_at=now,
+    )
+    session.add(task)
+    session.flush()
+    membership = TaskMembership(
+        task_id=task.id,
+        human_user_id=user.id,
+        primary_agent_id=payload.primary_agent_id,
+        role="owner",
+        status="active",
+        invited_by_user_id=user.id,
+        invited_at=now,
+        joined_at=now,
+        updated_at=now,
+    )
+    session.add(membership)
+    for agent in agents:
+        session.add(
+            TaskAgentParticipant(
+                task_id=task.id,
+                agent_id=agent.id,
+                human_user_id=user.id,
+                role="primary" if agent.id == payload.primary_agent_id else "support",
+                selected_at=now,
+            )
+        )
+    _add_activity(
+        session,
+        task_id=task.id,
+        kind="task_created",
+        actor_type="human",
+        actor_human_id=user.id,
+    )
+    add_human_action_audit(
+        session,
+        human_user_id=user.id,
+        human_session_id=human_session_id,
+        action="task.created",
+        target_type="task",
+        target_id=str(task.id),
+        outcome="success",
+        request_id=request_id,
+        audit_metadata={"agent_ids": [str(agent.id) for agent in agents]},
+    )
+    session.commit()
+    return _task_detail(session, task=task, viewer_membership=membership)
+
+
+def list_task_invitation_candidates(
+    session: Session, *, user: HumanUser, task_id: UUID, limit: int = 100
+) -> list[FriendResponse]:
+    task, membership = _task_context(session, task_id=task_id, user=user)
+    _require_owner(task, membership)
+    existing = set(
+        session.scalars(
+            select(TaskMembership.human_user_id).where(
+                TaskMembership.task_id == task_id,
+                TaskMembership.status.in_(["active", "invited"]),
+            )
+        )
+    )
+    return [
+        friend
+        for friend in list_friends(session, user=user, limit=limit)
+        if friend.relation_status == "accepted" and friend.human_user_id not in existing
+    ]
+
+
+def invite_task_members(
+    session: Session,
+    *,
+    user: HumanUser,
+    task_id: UUID,
+    human_user_ids: list[UUID],
+    human_session_id: UUID | None,
+    request_id: str,
+) -> TaskDetail:
+    task, membership = _task_context(session, task_id=task_id, user=user, lock=True)
+    _require_owner(task, membership)
+    accepted_ids = {
+        friend.human_user_id
+        for friend in list_friends(session, user=user, limit=200)
+        if friend.relation_status == "accepted"
+    }
+    if not set(human_user_ids).issubset(accepted_ids):
+        raise FriendshipNotFoundError
+    existing_ids = set(
+        session.scalars(
+            select(TaskMembership.human_user_id).where(
+                TaskMembership.task_id == task_id,
+                TaskMembership.status.in_(["active", "invited"]),
+            )
+        )
+    )
+    if existing_ids.intersection(human_user_ids):
+        raise TaskStateConflictError
+    now = utc_now()
+    for human_id in human_user_ids:
+        row = session.get(TaskMembership, (task_id, human_id))
+        if row is None:
+            row = TaskMembership(task_id=task_id, human_user_id=human_id)
+        row.primary_agent_id = None
+        row.role = "member"
+        row.status = "invited"
+        row.invited_by_user_id = user.id
+        row.invited_at = now
+        row.joined_at = None
+        row.updated_at = now
+        session.add(row)
+        _add_activity(
+            session,
+            task_id=task_id,
+            kind="member_invited",
+            actor_type="human",
+            actor_human_id=user.id,
+            target_human_id=human_id,
+        )
+    task.updated_at = now
+    add_human_action_audit(
+        session,
+        human_user_id=user.id,
+        human_session_id=human_session_id,
+        action="task.members_invited",
+        target_type="task",
+        target_id=str(task.id),
+        outcome="success",
+        request_id=request_id,
+    )
+    session.commit()
+    return _task_detail(session, task=task, viewer_membership=membership)
+
+
+def decide_task_invitation(
+    session: Session,
+    *,
+    user: HumanUser,
+    task_id: UUID,
+    accept: bool,
+    choice: AgentChoice | None,
+    human_session_id: UUID | None,
+    request_id: str,
+) -> TaskDetail | None:
+    task, membership = _task_context(session, task_id=task_id, user=user, lock=True)
+    if membership.status != "invited":
+        raise TaskStateConflictError
+    agents: list[Agent] = []
+    if accept:
+        if choice is None:
+            raise TaskAgentSelectionError
+        agents = _validate_agent_choice(session, human_id=user.id, choice=choice)
+    now = utc_now()
+    membership.status = "active" if accept else "declined"
+    membership.primary_agent_id = choice.primary_agent_id if accept and choice else None
+    membership.joined_at = now if accept else None
+    membership.updated_at = now
+    for agent in agents:
+        session.add(
+            TaskAgentParticipant(
+                task_id=task.id,
+                agent_id=agent.id,
+                human_user_id=user.id,
+                role="primary" if choice and agent.id == choice.primary_agent_id else "support",
+                selected_at=now,
+            )
+        )
+    _add_activity(
+        session,
+        task_id=task.id,
+        kind="member_joined" if accept else "member_declined",
+        actor_type="human",
+        actor_human_id=user.id,
+        target_human_id=user.id,
+        metadata={"agent_ids": [str(agent.id) for agent in agents]},
+    )
+    add_human_action_audit(
+        session,
+        human_user_id=user.id,
+        human_session_id=human_session_id,
+        action="task.invitation_accepted" if accept else "task.invitation_declined",
+        target_type="task",
+        target_id=str(task.id),
+        outcome="success",
+        request_id=request_id,
+    )
+    task.updated_at = now
+    session.commit()
+    return _task_detail(session, task=task, viewer_membership=membership) if accept else None
+
+
+def create_assignment(
+    session: Session,
+    *,
+    user: HumanUser,
+    task_id: UUID,
+    payload: TaskAssignmentCreate,
+    human_session_id: UUID | None,
+    request_id: str,
+) -> TaskDetail:
+    task, membership = _task_context(session, task_id=task_id, user=user, lock=True)
+    _require_owner(task, membership)
+    if task.status != "active":
+        raise TaskStateConflictError
+    target_membership = session.get(TaskMembership, (task_id, payload.responsible_human_user_id))
+    participant = session.get(TaskAgentParticipant, (task_id, payload.assignee_agent_id))
+    if (
+        target_membership is None
+        or target_membership.status != "active"
+        or participant is None
+        or not participant.active
+        or participant.human_user_id != payload.responsible_human_user_id
+    ):
+        raise TaskAgentSelectionError
+    assignment = TaskAssignment(
+        task_id=task_id,
+        responsible_human_user_id=payload.responsible_human_user_id,
+        assignee_agent_id=payload.assignee_agent_id,
+        created_by_human_user_id=user.id,
+        instruction=payload.instruction,
+        expected_output=payload.expected_output,
+        due_at=payload.due_at,
+        status="queued",
+    )
+    session.add(assignment)
+    session.flush()
+    session.add(AgentRun(assignment_id=assignment.id, agent_id=payload.assignee_agent_id))
+    _add_activity(
+        session,
+        task_id=task_id,
+        kind="assignment_created",
+        actor_type="human",
+        actor_human_id=user.id,
+        target_human_id=payload.responsible_human_user_id,
+        metadata={
+            "assignment_id": str(assignment.id),
+            "assignee_agent_id": str(payload.assignee_agent_id),
+        },
+    )
+    add_human_action_audit(
+        session,
+        human_user_id=user.id,
+        human_session_id=human_session_id,
+        action="task.assignment_created",
+        target_type="task",
+        target_id=str(task.id),
+        outcome="success",
+        request_id=request_id,
+    )
+    task.updated_at = utc_now()
+    session.commit()
+    return _task_detail(session, task=task, viewer_membership=membership)
+
+
+def update_task_status(
+    session: Session,
+    *,
+    user: HumanUser,
+    task_id: UUID,
+    action: str,
+    reason: str | None,
+    human_session_id: UUID | None,
+    request_id: str,
+) -> TaskDetail:
+    task, membership = _task_context(session, task_id=task_id, user=user, lock=True)
+    _require_owner(task, membership)
+    transitions = {
+        "pause": ({"active"}, "paused"),
+        "resume": ({"paused"}, "active"),
+        "cancel": ({"active", "paused", "awaiting_acceptance"}, "cancelled"),
+        "archive": ({"completed", "cancelled"}, "archived"),
+        "restore": ({"archived"}, "completed" if task.completed_at else "cancelled"),
+    }
+    allowed, target = transitions[action]
+    if task.status not in allowed:
+        raise TaskStateConflictError
+    now = utc_now()
+    task.status = target
+    task.updated_at = now
+    if action == "cancel":
+        task.cancelled_at = now
+    if action == "archive":
+        task.archived_at = now
+    if action == "restore":
+        task.archived_at = None
+    _add_activity(
+        session,
+        task_id=task.id,
+        kind=f"task_{action}",
+        actor_type="human",
+        actor_human_id=user.id,
+        metadata={"reason": reason} if reason else {},
+    )
+    add_human_action_audit(
+        session,
+        human_user_id=user.id,
+        human_session_id=human_session_id,
+        action=f"task.{action}",
+        target_type="task",
+        target_id=str(task.id),
+        outcome="success",
+        request_id=request_id,
+    )
+    session.commit()
+    return _task_detail(session, task=task, viewer_membership=membership)
+
+
+def submit_task(
+    session: Session,
+    *,
+    user: HumanUser,
+    task_id: UUID,
+    payload: TaskFinalSubmission,
+    human_session_id: UUID | None,
+    request_id: str,
+) -> TaskDetail:
+    task, membership = _task_context(session, task_id=task_id, user=user, lock=True)
+    _require_owner(task, membership)
+    if task.status != "active":
+        raise TaskStateConflictError
+    if session.scalar(
+        select(func.count(TaskAssignment.id)).where(
+            TaskAssignment.task_id == task.id,
+            TaskAssignment.status.not_in(["completed", "cancelled"]),
+        )
+    ):
+        raise TaskStateConflictError
+    now = utc_now()
+    task.final_summary = payload.summary
+    task.submitted_at = now
+    task.status = "awaiting_acceptance"
+    task.updated_at = now
+    _add_activity(
+        session,
+        task_id=task.id,
+        kind="final_submitted",
+        actor_type="human",
+        actor_human_id=user.id,
+    )
+    add_human_action_audit(
+        session,
+        human_user_id=user.id,
+        human_session_id=human_session_id,
+        action="task.final_submitted",
+        target_type="task",
+        target_id=str(task.id),
+        outcome="success",
+        request_id=request_id,
+    )
+    session.commit()
+    return _task_detail(session, task=task, viewer_membership=membership)
+
+
+def decide_task_acceptance(
+    session: Session,
+    *,
+    user: HumanUser,
+    task_id: UUID,
+    payload: TaskAcceptanceDecision,
+    human_session_id: UUID | None,
+    request_id: str,
+) -> TaskDetail:
+    task, membership = _task_context(session, task_id=task_id, user=user, lock=True)
+    _require_owner(task, membership)
+    if task.status != "awaiting_acceptance":
+        raise TaskStateConflictError
+    now = utc_now()
+    if payload.decision == "accept":
+        task.status = "completed"
+        task.accepted_at = now
+        task.completed_at = now
+    else:
+        task.status = "active"
+        task.revision += 1
+        task.final_summary = None
+        task.submitted_at = None
+    task.updated_at = now
+    _add_activity(
+        session,
+        task_id=task.id,
+        kind="accepted" if payload.decision == "accept" else "changes_requested",
+        actor_type="human",
+        actor_human_id=user.id,
+        metadata={"note": payload.note} if payload.note else {},
+    )
+    add_human_action_audit(
+        session,
+        human_user_id=user.id,
+        human_session_id=human_session_id,
+        action=f"task.{payload.decision}",
+        target_type="task",
+        target_id=str(task.id),
+        outcome="success",
+        request_id=request_id,
+    )
+    session.commit()
+    return _task_detail(session, task=task, viewer_membership=membership)
+
+
+def _digest_lease(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def claim_agent_run(session: Session, *, agent: Agent) -> AgentRunClaim | None:
+    now = utc_now()
+    expired = list(
+        session.scalars(
+            select(AgentRun).where(
+                AgentRun.agent_id == agent.id,
+                AgentRun.status.in_(["leased", "starting", "running"]),
+                AgentRun.lease_expires_at < now,
+            )
+        )
+    )
+    for run in expired:
+        run.status = "interrupted"
+        assignment = session.get(TaskAssignment, run.assignment_id)
+        if assignment is not None and assignment.status not in {"completed", "cancelled"}:
+            session.add(
+                AgentRun(
+                    assignment_id=assignment.id,
+                    agent_id=agent.id,
+                    attempt=run.attempt + 1,
+                    checkpoint=run.checkpoint,
+                )
+            )
+    session.flush()
+    run = session.scalar(
+        select(AgentRun)
+        .where(AgentRun.agent_id == agent.id, AgentRun.status == "queued")
+        .order_by(AgentRun.created_at)
+        .with_for_update(skip_locked=True)
+        .limit(1)
+    )
+    if run is None:
+        session.commit()
+        return None
+    assignment = session.get(TaskAssignment, run.assignment_id)
+    if assignment is None:
+        raise AgentRunNotFoundError
+    task = session.get(Task, assignment.task_id)
+    if task is None or task.status != "active":
+        raise AgentRunNotFoundError
+    token = secrets.token_urlsafe(32)
+    expires = now + timedelta(seconds=RUN_LEASE_SECONDS)
+    run.status = "leased"
+    run.lease_token_digest = _digest_lease(token)
+    run.lease_expires_at = expires
+    run.last_heartbeat_at = now
+    assignment.status = "running"
+    assignment.updated_at = now
+    _add_activity(
+        session,
+        task_id=task.id,
+        kind="run_leased",
+        actor_type="agent",
+        actor_agent_id=agent.id,
+        metadata={"assignment_id": str(assignment.id), "run_id": str(run.id)},
+    )
+    session.commit()
+    return AgentRunClaim(
+        run_id=run.id,
+        lease_token=token,
+        lease_expires_at=expires,
+        task_id=task.id,
+        thread_id=task.thread_id,
+        task_title=task.title,
+        task_goal=task.goal,
+        assignment_id=assignment.id,
+        instruction=assignment.instruction,
+        expected_output=assignment.expected_output,
+        due_at=_as_utc(assignment.due_at),
+        attempt=run.attempt,
+    )
+
+
+def _leased_run(
+    session: Session, *, agent: Agent, run_id: UUID, lease_token: str
+) -> tuple[AgentRun, TaskAssignment, Task]:
+    run = session.scalar(
+        select(AgentRun)
+        .where(AgentRun.id == run_id, AgentRun.agent_id == agent.id)
+        .with_for_update()
+    )
+    now = utc_now()
+    if (
+        run is None
+        or run.lease_token_digest is None
+        or not secrets.compare_digest(run.lease_token_digest, _digest_lease(lease_token))
+        or run.lease_expires_at is None
+        or _as_utc(run.lease_expires_at) <= now
+        or run.status not in {"leased", "starting", "running", "waiting_human"}
+    ):
+        raise AgentRunLeaseError
+    assignment = session.get(TaskAssignment, run.assignment_id)
+    task = session.get(Task, assignment.task_id) if assignment else None
+    if assignment is None or task is None:
+        raise AgentRunNotFoundError
+    return run, assignment, task
+
+
+def update_agent_run(
+    session: Session, *, agent: Agent, run_id: UUID, payload: AgentRunUpdate
+) -> AgentRunClaim:
+    run, assignment, task = _leased_run(
+        session, agent=agent, run_id=run_id, lease_token=payload.lease_token
+    )
+    now = utc_now()
+    run.status = payload.status
+    run.last_heartbeat_at = now
+    run.lease_expires_at = now + timedelta(seconds=RUN_LEASE_SECONDS)
+    run.checkpoint = payload.checkpoint
+    if run.started_at is None and payload.status in {"starting", "running"}:
+        run.started_at = now
+    assignment.status = "waiting_human" if payload.status == "waiting_human" else "running"
+    assignment.updated_at = now
+    session.commit()
+    return AgentRunClaim(
+        run_id=run.id,
+        lease_token=payload.lease_token,
+        lease_expires_at=run.lease_expires_at,
+        task_id=task.id,
+        thread_id=task.thread_id,
+        task_title=task.title,
+        task_goal=task.goal,
+        assignment_id=assignment.id,
+        instruction=assignment.instruction,
+        expected_output=assignment.expected_output,
+        due_at=_as_utc(assignment.due_at),
+        attempt=run.attempt,
+    )
+
+
+def complete_agent_run(
+    session: Session, *, agent: Agent, run_id: UUID, payload: AgentRunResult
+) -> None:
+    run, assignment, task = _leased_run(
+        session, agent=agent, run_id=run_id, lease_token=payload.lease_token
+    )
+    now = utc_now()
+    run.status = payload.status
+    run.finished_at = now
+    run.last_heartbeat_at = now
+    run.lease_expires_at = None
+    run.lease_token_digest = None
+    run.checkpoint = payload.checkpoint
+    assignment.status = payload.status
+    assignment.result_status = payload.status
+    assignment.result_summary = payload.summary
+    assignment.updated_at = now
+    assignment.completed_at = now
+    task.updated_at = now
+    _add_activity(
+        session,
+        task_id=task.id,
+        kind="assignment_result",
+        actor_type="agent",
+        actor_agent_id=agent.id,
+        metadata={
+            "assignment_id": str(assignment.id),
+            "run_id": str(run.id),
+            "status": payload.status,
+            "summary": payload.summary,
+        },
+        external=True,
+    )
+    session.commit()

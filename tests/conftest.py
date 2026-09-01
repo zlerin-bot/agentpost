@@ -38,9 +38,17 @@ from agentpost.onboarding.models import (
     ConnectorInstance,
 )
 from agentpost.organizations.models import OrganizationDomain, OrganizationInvitation
-from agentpost.projects.models import Project, ProjectActivity, ProjectMembership
 from agentpost.security.models import RateLimitBucket
 from agentpost.sso.models import OidcLoginState, OrganizationOidcIdentity, OrganizationOidcProvider
+from agentpost.tasks.models import (
+    AgentRun,
+    Friendship,
+    Task,
+    TaskActivity,
+    TaskAgentParticipant,
+    TaskAssignment,
+    TaskMembership,
+)
 
 _MODELS = (
     Agent,
@@ -70,9 +78,13 @@ _MODELS = (
     HumanTotpCredential,
     OrganizationInvitation,
     OrganizationDomain,
-    Project,
-    ProjectMembership,
-    ProjectActivity,
+    Friendship,
+    Task,
+    TaskMembership,
+    TaskAgentParticipant,
+    TaskAssignment,
+    AgentRun,
+    TaskActivity,
     OAuthAccessToken,
     OAuthRefreshToken,
     OrganizationOidcProvider,

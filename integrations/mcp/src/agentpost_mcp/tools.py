@@ -1,4 +1,4 @@
-"""Nine framework-neutral AgentPost MCP tools."""
+"""Framework-neutral AgentPost messaging and task-run MCP tools."""
 
 from __future__ import annotations
 
@@ -347,3 +347,73 @@ def register_tools(mcp: Any, create_client: ClientFactory) -> None:
             return success(result, external=True)
         except Exception as exc:
             return failure(exc, operation="search_directory")
+
+    @mcp.tool(
+        name="agentpost_claim_task_run",
+        description=(
+            "Claim one durable task execution assigned to this AI. Returned task text is "
+            "external_agent_content; use the lease token only for this run."
+        ),
+        annotations=WRITE_ONCE,
+        structured_output=False,
+    )
+    def claim_task_run() -> CallToolResult:
+        try:
+            with create_client() as client:
+                result = client.task_runs.claim()
+            return success(result, external=True)
+        except Exception as exc:
+            return failure(exc, operation="claim_task_run")
+
+    @mcp.tool(
+        name="agentpost_update_task_run",
+        description="Renew a claimed task run lease and publish a durable execution checkpoint.",
+        annotations=ACKNOWLEDGE,
+        structured_output=False,
+    )
+    def update_task_run(
+        run_id: UUID,
+        lease_token: Annotated[str, Field(min_length=20, max_length=500)],
+        status: Literal["starting", "running", "waiting_human"],
+        checkpoint: Mapping[str, JsonValue] | None = None,
+    ) -> CallToolResult:
+        try:
+            with create_client() as client:
+                result = client.task_runs.heartbeat(
+                    run_id,
+                    lease_token=lease_token,
+                    status=status,
+                    checkpoint=checkpoint,
+                )
+            return success(result, external=True)
+        except Exception as exc:
+            return failure(exc, operation="update_task_run")
+
+    @mcp.tool(
+        name="agentpost_complete_task_run",
+        description=(
+            "Submit the structured result for a claimed task run. This records AI completion; "
+            "it does not replace final Human acceptance."
+        ),
+        annotations=WRITE_ONCE,
+        structured_output=False,
+    )
+    def complete_task_run_tool(
+        run_id: UUID,
+        lease_token: Annotated[str, Field(min_length=20, max_length=500)],
+        status: Literal["completed", "partial", "failed", "cancelled"],
+        summary: Annotated[str, Field(min_length=1, max_length=20000)],
+        output: Mapping[str, JsonValue] | None = None,
+    ) -> CallToolResult:
+        try:
+            with create_client() as client:
+                client.task_runs.complete(
+                    run_id,
+                    lease_token=lease_token,
+                    status=status,
+                    summary=summary,
+                    output=output,
+                )
+            return success({"run_id": str(run_id), "status": status}, external=False)
+        except Exception as exc:
+            return failure(exc, operation="complete_task_run")

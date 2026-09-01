@@ -27,6 +27,16 @@ def test_public_agent_integration_contract_preserves_machine_and_human_semantics
     assert payload["states"]["ack_means_received_not_completed"] is True
     assert payload["states"]["direct_reply_handles_task_round"] is True
     assert payload["states"]["structured_result_takes_precedence"] is True
+    assert payload["states"]["agent_result_is_not_human_acceptance"] is True
+    assert payload["task_execution"] == {
+        "claim_endpoint": "/api/v1/task-runs/claim",
+        "heartbeat_endpoint_template": "/api/v1/task-runs/{run_id}/heartbeat",
+        "result_endpoint_template": "/api/v1/task-runs/{run_id}/result",
+        "lease_seconds": 90,
+        "durable_queue": True,
+        "claim_is_idempotent_per_active_lease": True,
+        "result_requires_human_acceptance": True,
+    }
     assert payload["heartbeat"]["recommended_interval_seconds"] == 30
     assert payload["heartbeat"]["offline_after_seconds"] == 90
     assert payload["heartbeat"]["online_requires_current_healthy_heartbeat"] is True

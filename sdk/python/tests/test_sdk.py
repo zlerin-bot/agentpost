@@ -914,3 +914,34 @@ def test_approval_transport_failure_exposes_idempotency_key_without_retry() -> N
 
     assert calls == 1
     assert raised.value.idempotency_key == "approval-safe-retry"
+
+
+def test_task_run_claim_heartbeat_and_result_are_explicit() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.url.path.endswith("/task-runs/claim"):
+            return json_response(request, 200, {"run_id": "run-1", "lease_token": "x" * 24})
+        if request.url.path.endswith("/heartbeat"):
+            return json_response(request, 200, {"run_id": "run-1", "lease_token": "x" * 24})
+        return httpx.Response(204, request=request)
+
+    with make_client(handler) as client:
+        claimed = client.task_runs.claim()
+        heartbeat = client.task_runs.heartbeat(
+            "run-1", lease_token="x" * 24, status="running", checkpoint={"step": 2}
+        )
+        completed = client.task_runs.complete(
+            "run-1",
+            lease_token="x" * 24,
+            status="completed",
+            summary="done",
+            output={"artifact": "report"},
+        )
+
+    assert claimed == {"run_id": "run-1", "lease_token": "x" * 24}
+    assert heartbeat["run_id"] == "run-1"
+    assert completed is None
+    assert json.loads(requests[1].content)["checkpoint"] == {"step": 2}
+    assert json.loads(requests[2].content)["status"] == "completed"

@@ -112,18 +112,20 @@ def test_orbit_site_is_branded_and_does_not_persist_credentials(
 
     assert home.status_code == orbit.status_code == 200
     header = orbit.text.split('<header class="topbar">', 1)[1].split("</header>", 1)[0]
-    assert "星云驿" in orbit.text
-    assert "AgentPost · 星轨" in header
+    assert "AgentPost" in orbit.text
+    assert "<strong>AgentPost</strong>" in header
     assert 'id="brand-mark-gradient"' in header
     assert "plane-switch" not in header
     assert "星轨看协作" not in header
     assert "云驿管 Agent" not in header
     assert "设置管账户" not in header
-    assert 'data-module="orbit"' in orbit.text
+    assert 'data-module="orbit"' not in header
     assert 'data-module="relay"' in orbit.text
     assert 'data-module="projects"' in orbit.text
     assert 'data-module="friends"' in orbit.text
     assert 'data-module="settings"' in orbit.text
+    primary = orbit.text.split('id="primary-navigation"', 1)[1].split("</nav>", 1)[0]
+    assert primary.count('class="primary-nav-item') == 4
     assert "我的对话" in orbit.text
     assert "Agent 总览" in orbit.text
     assert "个人资料" in orbit.text
@@ -233,18 +235,8 @@ def test_orbit_site_is_branded_and_does_not_persist_credentials(
     assert "AGENTPOST_API_KEY" not in orbit.text
     assert "agt_" not in orbit.text
     assert "账户安全" in orbit.text
-    assert "组织与成员" in orbit.text
-    assert "organization-list" in orbit.text
-    assert "open-organization-create" in orbit.text
-    assert "organization-manage-dialog" in orbit.text
-    assert "organization-invitation-dialog" in orbit.text
-    assert "organization-pending-list" in orbit.text
-    assert "organization-invite-username" in orbit.text
-    assert "加入前请确认组织、角色和权限范围" in orbit.text
-    assert '"/api/v1/orbit/organization-invitations/preview"' in script.text
-    assert '"/api/v1/orbit/organization-invitations/accept"' in script.text
-    assert '"/api/v1/orbit/organization-invitations"' in script.text
-    assert "organization-invitation" in script.text
+    assert 'data-section="organizations"' not in primary
+    assert 'requestJson("/api/v1/orbit/organization-invitations")' not in script.text
     assert "history.replaceState" in script.text
     assert "organization-domain-name" in orbit.text
     assert "/domains/" in script.text
@@ -296,7 +288,7 @@ def test_orbit_site_is_branded_and_does_not_persist_credentials(
     assert "新动态 · 待接入" not in orbit.text
     assert "Human 已查看" not in orbit.text
     assert "chat-composer" not in orbit.text
-    assert "按每个对话查看 Agent 之间的全部往来" in orbit.text
+    assert "按每个对话查看 Agent 之间的全部往来" in script.text
     assert "搜索有权查看的对话" in orbit.text
     assert "/api/v1/orbit/threads" in script.text
     assert "放心查看，不会影响 Agent 的处理进度" in orbit.text
@@ -1668,7 +1660,7 @@ def test_human_key_creates_revocable_short_lived_browser_session(
         cookie_header = login.headers["set-cookie"]
         assert "HttpOnly" in cookie_header
         assert "SameSite=strict" in cookie_header
-        assert "Path=/api/v1/orbit" in cookie_header
+        assert "Path=/api/v1" in cookie_header
         assert human["access_key"] not in cookie_header
         assert dashboard.status_code == 200
 
@@ -1692,13 +1684,13 @@ def test_human_key_creates_revocable_short_lived_browser_session(
         client.cookies.set(
             "xinggui_session",
             raw_session,
-            path="/api/v1/orbit",
+            path="/api/v1",
         )
         revoked = client.get("/api/v1/orbit/dashboard")
         assert revoked.status_code == 401
         client.cookies.delete(
             "xinggui_session",
-            path="/api/v1/orbit",
+            path="/api/v1",
         )
 
         second_login = client.post(

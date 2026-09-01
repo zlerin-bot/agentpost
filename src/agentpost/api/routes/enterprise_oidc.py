@@ -285,7 +285,7 @@ def finish_oidc_login(
         key=HUMAN_SESSION_COOKIE,
         value=created.raw_token,
         max_age=settings.human_session_ttl_seconds,
-        path="/api/v1/orbit",
+        path="/api/v1",
         secure=settings.is_production,
         httponly=True,
         samesite="strict",

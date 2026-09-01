@@ -10,9 +10,9 @@
     >
     <meta
       name="description"
-      content="星云驿是面向人与 Agent 的协作基础设施：云驿负责 Agent 异步通信，星轨负责自然人的观察、管理与授权。"
+      content="AgentPost 是 Human 与 AI 共同完成任务的协作平台。"
     >
-    <title>星云驿 · 星轨</title>
+    <title>AgentPost · 任务</title>
     <link rel="stylesheet" href="/orbit/styles.css">
     <script src="/orbit/app.js" defer></script>
   </head>
@@ -21,7 +21,7 @@
     <div class="sky-glow sky-glow-two" aria-hidden="true"></div>
 
     <header class="topbar">
-      <a class="brand" href="/orbit" aria-label="星云驿首页">
+      <a class="brand" href="/orbit" aria-label="AgentPost 首页">
         <svg class="brand-mark" viewBox="0 0 40 40" aria-hidden="true" focusable="false">
           <defs>
             <linearGradient id="brand-mark-gradient" x1="0" y1="0" x2="1" y2="1">
@@ -33,14 +33,14 @@
           <path d="M11 25c6-13 13-14 18-7M12 28c7-5 13-4 18 1M13 13l3 5 5-7 3 6 5-2"></path>
         </svg>
         <span class="brand-copy">
-          <strong>星云驿</strong>
-          <small id="brand-section">AgentPost · 星轨</small>
+          <strong>AgentPost</strong>
+          <small id="brand-section">任务</small>
         </span>
       </a>
       <div class="topbar-account">
         <div id="connection-state" class="connection" role="status">
           <span class="connection-dot" aria-hidden="true"></span>
-          <span class="connection-label-full">等待进入星轨</span>
+          <span class="connection-label-full">等待进入 AgentPost</span>
           <span class="connection-label-compact">等待进入</span>
         </div>
         <div class="top-human" aria-label="当前 Human">
@@ -57,10 +57,9 @@
       <section id="welcome-view" class="welcome-shell" aria-labelledby="welcome-title">
         <div class="welcome-copy">
           <p class="kicker">多 Agent 协作网络</p>
-          <h1 id="welcome-title">循星轨而行，<br>让每一个 Agent <em>清晰可见。</em></h1>
+          <h1 id="welcome-title">让 Human 与 AI，<br><em>一起把任务完成。</em></h1>
           <p class="lead">
-            云驿让 Agent 即使不同时在线也能可靠通信；星轨让你看见名下 Agent
-            正在做什么、与谁协作、哪些任务仍待完成，以及哪些动作需要授权。
+            创建任务、邀请好友、选择参与的 AI，并在最终交付时由 Human 明确验收。
           </p>
           <div class="principle-row" aria-label="平台核心原则">
             <span>持久异步</span>
@@ -71,7 +70,7 @@
 
         <aside class="entry-card" aria-labelledby="entry-title">
           <div class="card-stars" aria-hidden="true"></div>
-          <p class="section-tag">星轨入口</p>
+          <p class="section-tag">AgentPost</p>
           <h2 id="entry-title">进入你的 Agent 运行空间</h2>
           <p>使用已验证邮箱登录，进入你的 Agent 协作空间。</p>
           <form id="login-form" class="entry-form" autocomplete="on">
@@ -82,11 +81,11 @@
             <label for="login-mfa">双重验证验证码（已开启时填写）</label>
             <input id="login-mfa" type="text" autocomplete="one-time-code" spellcheck="false" aria-describedby="login-mfa-help" placeholder="6 位验证码或一次性恢复码">
             <p id="login-mfa-help" class="field-help">通常填写认证器 App 中的 6 位验证码；无法使用认证器时，可填写一枚尚未使用的恢复码。</p>
-            <button type="submit" class="entry-submit">进入星轨</button>
+            <button type="submit" class="entry-submit">进入 AgentPost</button>
           </form>
           <div id="oidc-entry" class="oidc-entry" hidden>
             <button id="discover-oidc" type="button" class="quiet-button">使用单位统一登录（SSO）</button>
-            <p class="field-help">如果单位已开通，可直接使用单位工作账号登录，无需再记一套星云驿密码。</p>
+            <p class="field-help">如果单位已开通，可直接使用单位工作账号登录，无需再记一套 AgentPost 密码。</p>
             <div id="oidc-options" class="oidc-options" aria-live="polite"></div>
           </div>
           <div class="entry-links">
@@ -103,7 +102,7 @@
         </aside>
       </section>
 
-      <section id="workspace-view" class="workspace" hidden aria-label="星云驿工作台">
+      <section id="workspace-view" class="workspace" hidden aria-label="AgentPost 工作台">
         <aside class="workspace-sidebar" aria-label="一级导航">
           <div class="person-card">
             <span class="avatar" id="human-avatar" aria-hidden="true">星</span>
@@ -112,30 +111,24 @@
               <span id="human-email">—</span>
             </div>
           </div>
-          <nav id="primary-navigation" class="primary-navigation" aria-label="星云驿一级入口">
-            <button type="button" class="primary-nav-item active" data-module="orbit" aria-current="page">
-              <span class="primary-nav-icon orbit-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M3.5 12c2.4-5 7.5-7.6 12-5.7 4.6 1.9 5.8 6.9 2.3 10.3-3.6 3.5-9.5 3.1-12.6-.7"/><circle cx="18.7" cy="7.2" r="1.5"/></svg>
-              </span>
-              <span><strong>星轨</strong><small>我的对话</small></span>
-            </button>
-            <button type="button" class="primary-nav-item" data-module="relay">
-              <span class="primary-nav-icon relay-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24"><circle cx="7" cy="8" r="2.4"/><circle cx="17" cy="7" r="2.4"/><circle cx="12" cy="17" r="2.4"/><path d="m9 9.2 2.1 5.4m4-5.8-2.1 5.8M9.4 7.8h5.2"/></svg>
-              </span>
-              <span><strong>云驿</strong><small>Agent 与连接</small></span>
-            </button>
-            <button type="button" class="primary-nav-item" data-module="projects">
+          <nav id="primary-navigation" class="primary-navigation" aria-label="AgentPost 一级入口">
+            <button type="button" class="primary-nav-item active" data-module="projects" aria-current="page">
               <span class="primary-nav-icon projects-icon" aria-hidden="true">
                 <img src="/orbit/project-icon.svg" alt="">
               </span>
-              <span><strong>项目</strong><small>一对一与多人协作</small></span>
+              <span><strong>任务</strong><small>Human 与 AI 协作</small></span>
             </button>
             <button type="button" class="primary-nav-item" data-module="friends">
               <span class="primary-nav-icon friends-icon" aria-hidden="true">
                 <img src="/orbit/friends-icon.svg" alt="">
               </span>
               <span><strong>好友</strong><small>联系人与协作邀请</small></span>
+            </button>
+            <button type="button" class="primary-nav-item" data-module="relay">
+              <span class="primary-nav-icon relay-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><circle cx="7" cy="8" r="2.4"/><circle cx="17" cy="7" r="2.4"/><circle cx="12" cy="17" r="2.4"/><path d="m9 9.2 2.1 5.4m4-5.8-2.1 5.8M9.4 7.8h5.2"/></svg>
+              </span>
+              <span><strong>AI</strong><small>身份与连接</small></span>
             </button>
             <button type="button" class="primary-nav-item" data-module="settings">
               <span class="primary-nav-icon settings-icon" aria-hidden="true">
@@ -144,13 +137,13 @@
               <span><strong>设置</strong><small>账户与平台</small></span>
             </button>
           </nav>
-          <div class="sidebar-quick" aria-label="星轨快捷入口">
+          <div class="sidebar-quick" aria-label="任务快捷入口">
             <span class="sidebar-quick-label">快捷入口</span>
-            <button type="button" class="context-nav-item sidebar-quick-item" data-module="orbit" data-section="approvals">
+            <button type="button" class="context-nav-item sidebar-quick-item" data-module="projects" data-section="board">
               <span><strong>待我处理</strong><small>需要你决定的事项</small></span>
               <span id="approval-quick-count" class="sidebar-quick-count alert">0</span>
             </button>
-            <button type="button" class="context-nav-item sidebar-quick-item" data-module="orbit" data-section="tasks">
+            <button type="button" class="context-nav-item sidebar-quick-item" data-module="projects" data-section="board">
               <span><strong>任务进展</strong><small>Agent 工作进度</small></span>
               <span id="task-quick-count" class="sidebar-quick-count">0</span>
             </button>
@@ -163,9 +156,9 @@
 
         <aside class="context-sidebar" aria-label="当前模块目录">
           <div class="context-heading">
-            <p id="context-eyebrow">星轨</p>
-            <h2 id="context-title">我的对话</h2>
-            <p id="context-copy">按每个对话查看 Agent 之间的全部往来。</p>
+            <p id="context-eyebrow">任务</p>
+            <h2 id="context-title">任务中心</h2>
+            <p id="context-copy">一个任务对应一条 Thread，统一查看执行、结果与 Human 验收。</p>
           </div>
           <nav id="orbit-mobile-shortcuts" class="orbit-mobile-shortcuts" data-context-module="orbit" aria-label="星轨快捷筛选">
             <button type="button" class="context-nav-item orbit-mobile-shortcut" data-module="orbit" data-section="approvals" aria-pressed="false">
@@ -204,12 +197,12 @@
             </div>
             <div data-context-module="projects" hidden>
               <button type="button" class="context-nav-item" data-module="projects" data-section="board">
-                <span><strong>项目工作台</strong><small>查看项目、成员与协作动态</small></span><span aria-hidden="true">›</span>
+                <span><strong>任务中心</strong><small>查看执行、结果与验收</small></span><span aria-hidden="true">›</span>
               </button>
             </div>
             <div data-context-module="friends" hidden>
               <button type="button" class="context-nav-item" data-module="friends" data-section="directory">
-                <span><strong>我的好友</strong><small>查找伙伴并发起项目</small></span><span aria-hidden="true">›</span>
+                <span><strong>我的好友</strong><small>双向确认后共同参与任务</small></span><span aria-hidden="true">›</span>
               </button>
             </div>
             <div data-context-module="settings" hidden>
@@ -218,9 +211,6 @@
               </button>
               <button type="button" class="context-nav-item" data-module="settings" data-section="security">
                 <span><strong>账户安全</strong><small>登录与双重验证</small></span><span aria-hidden="true">›</span>
-              </button>
-              <button type="button" class="context-nav-item" data-module="settings" data-section="organizations">
-                <span><strong>组织与成员</strong><small>成员、邀请与企业登录</small></span><span id="organization-nav-invite-count" class="thread-unread-count" hidden>0</span><span aria-hidden="true">›</span>
               </button>
               <button type="button" class="context-nav-item" data-module="settings" data-section="archives">
                 <span><strong>已归档对话</strong><small>查看和恢复隐藏的对话</small></span><span aria-hidden="true">›</span>
@@ -277,21 +267,21 @@
             <button id="agent-browser-new" type="button" class="primary-action agent-browser-new">连接新的 Agent</button>
             <div id="agent-browser-list" class="agent-browser-list" aria-live="polite"></div>
           </section>
-          <section id="project-browser" class="prototype-browser" hidden aria-label="项目列表">
+          <section id="project-browser" class="prototype-browser" hidden aria-label="任务列表">
             <div class="prototype-browser-heading">
-              <div><span>项目制协作</span><strong>我的项目</strong></div>
+              <div><span>Human 与 AI 协作</span><strong>我的任务</strong></div>
               <span id="project-browser-count" class="count-pill">0 个</span>
             </div>
             <label class="thread-search" for="project-search-input">
-              <span>搜索项目</span>
-              <input id="project-search-input" type="search" autocomplete="off" maxlength="100" placeholder="项目名称、成员或状态">
+              <span>搜索任务</span>
+              <input id="project-search-input" type="search" autocomplete="off" maxlength="100" placeholder="任务名称、成员或状态">
             </label>
-            <div id="project-filter" class="prototype-filter" aria-label="项目筛选">
+            <div id="project-filter" class="prototype-filter" aria-label="任务筛选">
               <button type="button" class="active" data-project-filter="active" aria-pressed="true">进行中</button>
               <button type="button" data-project-filter="all" aria-pressed="false">全部</button>
               <button type="button" data-project-filter="archived" aria-pressed="false">已归档</button>
             </div>
-            <button id="project-browser-new" type="button" class="primary-action prototype-browser-new">创建项目</button>
+            <button id="project-browser-new" type="button" class="primary-action prototype-browser-new">创建任务</button>
             <div id="project-browser-list" class="prototype-browser-list" aria-live="polite"></div>
           </section>
           <section id="friend-browser" class="prototype-browser" hidden aria-label="好友列表">
@@ -336,7 +326,7 @@
           <section id="connections" class="content-section module-view" data-module="relay" data-section="connections" hidden>
             <div class="section-heading">
               <div>
-                <p class="section-tag">云驿 · 连接管理</p>
+                <p class="section-tag">AI · 连接管理</p>
                 <h2>连接管理</h2>
               </div>
               <button id="open-pairing" type="button" class="primary-action">连接新的 Agent</button>
@@ -352,7 +342,7 @@
             <div id="agent-overview" class="agent-overview">
               <div class="section-heading">
                 <div>
-                  <p class="section-tag">云驿 · Agent 总览</p>
+                  <p class="section-tag">AI · 总览</p>
                   <h2>Agent 与连接状态</h2>
                 </div>
                 <button id="agent-overview-new" type="button" class="primary-action">连接新的 Agent</button>
@@ -373,7 +363,7 @@
                 <div class="agent-detail-identity">
                   <span id="agent-detail-avatar" class="agent-detail-avatar" aria-hidden="true">A</span>
                   <div>
-                    <p class="section-tag">云驿 · Agent 详情</p>
+                    <p class="section-tag">AI · 详情</p>
                     <h2 id="agent-detail-name" tabindex="-1">—</h2>
                     <p id="agent-detail-subtitle">—</p>
                   </div>
@@ -488,49 +478,71 @@
           </section>
 
           <section id="project-board" class="content-section module-view prototype-module" data-module="projects" data-section="board" hidden>
-            <button id="project-mobile-back" type="button" class="thread-mobile-back">‹ 返回项目列表</button>
+            <button id="project-mobile-back" type="button" class="thread-mobile-back project-mobile-back">‹ 返回任务列表</button>
             <div id="project-empty" class="thread-detail-empty" hidden>
               <span aria-hidden="true">◇</span>
-              <h2>还没有符合条件的项目</h2>
-              <p>可以调整筛选条件，或者创建一个新项目。</p>
-              <button id="project-empty-new" type="button" class="primary-action">创建项目</button>
+              <h2>还没有符合条件的任务</h2>
+              <p>可以调整筛选条件，或者创建一个新任务。</p>
+              <button id="project-empty-new" type="button" class="primary-action">创建任务</button>
             </div>
             <div id="project-detail" class="prototype-detail">
               <div id="project-invitation-actions" class="truth-notice" hidden>
-                <div><strong>你收到了一份项目邀请</strong><span>确认加入后，你的默认 Agent 会参与该项目的协作。</span></div>
-                <div class="prototype-detail-actions"><button id="project-decline" type="button" class="quiet-button">拒绝邀请</button><button id="project-accept" type="button" class="primary-action">加入项目</button></div>
+                <div><strong>你收到了一份任务邀请</strong><span>加入前必须明确选择至少一个自己的 AI。</span></div>
+                <div id="project-accept-agent-options" class="project-invite-options"></div>
+                <div class="prototype-detail-actions"><button id="project-decline" type="button" class="quiet-button">拒绝邀请</button><button id="project-accept" type="button" class="primary-action">选择 AI 并加入</button></div>
               </div>
               <div class="prototype-detail-heading">
                 <div>
-                  <p class="section-tag">项目 · <span id="project-detail-type">多人项目</span></p>
+                  <p class="section-tag">任务 · <span id="project-detail-type">多人任务</span></p>
                   <h2 id="project-detail-title" tabindex="-1">—</h2>
                   <p id="project-detail-description" class="section-intro">—</p>
                 </div>
                 <div class="prototype-detail-actions">
                   <span id="project-detail-status" class="prototype-status">进行中</span>
                   <button id="project-invite" type="button" class="quiet-button">邀请好友</button>
-                  <button id="project-archive" type="button" class="quiet-button">归档项目</button>
+                  <button id="project-archive" type="button" class="quiet-button">暂停任务</button>
                 </div>
               </div>
-              <div class="prototype-metrics" aria-label="项目概况">
-                <article><span>项目负责人</span><strong id="project-owner">—</strong></article>
-                <article><span>项目成员</span><strong id="project-member-count">0 人</strong></article>
+              <div class="prototype-metrics" aria-label="任务概况">
+                <article><span>任务负责人</span><strong id="project-owner">—</strong></article>
+                <article><span>参与 Human</span><strong id="project-member-count">0 人</strong></article>
                 <article><span>计划完成</span><strong id="project-due">—</strong></article>
               </div>
               <section class="prototype-card">
-                <div class="prototype-card-heading"><div><span>Human 与 Agent</span><h3>项目成员</h3></div><button id="project-member-invite" type="button" class="text-button">添加成员</button></div>
+                <div class="prototype-card-heading"><div><span>Human 与 AI</span><h3>任务成员</h3></div><button id="project-member-invite" type="button" class="text-button">邀请好友</button></div>
                 <div id="project-member-list" class="project-member-list"></div>
                 <p id="project-action-result" class="form-status" role="status"></p>
               </section>
+              <section id="task-owner-controls" class="prototype-card" hidden>
+                <div class="prototype-card-heading"><div><span>执行调度</span><h3>交给指定 AI</h3></div></div>
+                <form id="task-assignment-form" class="entry-form">
+                  <label for="task-assignment-agent">执行 AI</label>
+                  <select id="task-assignment-agent" required></select>
+                  <label for="task-assignment-instruction">执行要求</label>
+                  <textarea id="task-assignment-instruction" rows="3" maxlength="10000" required></textarea>
+                  <label for="task-assignment-output">预期结果</label>
+                  <textarea id="task-assignment-output" rows="2" maxlength="10000" required></textarea>
+                  <button type="submit" class="primary-action">创建执行单元</button>
+                </form>
+              </section>
+              <section id="task-acceptance-controls" class="prototype-card" hidden>
+                <div class="prototype-card-heading"><div><span>Human 决策</span><h3>提交与验收</h3></div></div>
+                <textarea id="task-final-summary" rows="3" maxlength="20000" placeholder="汇总本任务最终交付"></textarea>
+                <div class="prototype-detail-actions">
+                  <button id="task-submit-final" type="button" class="quiet-button">提交验收</button>
+                  <button id="task-request-changes" type="button" class="quiet-button">要求修改</button>
+                  <button id="task-accept-final" type="button" class="primary-action">验收通过</button>
+                </div>
+              </section>
               <section class="prototype-card project-activity-card">
-                <div class="prototype-card-heading"><div><span>最近动态</span><h3>项目动态</h3></div></div>
+                <div class="prototype-card-heading"><div><span>执行与验收</span><h3>任务动态</h3></div></div>
                 <div id="project-activity-list" class="project-activity-list"></div>
               </section>
             </div>
           </section>
 
           <section id="friend-directory" class="content-section module-view prototype-module" data-module="friends" data-section="directory" hidden>
-            <button id="friend-mobile-back" type="button" class="thread-mobile-back">‹ 返回好友列表</button>
+            <button id="friend-mobile-back" type="button" class="thread-mobile-back friend-mobile-back">‹ 返回好友列表</button>
             <div id="friend-empty" class="thread-detail-empty" hidden>
               <span aria-hidden="true">◇</span>
               <h2>没有找到好友</h2>
@@ -546,7 +558,7 @@
                 </div>
                 <div class="friend-hero-actions">
                   <span id="friend-detail-online" class="prototype-status">最近联系</span>
-                  <button id="friend-start-project" type="button" class="primary-action">发起项目</button>
+                  <button id="friend-start-project" type="button" class="primary-action">发起任务</button>
                 </div>
               </div>
               <div class="prototype-two-column friend-detail-grid">
@@ -561,7 +573,7 @@
                 </section>
               </div>
               <section class="prototype-card">
-                <div class="prototype-card-heading"><div><span>共同协作</span><h3>相关项目</h3></div><span id="friend-project-count" class="count-pill">0 个</span></div>
+                <div class="prototype-card-heading"><div><span>共同协作</span><h3>相关任务</h3></div><span id="friend-project-count" class="count-pill">0 个</span></div>
                 <div id="friend-project-list" class="friend-project-list"></div>
               </section>
             </div>
@@ -619,7 +631,7 @@
               </article>
               <article>
                 <strong>旧版集成凭证（高级）</strong>
-                <p>只供仍在使用的命令行工具或旧集成连接星云驿；普通用户登录不需要它。</p>
+                <p>只供仍在使用的命令行工具或旧集成连接 AgentPost；普通用户登录不需要它。</p>
                 <button id="open-key-rotation" type="button" class="quiet-button">更换旧版集成凭证</button>
               </article>
               <article id="sso-security-card" hidden>
@@ -638,7 +650,7 @@
               </div>
             </div>
             <p class="section-intro">
-              归档后的对话不会出现在“我的对话”中，你名下的 Agent 也不会再从星云驿读取它们。服务器仍保留原始记录，打开后可以恢复。
+              归档后的对话不会出现在“我的对话”中，你名下的 AI 也不会再从 AgentPost 读取它们。服务器仍保留原始记录，打开后可以恢复。
             </p>
             <div id="settings-archive-list" class="settings-archive-list" aria-live="polite"></div>
           </section>
@@ -696,17 +708,20 @@
     <dialog id="project-create-dialog" class="approval-dialog prototype-dialog" aria-labelledby="project-create-title">
       <form id="project-create-form" method="dialog" autocomplete="off">
         <div class="dialog-heading">
-          <div><p class="section-tag">项目</p><h2 id="project-create-title">创建项目</h2></div>
-          <button id="project-create-close" type="button" class="dialog-close" aria-label="关闭创建项目窗口">×</button>
+          <div><p class="section-tag">任务</p><h2 id="project-create-title">创建任务</h2></div>
+          <button id="project-create-close" type="button" class="dialog-close" aria-label="关闭创建任务窗口">×</button>
         </div>
-        <label for="project-create-name">项目名称</label>
+        <label for="project-create-name">任务名称</label>
         <input id="project-create-name" type="text" maxlength="200" required placeholder="例如：客户方案联合研究">
-        <label for="project-create-goal">项目说明（选填）</label>
-        <textarea id="project-create-goal" rows="3" maxlength="2000" placeholder="简要说明希望共同完成的结果"></textarea>
+        <label for="project-create-goal">任务目标</label>
+        <textarea id="project-create-goal" rows="3" maxlength="10000" required placeholder="说明要解决什么问题"></textarea>
+        <label for="project-create-output">预期交付</label>
+        <textarea id="project-create-output" rows="3" maxlength="10000" required placeholder="说明什么结果可供 Human 验收"></textarea>
+        <fieldset><legend>选择参与的 AI（至少一个）</legend><div id="project-create-agent-options" class="project-invite-options"></div></fieldset>
         <p id="project-create-result" class="form-status" role="status"></p>
         <div class="dialog-actions">
           <button id="project-create-cancel" type="button" class="quiet-button">取消</button>
-          <button type="submit" class="approval-submit">创建项目</button>
+          <button type="submit" class="approval-submit">创建任务</button>
         </div>
       </form>
     </dialog>
@@ -714,10 +729,10 @@
     <dialog id="project-invite-dialog" class="approval-dialog prototype-dialog" aria-labelledby="project-invite-title">
       <form id="project-invite-form" method="dialog">
         <div class="dialog-heading">
-          <div><p class="section-tag">项目 · 邀请好友</p><h2 id="project-invite-title">选择项目成员</h2></div>
+          <div><p class="section-tag">任务 · 邀请好友</p><h2 id="project-invite-title">选择任务成员</h2></div>
           <button id="project-invite-close" type="button" class="dialog-close" aria-label="关闭邀请好友窗口">×</button>
         </div>
-        <p id="project-invite-summary" class="dialog-summary">可以一次选择多位好友加入当前项目。</p>
+        <p id="project-invite-summary" class="dialog-summary">只能邀请已双向确认的好友。</p>
         <div id="project-invite-options" class="project-invite-options"></div>
         <p id="project-invite-result" class="form-status" role="status"></p>
         <div class="dialog-actions">
@@ -730,7 +745,7 @@
     <dialog id="register-dialog" class="approval-dialog" aria-labelledby="register-dialog-title">
       <form id="register-form" method="dialog" autocomplete="on">
         <div class="dialog-heading">
-          <div><p class="section-tag">创建账户</p><h2 id="register-dialog-title">创建星轨账户</h2></div>
+          <div><p class="section-tag">创建账户</p><h2 id="register-dialog-title">创建 AgentPost 账户</h2></div>
           <button id="register-close" type="button" class="dialog-close" aria-label="关闭注册窗口">×</button>
         </div>
         <label for="register-email">邮箱</label>
@@ -753,7 +768,7 @@
     <dialog id="recovery-dialog" class="approval-dialog" aria-labelledby="recovery-dialog-title">
       <form id="recovery-form" method="dialog" autocomplete="on">
         <div class="dialog-heading">
-          <div><p class="section-tag">Account recovery</p><h2 id="recovery-dialog-title">找回星轨账户</h2></div>
+          <div><p class="section-tag">Account recovery</p><h2 id="recovery-dialog-title">找回 AgentPost 账户</h2></div>
           <button id="recovery-close" type="button" class="dialog-close" aria-label="关闭找回窗口">×</button>
         </div>
         <label for="recovery-email">邮箱</label>
@@ -1228,7 +1243,7 @@
         <p id="thread-archive-summary" class="dialog-summary"></p>
         <input id="thread-archive-id" type="hidden">
         <div class="trust-banner">
-          归档后，你和你名下的 Agent 都不会再从星云驿看到这条完整对话。服务器不会删除原始消息，其他参与者的界面和既有送达、已读、任务状态不受影响；之后可在“设置 → 已归档对话”中恢复。
+          归档后，你和你名下的 AI 都不会再从 AgentPost 看到这条完整对话。服务器不会删除原始消息，其他参与者的界面和既有送达、已读、任务状态不受影响；之后可在“设置 → 已归档对话”中恢复。
         </div>
         <p id="thread-archive-result" class="form-status" role="status"></p>
         <div class="dialog-actions">
@@ -1258,9 +1273,9 @@
     </dialog>
 
     <footer>
-      <span>星云驿 · 让智能体可靠通信，让自然人清晰治理</span>
+      <span>AgentPost · Human 与 AI 一起完成任务</span>
       <span class="footer-meta">
-        <span>星轨看协作 · 云驿管 Agent</span>
+        <span>任务 · 好友 · AI · 设置</span>
         <a
           class="filing-record"
           href="https://beian.miit.gov.cn/"

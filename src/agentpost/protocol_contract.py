@@ -12,6 +12,7 @@ from agentpost.messaging.schemas import (
     MessageType,
 )
 from agentpost.onboarding.connectivity import heartbeat_timeout_seconds
+from agentpost.tasks.service import RUN_LEASE_SECONDS
 
 PROTOCOL_CONTRACT_VERSION = "0.1"
 
@@ -46,6 +47,21 @@ class StateContract(ContractModel):
     ack_means_received_not_completed: Literal[True] = True
     direct_reply_handles_task_round: Literal[True] = True
     structured_result_takes_precedence: Literal[True] = True
+    agent_result_is_not_human_acceptance: Literal[True] = True
+
+
+class TaskExecutionContract(ContractModel):
+    claim_endpoint: Literal["/api/v1/task-runs/claim"] = "/api/v1/task-runs/claim"
+    heartbeat_endpoint_template: Literal["/api/v1/task-runs/{run_id}/heartbeat"] = (
+        "/api/v1/task-runs/{run_id}/heartbeat"
+    )
+    result_endpoint_template: Literal["/api/v1/task-runs/{run_id}/result"] = (
+        "/api/v1/task-runs/{run_id}/result"
+    )
+    lease_seconds: int
+    durable_queue: Literal[True] = True
+    claim_is_idempotent_per_active_lease: Literal[True] = True
+    result_requires_human_acceptance: Literal[True] = True
 
 
 class HeartbeatContract(ContractModel):
@@ -121,6 +137,7 @@ class AgentIntegrationContract(ContractModel):
     endpoints: list[EndpointContract]
     content: ContentContract
     states: StateContract
+    task_execution: TaskExecutionContract
     heartbeat: HeartbeatContract
     synchronization: SynchronizationContract
     interoperability: InteroperabilityContract
@@ -199,6 +216,24 @@ def build_agent_integration_contract(settings: Settings) -> AgentIntegrationCont
                 purpose="report health for the current active Connector",
                 changes_state=True,
             ),
+            EndpointContract(
+                method="POST",
+                path="/api/v1/task-runs/claim",
+                purpose="claim one durable execution assigned to the authenticated Agent",
+                changes_state=True,
+            ),
+            EndpointContract(
+                method="POST",
+                path="/api/v1/task-runs/{run_id}/heartbeat",
+                purpose="renew the execution lease and publish a checkpoint",
+                changes_state=True,
+            ),
+            EndpointContract(
+                method="POST",
+                path="/api/v1/task-runs/{run_id}/result",
+                purpose="submit an Agent result without claiming Human acceptance",
+                changes_state=True,
+            ),
         ],
         content=ContentContract(
             native_formats=["text", "markdown", "json"],
@@ -213,6 +248,7 @@ def build_agent_integration_contract(settings: Settings) -> AgentIntegrationCont
             delivery_states=["unread", "delivered", "read", "acked"],
             task_result_states=["completed", "partial", "failed", "cancelled"],
         ),
+        task_execution=TaskExecutionContract(lease_seconds=RUN_LEASE_SECONDS),
         heartbeat=HeartbeatContract(
             endpoint="/connect/heartbeat",
             recommended_interval_seconds=settings.connector_heartbeat_interval_seconds,

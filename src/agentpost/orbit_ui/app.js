@@ -58,8 +58,8 @@ const state = {
   selectedFriendId: "",
   friendQuery: "",
   friendFilter: "all",
-  activeModule: "orbit",
-  activeSection: "communications",
+  activeModule: "projects",
+  activeSection: "board",
   lastSectionByModule: {
     orbit: "communications",
     relay: "agents",
@@ -173,6 +173,16 @@ const elements = {
   projectMemberInvite: document.querySelector("#project-member-invite"),
   projectArchive: document.querySelector("#project-archive"),
   projectActivityList: document.querySelector("#project-activity-list"),
+  taskOwnerControls: document.querySelector("#task-owner-controls"),
+  taskAssignmentForm: document.querySelector("#task-assignment-form"),
+  taskAssignmentAgent: document.querySelector("#task-assignment-agent"),
+  taskAssignmentInstruction: document.querySelector("#task-assignment-instruction"),
+  taskAssignmentOutput: document.querySelector("#task-assignment-output"),
+  taskAcceptanceControls: document.querySelector("#task-acceptance-controls"),
+  taskFinalSummary: document.querySelector("#task-final-summary"),
+  taskSubmitFinal: document.querySelector("#task-submit-final"),
+  taskRequestChanges: document.querySelector("#task-request-changes"),
+  taskAcceptFinal: document.querySelector("#task-accept-final"),
   friendBrowser: document.querySelector("#friend-browser"),
   friendBrowserCount: document.querySelector("#friend-browser-count"),
   friendSearchInput: document.querySelector("#friend-search-input"),
@@ -199,6 +209,9 @@ const elements = {
   projectCreateCancel: document.querySelector("#project-create-cancel"),
   projectCreateName: document.querySelector("#project-create-name"),
   projectCreateGoal: document.querySelector("#project-create-goal"),
+  projectCreateOutput: document.querySelector("#project-create-output"),
+  projectCreateAgentOptions: document.querySelector("#project-create-agent-options"),
+  projectAcceptAgentOptions: document.querySelector("#project-accept-agent-options"),
   projectCreateResult: document.querySelector("#project-create-result"),
   projectInviteDialog: document.querySelector("#project-invite-dialog"),
   projectInviteForm: document.querySelector("#project-invite-form"),
@@ -451,35 +464,34 @@ const MODULE_DEFINITIONS = Object.freeze({
     sections: Object.freeze(["communications", "tasks", "approvals"]),
   }),
   relay: Object.freeze({
-    label: "云驿",
-    title: "Agent 与连接",
-    description: "管理 Agent 身份、真实连接状态和保留的连接历史。",
+    label: "AI",
+    title: "我的 AI",
+    description: "管理 AI 身份、连接状态和任务参与能力。",
     defaultSection: "agents",
     sections: Object.freeze(["agents", "connections"]),
   }),
   projects: Object.freeze({
-    label: "项目",
-    title: "项目工作台",
-    description: "把一对一和多人协作都作为项目管理，统一查看成员与协作动态。",
+    label: "任务",
+    title: "任务中心",
+    description: "一个任务对应一条 Thread，统一查看执行、结果与 Human 验收。",
     defaultSection: "board",
     sections: Object.freeze(["board"]),
   }),
   friends: Object.freeze({
     label: "好友",
     title: "我的好友",
-    description: "维护自己的协作好友清单，随时选择伙伴并发起项目。",
+    description: "好友必须双向确认，确认后才能邀请对方加入任务。",
     defaultSection: "directory",
     sections: Object.freeze(["directory"]),
   }),
   settings: Object.freeze({
     label: "设置",
     title: "账户与平台",
-    description: "管理你的账户安全、组织关系和平台选项。",
+    description: "管理账户安全、归档记录和平台选项。",
     defaultSection: "profile",
     sections: Object.freeze([
       "profile",
       "security",
-      "organizations",
       "archives",
       "notifications",
       "privacy",
@@ -490,23 +502,38 @@ const MODULE_DEFINITIONS = Object.freeze({
 });
 
 function projectById(projectId) {
-  return state.projects.find((project) => project.project_id === projectId) || null;
+  return state.projects.find((project) => project.task_id === projectId) || null;
 }
 
 function friendById(friendId) {
   return state.friends.find((friend) => friend.human_user_id === friendId) || null;
 }
 
+function ownedTaskAgents() {
+  const agents = Array.isArray(state.dashboard?.agents) ? state.dashboard.agents : [];
+  return agents.filter(
+    (agent) => agent.access_source === "direct" && agent.role === "owner" && agent.status === "active",
+  );
+}
+
 function projectStatusLabel(project) {
-  return project.status === "archived" ? "已归档" : "进行中";
+  const labels = {
+    active: "进行中",
+    paused: "已暂停",
+    awaiting_acceptance: "待验收",
+    completed: "已完成",
+    cancelled: "已取消",
+    archived: "已归档",
+  };
+  return labels[project.status] || project.status;
 }
 
 function projectKind(project) {
   const total = project.active_member_count + project.invited_member_count;
   if (total <= 1) {
-    return "个人项目";
+    return "个人任务";
   }
-  return total === 2 ? "一对一项目" : "多人项目";
+  return total === 2 ? "一对一任务" : "多人任务";
 }
 
 function dateOnlyText(value) {
@@ -528,11 +555,11 @@ function filteredProjects() {
   const query = state.projectQuery.trim().toLowerCase();
   return state.projects.filter((project) => {
     const matchesFilter = state.projectFilter === "all"
-      || (state.projectFilter === "active" && project.status === "active")
+      || (state.projectFilter === "active" && project.status !== "archived")
       || (state.projectFilter === "archived" && project.status === "archived");
     const searchable = [
       project.title,
-      project.description || "",
+      project.goal || "",
       project.owner_display_name,
       projectStatusLabel(project),
     ].join(" ").toLowerCase();
@@ -546,7 +573,7 @@ function filteredFriends() {
     const searchable = [
       friend.display_name,
       friend.username,
-      ...friend.capabilities,
+      ...friend.agents.flatMap((agent) => agent.capabilities || []),
       ...friend.agents.flatMap((agent) => [agent.display_name, agent.address]),
     ].join(" ").toLowerCase();
     return !query || searchable.includes(query);
@@ -585,11 +612,11 @@ async function loadProjects({ preserveSelection = true } = {}) {
     return;
   }
   try {
-    const payload = await requestJson("/api/v1/orbit/projects");
+    const payload = await requestJson("/api/v1/tasks");
     state.projects = Array.isArray(payload?.items) ? payload.items : [];
     state.projectsLoaded = true;
     if (!preserveSelection || !projectById(state.selectedProjectId)) {
-      state.selectedProjectId = state.projects[0]?.project_id || "";
+      state.selectedProjectId = isMobileWorkspace() ? "" : (state.projects[0]?.task_id || "");
     }
     renderProjectBrowser();
     if (state.selectedProjectId) {
@@ -615,7 +642,7 @@ async function loadProjectDetail(projectId) {
     return;
   }
   try {
-    const project = await requestJson("/api/v1/orbit/projects/" + encodeURIComponent(projectId));
+    const project = await requestJson("/api/v1/tasks/" + encodeURIComponent(projectId));
     if (state.selectedProjectId !== projectId) {
       return;
     }
@@ -635,11 +662,18 @@ async function loadFriends() {
     return;
   }
   try {
-    const payload = await requestJson("/api/v1/orbit/friends");
-    state.friends = Array.isArray(payload?.items) ? payload.items : [];
+    const [payload, suggestions] = await Promise.all([
+      requestJson("/api/v1/friends"),
+      requestJson("/api/v1/friends/suggestions"),
+    ]);
+    const formal = Array.isArray(payload?.items) ? payload.items : [];
+    const suggested = Array.isArray(suggestions?.items) ? suggestions.items : [];
+    state.friends = [...formal, ...suggested.filter(
+      (candidate) => !formal.some((friend) => friend.human_user_id === candidate.human_user_id),
+    )];
     state.friendsLoaded = true;
     if (!friendById(state.selectedFriendId)) {
-      state.selectedFriendId = state.friends[0]?.human_user_id || "";
+      state.selectedFriendId = isMobileWorkspace() ? "" : (state.friends[0]?.human_user_id || "");
     }
     renderFriendBrowser();
   } catch (error) {
@@ -652,8 +686,8 @@ async function loadFriends() {
 
 function renderProjectBrowser() {
   const projects = filteredProjects();
-  if (!projects.some((project) => project.project_id === state.selectedProjectId)) {
-    state.selectedProjectId = projects[0]?.project_id || "";
+  if (!projects.some((project) => project.task_id === state.selectedProjectId)) {
+    state.selectedProjectId = isMobileWorkspace() ? "" : (projects[0]?.task_id || "");
     state.selectedProject = null;
   }
   elements.projectBrowserCount.textContent = projects.length + " 个";
@@ -664,13 +698,14 @@ function renderProjectBrowser() {
       title: project.title,
       meta: projectKind(project) + " · " + project.owner_display_name + "负责",
       badge: pending || projectStatusLabel(project),
-      active: state.selectedProjectId === project.project_id,
-      avatar: projectKind(project) === "一对一项目" ? "1" : "项",
+      active: state.selectedProjectId === project.task_id,
+      avatar: projectKind(project) === "一对一任务" ? "1" : "任",
       onClick: async () => {
-        state.selectedProjectId = project.project_id;
+        state.selectedProjectId = project.task_id;
         state.selectedProject = null;
         renderProjectBrowser();
-        await loadProjectDetail(project.project_id);
+        updateCollaborationWorkspaceMode();
+        await loadProjectDetail(project.task_id);
         elements.projectDetailTitle.focus({ preventScroll: true });
         resetMobileLayerScroll();
       },
@@ -683,12 +718,22 @@ function activityText(activity) {
   const actor = activity.actor_display_name || "系统";
   const target = activity.target_display_name || "成员";
   const labels = {
-    created: actor + "创建了项目",
-    member_invited: actor + "邀请" + target + "加入项目",
-    member_joined: target + "已加入项目",
-    member_declined: target + "拒绝了项目邀请",
-    archived: actor + "归档了项目",
-    restored: actor + "恢复了项目",
+    created: actor + "创建了任务",
+    task_created: actor + "创建了任务",
+    member_invited: actor + "邀请" + target + "加入任务",
+    member_joined: target + "已加入任务",
+    member_declined: target + "拒绝了任务邀请",
+    assignment_created: actor + "创建了 AI 执行单元",
+    run_claimed: actor + "开始执行",
+    run_updated: actor + "更新了执行进度",
+    result_submitted: actor + "提交了执行结果",
+    final_submitted: actor + "提交任务等待验收",
+    accepted: actor + "验收通过",
+    changes_requested: actor + "要求修改",
+    paused: actor + "暂停了任务",
+    resumed: actor + "恢复了任务",
+    archived: actor + "归档了任务",
+    restored: actor + "恢复了任务",
   };
   if (activity.kind === "agent_delivery") {
     return actor + "通过 " + (activity.agent_display_name || "Agent")
@@ -696,13 +741,13 @@ function activityText(activity) {
   }
   if (activity.kind === "agent_update") {
     return actor + "通过 " + (activity.agent_display_name || "Agent")
-      + " 更新了项目：" + (activity.subject || "未命名更新");
+      + " 更新了任务：" + (activity.subject || "未命名更新");
   }
-  return labels[activity.kind] || "项目状态已更新";
+  return labels[activity.kind] || "任务状态已更新";
 }
 
 function renderProjectDetail() {
-  const project = state.selectedProjectId === state.selectedProject?.project_id
+  const project = state.selectedProjectId === state.selectedProject?.task_id
     ? state.selectedProject
     : null;
   elements.projectEmpty.hidden = Boolean(state.selectedProjectId);
@@ -711,7 +756,7 @@ function renderProjectDetail() {
     return;
   }
   if (!project) {
-    elements.projectDetailTitle.textContent = "正在读取项目";
+    elements.projectDetailTitle.textContent = "正在读取任务";
     elements.projectDetailDescription.textContent = "请稍候…";
     return;
   }
@@ -721,7 +766,7 @@ function renderProjectDetail() {
   elements.projectInvitationActions.hidden = !invited;
   elements.projectDetailType.textContent = projectKind(project);
   elements.projectDetailTitle.textContent = project.title;
-  elements.projectDetailDescription.textContent = project.description || "暂未填写项目说明。";
+  elements.projectDetailDescription.textContent = project.goal + "\n预期交付：" + project.expected_output;
   elements.projectDetailStatus.textContent = invited ? "待确认" : projectStatusLabel(project);
   elements.projectDetailStatus.classList.toggle("archived", project.status === "archived");
   elements.projectOwner.textContent = project.owner_display_name;
@@ -733,7 +778,39 @@ function renderProjectDetail() {
   elements.projectInvite.disabled = project.status === "archived";
   elements.projectMemberInvite.disabled = project.status === "archived";
   elements.projectArchive.hidden = !ownerAccess;
-  elements.projectArchive.textContent = project.status === "archived" ? "恢复项目" : "归档项目";
+  elements.taskOwnerControls.hidden = !ownerAccess || project.status !== "active";
+  elements.taskAcceptanceControls.hidden = !ownerAccess
+    || !["active", "awaiting_acceptance"].includes(project.status);
+  elements.taskSubmitFinal.hidden = project.status !== "active";
+  elements.taskAcceptFinal.hidden = project.status !== "awaiting_acceptance";
+  elements.taskRequestChanges.hidden = project.status !== "awaiting_acceptance";
+  elements.taskFinalSummary.value = project.final_summary || "";
+  elements.taskAssignmentAgent.replaceChildren();
+  project.members.filter((member) => member.status === "active").forEach((member) => {
+    (member.agents || []).forEach((agent) => {
+      const option = document.createElement("option");
+      option.value = agent.agent_id;
+      option.dataset.humanUserId = member.human_user_id;
+      option.textContent = `${member.display_name} · ${agent.display_name}${agent.role === "primary" ? "（主）" : ""}`;
+      elements.taskAssignmentAgent.append(option);
+    });
+  });
+  elements.projectArchive.textContent = project.status === "paused" ? "继续任务" : "暂停任务";
+
+  elements.projectAcceptAgentOptions.replaceChildren();
+  if (invited) {
+    ownedTaskAgents().forEach((agent, index) => {
+      const label = document.createElement("label");
+      label.className = "project-invite-option";
+      const input = document.createElement("input");
+      input.type = "radio";
+      input.name = "task-accept-agent";
+      input.value = agent.id;
+      input.checked = index === 0;
+      label.append(input, document.createTextNode(agentDisplayName(agent)));
+      elements.projectAcceptAgentOptions.append(label);
+    });
+  }
 
   elements.projectMemberList.replaceChildren();
   [...project.members].sort((left, right) => {
@@ -755,9 +832,12 @@ function renderProjectDetail() {
     const name = document.createElement("strong");
     name.textContent = member.display_name + (member.role === "owner" ? " · 负责人" : "");
     const agent = document.createElement("small");
+    const selectedAgents = Array.isArray(member.agents) ? member.agents : [];
     agent.textContent = member.status === "invited"
       ? "等待对方确认邀请"
-      : (member.agent ? member.agent.display_name + " · 已参与" : "尚未设置默认 Agent");
+      : (selectedAgents.length
+        ? selectedAgents.map((item) => item.display_name + (item.role === "primary" ? "（主）" : "")).join("、")
+        : "尚未选择 AI");
     copy.append(name, agent);
     row.append(avatar, copy);
     if (friend) {
@@ -776,7 +856,7 @@ function renderProjectDetail() {
   if (!owner && project.members.length === 0) {
     const empty = document.createElement("p");
     empty.className = "prototype-inline-empty";
-    empty.textContent = "当前项目还没有成员信息。";
+    empty.textContent = "当前任务还没有成员信息。";
     elements.projectMemberList.append(empty);
   }
 
@@ -798,7 +878,7 @@ function renderProjectDetail() {
   if (!project.activities.length) {
     const empty = document.createElement("p");
     empty.className = "prototype-inline-empty";
-    empty.textContent = "项目暂时没有动态。";
+    empty.textContent = "任务暂时没有动态。";
     elements.projectActivityList.append(empty);
   }
 }
@@ -806,7 +886,7 @@ function renderProjectDetail() {
 function renderFriendBrowser() {
   const friends = filteredFriends();
   if (!friends.some((friend) => friend.human_user_id === state.selectedFriendId)) {
-    state.selectedFriendId = friends[0]?.human_user_id || "";
+    state.selectedFriendId = isMobileWorkspace() ? "" : (friends[0]?.human_user_id || "");
   }
   elements.friendBrowserCount.textContent = friends.length + " 人";
   elements.friendBrowserList.replaceChildren();
@@ -820,6 +900,7 @@ function renderFriendBrowser() {
       onClick: () => {
         state.selectedFriendId = friend.human_user_id;
         renderFriendBrowser();
+        updateCollaborationWorkspaceMode();
         elements.friendDetailName.focus({ preventScroll: true });
         resetMobileLayerScroll();
       },
@@ -836,19 +917,36 @@ function renderFriendDetail() {
     return;
   }
   elements.friendDetailAvatar.textContent = friend.display_name.slice(0, 1);
-  elements.friendDetailRelation.textContent = "最近联系 " + dateOnlyText(friend.last_contact_at);
+  const relationLabels = {
+    accepted: "正式好友",
+    pending_incoming: "等待你确认",
+    pending_outgoing: "等待对方确认",
+    suggested: "沟通过，可申请好友",
+  };
+  elements.friendDetailRelation.textContent = relationLabels[friend.relation_status] || "协作联系";
   elements.friendDetailName.textContent = friend.display_name;
   elements.friendDetailRole.textContent = "@" + friend.username;
-  elements.friendDetailOnline.textContent = "已建立协作联系";
+  elements.friendDetailOnline.textContent = relationLabels[friend.relation_status] || "协作联系";
   elements.friendDetailOnline.classList.remove("online", "offline");
-  elements.friendDetailNote.textContent = "好友关系来自双方名下 Agent 已经发生的真实沟通。";
+  elements.friendDetailNote.textContent = friend.relation_status === "accepted"
+    ? "双方已经明确确认好友关系，可以互相邀请加入任务。"
+    : "历史沟通不自动成为好友，必须由双方明确确认。";
+  const actionLabels = {
+    accepted: "发起任务",
+    pending_incoming: "接受好友申请",
+    pending_outgoing: "等待对方确认",
+    suggested: "申请加好友",
+  };
+  elements.friendStartProject.textContent = actionLabels[friend.relation_status] || "申请加好友";
+  elements.friendStartProject.disabled = friend.relation_status === "pending_outgoing";
   elements.friendCapabilities.replaceChildren();
-  friend.capabilities.forEach((capability) => {
+  const capabilities = [...new Set(friend.agents.flatMap((agent) => agent.capabilities || []))];
+  capabilities.forEach((capability) => {
     const chip = document.createElement("span");
     chip.textContent = capability;
     elements.friendCapabilities.append(chip);
   });
-  if (!friend.capabilities.length) {
+  if (!capabilities.length) {
     const empty = document.createElement("span");
     empty.textContent = "暂未声明能力";
     elements.friendCapabilities.append(empty);
@@ -864,19 +962,19 @@ function renderFriendDetail() {
     const name = document.createElement("strong");
     name.textContent = agent.display_name;
     const status = document.createElement("small");
-    status.textContent = agent.address + " · 最近联系 " + dateText(agent.last_contact_at);
+    status.textContent = agent.address + (agent.connection_state ? " · " + agent.connection_state : "");
     copy.append(name, status);
     row.append(avatar, copy);
     elements.friendAgentList.append(row);
   });
   const relatedProjects = state.projects.filter((project) =>
-    project.member_human_user_ids.includes(friend.human_user_id));
+    project.members?.some((member) => member.human_user_id === friend.human_user_id));
   elements.friendProjectCount.textContent = relatedProjects.length + " 个";
   elements.friendProjectList.replaceChildren();
   if (!relatedProjects.length) {
     const empty = document.createElement("p");
     empty.className = "prototype-inline-empty";
-    empty.textContent = "还没有共同项目，可以从右上方发起。";
+    empty.textContent = "还没有共同任务，可以从右上方发起。";
     elements.friendProjectList.append(empty);
   }
   relatedProjects.forEach((project) => {
@@ -890,10 +988,10 @@ function renderFriendDetail() {
     meta.textContent = projectKind(project) + " · " + projectStatusLabel(project);
     copy.append(title, meta);
     const arrow = document.createElement("span");
-    arrow.textContent = "查看项目 ›";
+    arrow.textContent = "查看任务 ›";
     row.append(copy, arrow);
     row.addEventListener("click", async () => {
-      state.selectedProjectId = project.project_id;
+      state.selectedProjectId = project.task_id;
       state.projectFilter = project.status === "archived" ? "archived" : "active";
       elements.projectFilters.forEach((button) => {
         const active = button.dataset.projectFilter === state.projectFilter;
@@ -902,7 +1000,7 @@ function renderFriendDetail() {
       });
       activateRoute("projects", "board", { focusContent: true });
       renderProjectBrowser();
-      await loadProjectDetail(project.project_id);
+      await loadProjectDetail(project.task_id);
     });
     elements.friendProjectList.append(row);
   });
@@ -911,6 +1009,21 @@ function renderFriendDetail() {
 function openProjectCreateDialog() {
   elements.projectCreateForm.reset();
   elements.projectCreateResult.textContent = "";
+  elements.projectCreateAgentOptions.replaceChildren();
+  ownedTaskAgents().forEach((agent, index) => {
+    const label = document.createElement("label");
+    label.className = "project-invite-option";
+    const input = document.createElement("input");
+    input.type = "radio";
+    input.name = "task-create-agent";
+    input.value = agent.id;
+    input.checked = index === 0;
+    label.append(input, document.createTextNode(agentDisplayName(agent)));
+    elements.projectCreateAgentOptions.append(label);
+  });
+  if (!ownedTaskAgents().length) {
+    elements.projectCreateAgentOptions.append(emptyState("请先在“AI”中连接至少一个自己的 AI。"));
+  }
   elements.projectCreateDialog.showModal();
   elements.projectCreateName.focus();
 }
@@ -919,14 +1032,51 @@ function closeProjectCreateDialog() {
   elements.projectCreateDialog.close();
 }
 
+async function actOnSelectedFriend() {
+  const friend = friendById(state.selectedFriendId);
+  if (!friend) {
+    return;
+  }
+  if (friend.relation_status === "accepted") {
+    openProjectCreateDialog();
+    return;
+  }
+  if (friend.relation_status === "pending_outgoing") {
+    return;
+  }
+  try {
+    if (friend.relation_status === "pending_incoming") {
+      await requestJson(`/api/v1/friend-requests/${encodeURIComponent(friend.friendship_id)}/decision`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": state.csrfToken },
+        body: JSON.stringify({ decision: "accept" }),
+      });
+    } else {
+      await requestJson("/api/v1/friend-requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": state.csrfToken },
+        body: JSON.stringify({ username: friend.username }),
+      });
+    }
+    await loadFriends();
+  } catch (error) {
+    elements.friendDetailNote.textContent = error.message;
+  }
+}
+
 async function createProject(event) {
   event.preventDefault();
   if (!elements.projectCreateForm.reportValidity()) {
     return;
   }
-  elements.projectCreateResult.textContent = "正在创建项目…";
+  const selectedAgentId = elements.projectCreateForm.querySelector('input[name="task-create-agent"]:checked')?.value;
+  if (!selectedAgentId) {
+    elements.projectCreateResult.textContent = "必须选择至少一个自己的 AI。";
+    return;
+  }
+  elements.projectCreateResult.textContent = "正在创建任务…";
   try {
-    const project = await requestJson("/api/v1/orbit/projects", {
+    const project = await requestJson("/api/v1/tasks", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -934,16 +1084,19 @@ async function createProject(event) {
       },
       body: JSON.stringify({
         title: elements.projectCreateName.value.trim(),
-        description: elements.projectCreateGoal.value.trim() || null,
+        goal: elements.projectCreateGoal.value.trim(),
+        expected_output: elements.projectCreateOutput.value.trim(),
+        agent_ids: [selectedAgentId],
+        primary_agent_id: selectedAgentId,
       }),
     });
-    state.selectedProjectId = project.project_id;
+    state.selectedProjectId = project.task_id;
     state.selectedProject = project;
     state.projectFilter = "active";
     closeProjectCreateDialog();
     activateRoute("projects", "board", { focusContent: true });
     await loadProjects();
-    elements.projectActionResult.textContent = "项目已经创建。";
+    elements.projectActionResult.textContent = "任务已经创建，每个任务固定使用一条 Thread。";
   } catch (error) {
     elements.projectCreateResult.textContent = error.message;
   }
@@ -955,11 +1108,11 @@ async function openProjectInviteDialog() {
     return;
   }
   elements.projectInviteResult.textContent = "";
-  elements.projectInviteSummary.textContent = "可以一次选择多位好友加入“" + project.title + "”。";
+  elements.projectInviteSummary.textContent = "只能邀请已双向确认的好友加入“" + project.title + "”。";
   elements.projectInviteOptions.replaceChildren();
   try {
     const payload = await requestJson(
-      "/api/v1/orbit/projects/" + encodeURIComponent(project.project_id) + "/invite-candidates",
+      "/api/v1/tasks/" + encodeURIComponent(project.task_id) + "/invite-candidates",
     );
     state.projectInvitationCandidates = Array.isArray(payload?.items) ? payload.items : [];
   } catch (error) {
@@ -1010,7 +1163,7 @@ async function inviteProjectFriends(event) {
   }
   try {
     const updated = await requestJson(
-      "/api/v1/orbit/projects/" + encodeURIComponent(project.project_id) + "/members",
+      "/api/v1/tasks/" + encodeURIComponent(project.task_id) + "/members",
       {
         method: "POST",
         headers: {
@@ -1034,29 +1187,27 @@ async function updateSelectedProjectStatus() {
   if (!project) {
     return;
   }
-  const nextStatus = project.status === "archived" ? "active" : "archived";
+  const action = project.status === "paused" ? "resume" : "pause";
   try {
     state.selectedProject = await requestJson(
-      "/api/v1/orbit/projects/" + encodeURIComponent(project.project_id) + "/status",
+      "/api/v1/tasks/" + encodeURIComponent(project.task_id) + "/status",
       {
-        method: "PATCH",
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
           "X-CSRF-Token": state.csrfToken,
         },
-        body: JSON.stringify({ status: nextStatus }),
+        body: JSON.stringify({ action }),
       },
     );
-    state.projectFilter = nextStatus === "archived" ? "archived" : "active";
+    state.projectFilter = "active";
     elements.projectFilters.forEach((button) => {
       const active = button.dataset.projectFilter === state.projectFilter;
       button.classList.toggle("active", active);
       button.setAttribute("aria-pressed", String(active));
     });
     await loadProjects();
-    elements.projectActionResult.textContent = nextStatus === "archived"
-      ? "项目已经归档。"
-      : "项目已经恢复。";
+    elements.projectActionResult.textContent = action === "pause" ? "任务已经暂停。" : "任务已经继续。";
   } catch (error) {
     elements.projectActionResult.textContent = error.message;
   }
@@ -1068,18 +1219,96 @@ async function decideSelectedProjectInvitation(accept) {
     return;
   }
   try {
+    const selectedAgentId = elements.projectAcceptAgentOptions
+      .querySelector('input[name="task-accept-agent"]:checked')?.value;
+    if (accept && !selectedAgentId) {
+      elements.projectActionResult.textContent = "加入任务前必须选择至少一个自己的 AI。";
+      return;
+    }
     await requestJson(
-      "/api/v1/orbit/projects/" + encodeURIComponent(project.project_id)
+      "/api/v1/tasks/" + encodeURIComponent(project.task_id)
         + (accept ? "/accept" : "/decline"),
       {
         method: "POST",
-        headers: { "X-CSRF-Token": state.csrfToken },
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": state.csrfToken,
+        },
+        body: accept ? JSON.stringify({
+          agent_ids: [selectedAgentId],
+          primary_agent_id: selectedAgentId,
+        }) : undefined,
       },
     );
     await loadProjects({ preserveSelection: accept });
     if (accept) {
-      elements.projectActionResult.textContent = "你已经加入项目。";
+      elements.projectActionResult.textContent = "你已经选择 AI 并加入任务。";
     }
+  } catch (error) {
+    elements.projectActionResult.textContent = error.message;
+  }
+}
+
+async function createTaskAssignment(event) {
+  event.preventDefault();
+  const project = state.selectedProject;
+  const option = elements.taskAssignmentAgent.selectedOptions[0];
+  if (!project || !option) {
+    elements.projectActionResult.textContent = "没有可分配的参与 AI。";
+    return;
+  }
+  try {
+    state.selectedProject = await requestJson(`/api/v1/tasks/${encodeURIComponent(project.task_id)}/assignments`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": state.csrfToken },
+      body: JSON.stringify({
+        responsible_human_user_id: option.dataset.humanUserId,
+        assignee_agent_id: option.value,
+        instruction: elements.taskAssignmentInstruction.value.trim(),
+        expected_output: elements.taskAssignmentOutput.value.trim(),
+      }),
+    });
+    elements.taskAssignmentForm.reset();
+    renderProjectDetail();
+    elements.projectActionResult.textContent = "执行单元已进入可靠队列，等待指定 AI 领取。";
+  } catch (error) {
+    elements.projectActionResult.textContent = error.message;
+  }
+}
+
+async function submitTaskForAcceptance() {
+  const project = state.selectedProject;
+  const summary = elements.taskFinalSummary.value.trim();
+  if (!project || !summary) {
+    elements.projectActionResult.textContent = "请先填写最终交付汇总。";
+    return;
+  }
+  try {
+    state.selectedProject = await requestJson(`/api/v1/tasks/${encodeURIComponent(project.task_id)}/submit`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": state.csrfToken },
+      body: JSON.stringify({ summary }),
+    });
+    renderProjectDetail();
+    elements.projectActionResult.textContent = "任务已提交，等待 Human 验收。";
+  } catch (error) {
+    elements.projectActionResult.textContent = error.message;
+  }
+}
+
+async function decideTaskAcceptance(decision) {
+  const project = state.selectedProject;
+  if (!project) {
+    return;
+  }
+  try {
+    state.selectedProject = await requestJson(`/api/v1/tasks/${encodeURIComponent(project.task_id)}/acceptance`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": state.csrfToken },
+      body: JSON.stringify({ decision, note: elements.taskFinalSummary.value.trim() || null }),
+    });
+    renderProjectDetail();
+    elements.projectActionResult.textContent = decision === "accept" ? "Human 已验收通过。" : "已退回修改。";
   } catch (error) {
     elements.projectActionResult.textContent = error.message;
   }
@@ -1113,7 +1342,7 @@ function initializeCollaborationModules() {
   [elements.projectBrowserNew, elements.projectEmptyNew].forEach((button) => {
     button.addEventListener("click", openProjectCreateDialog);
   });
-  elements.friendStartProject.addEventListener("click", openProjectCreateDialog);
+  elements.friendStartProject.addEventListener("click", actOnSelectedFriend);
   [elements.projectInvite, elements.projectMemberInvite].forEach((button) => {
     button.addEventListener("click", openProjectInviteDialog);
   });
@@ -1126,17 +1355,34 @@ function initializeCollaborationModules() {
   elements.projectInviteForm.addEventListener("submit", inviteProjectFriends);
   elements.projectInviteClose.addEventListener("click", closeProjectInviteDialog);
   elements.projectInviteCancel.addEventListener("click", closeProjectInviteDialog);
+  elements.taskAssignmentForm.addEventListener("submit", createTaskAssignment);
+  elements.taskSubmitFinal.addEventListener("click", submitTaskForAcceptance);
+  elements.taskAcceptFinal.addEventListener("click", () => decideTaskAcceptance("accept"));
+  elements.taskRequestChanges.addEventListener("click", () => decideTaskAcceptance("request_changes"));
   elements.projectMobileBack.addEventListener("click", () => {
+    if (isMobileWorkspace()) {
+      state.selectedProjectId = "";
+      state.selectedProject = null;
+      updateCollaborationWorkspaceMode();
+      resetMobileLayerScroll();
+      return;
+    }
     elements.projectBrowser.scrollIntoView({ behavior: "smooth", block: "start" });
   });
   elements.friendMobileBack.addEventListener("click", () => {
+    if (isMobileWorkspace()) {
+      state.selectedFriendId = "";
+      updateCollaborationWorkspaceMode();
+      resetMobileLayerScroll();
+      return;
+    }
     elements.friendBrowser.scrollIntoView({ behavior: "smooth", block: "start" });
   });
 }
 
 function normalizedRoute(module, section) {
-  const definition = MODULE_DEFINITIONS[module] || MODULE_DEFINITIONS.orbit;
-  const normalizedModule = MODULE_DEFINITIONS[module] ? module : "orbit";
+  const definition = MODULE_DEFINITIONS[module] || MODULE_DEFINITIONS.projects;
+  const normalizedModule = MODULE_DEFINITIONS[module] ? module : "projects";
   const normalizedSection = definition.sections.includes(section)
     ? section
     : state.lastSectionByModule[normalizedModule] || definition.defaultSection;
@@ -1263,6 +1509,14 @@ function updateCollaborationWorkspaceMode() {
   const friendsActive = state.activeModule === "friends" && state.activeSection === "directory";
   elements.workspaceView.classList.toggle("project-workspace-mode", projectsActive);
   elements.workspaceView.classList.toggle("friend-workspace-mode", friendsActive);
+  elements.workspaceView.classList.toggle(
+    "project-detail-open",
+    projectsActive && Boolean(state.selectedProjectId),
+  );
+  elements.workspaceView.classList.toggle(
+    "friend-detail-open",
+    friendsActive && Boolean(state.selectedFriendId),
+  );
   elements.projectBrowser.hidden = !projectsActive;
   elements.friendBrowser.hidden = !friendsActive;
 }
@@ -1315,8 +1569,8 @@ function activateRoute(module, section, { updateHistory = true, focusContent = f
   elements.contextEyebrow.textContent = definition.label;
   elements.contextTitle.textContent = definition.title;
   elements.contextCopy.textContent = definition.description;
-  elements.brandSection.textContent = `AgentPost · ${definition.label}`;
-  document.title = `星云驿 · ${definition.label}`;
+  elements.brandSection.textContent = definition.label;
+  document.title = `AgentPost · ${definition.label}`;
   updateThreadWorkspaceMode();
   updateAgentWorkspaceMode();
   updateCollaborationWorkspaceMode();
@@ -1335,7 +1589,7 @@ function initializeWorkspaceNavigation() {
   const parameters = new URLSearchParams(window.location.search);
   applyThreadRouteParameters(parameters);
   applyAgentRouteParameters(parameters);
-  const route = normalizedRoute(parameters.get("module") || "orbit", parameters.get("view") || "");
+  const route = normalizedRoute(parameters.get("module") || "projects", parameters.get("view") || "");
   activateRoute(route.module, route.section, { updateHistory: false });
 
   elements.primaryNavigationItems.forEach((item) => {
@@ -2483,12 +2737,12 @@ async function inviteOrganizationMember(event) {
     );
     elements.organizationInviteUsername.value = "";
     elements.organizationInviteContact.value = "";
-    elements.organizationManageResult.textContent = "站内邀请已发出；对方登录星云驿后即可接受。";
+    elements.organizationManageResult.textContent = "站内邀请已发出；对方登录 AgentPost 后即可接受。";
     elements.organizationManageResult.className = "form-status success";
     await loadOrganizationManagement();
   } catch (error) {
     const messages = {
-      organization_invitee_not_found: "没有找到这个 Human 用户名。请核对对方在星云驿中的用户名后再试。",
+      organization_invitee_not_found: "没有找到这个 Human 用户名。请核对对方在 AgentPost 中的用户名后再试。",
       organization_already_member: "这位 Human 已经是组织成员。",
       organization_invitation_already_pending: "已经向这位 Human 发出过待接受邀请，无需重复邀请。",
     };
@@ -2801,7 +3055,7 @@ function renderAgentOverviewState() {
   elements.agentDetailMissing.hidden = true;
   updateAgentWorkspaceMode();
   if (state.activeModule === "relay") {
-    document.title = "星云驿 · 云驿";
+    document.title = "AgentPost · AI";
   }
 }
 
@@ -2964,7 +3218,7 @@ function renderAgentDetail(agent) {
   elements.agentReturnThread.hidden = !returnThread;
   renderAgentTab();
   updateAgentWorkspaceMode();
-  document.title = `星云驿 · ${agentDisplayName(agent)}`;
+  document.title = `AgentPost · ${agentDisplayName(agent)}`;
 }
 
 function renderMissingAgent() {
@@ -3358,7 +3612,7 @@ function pairingPrompt(host) {
   return [
     target
       ? `请把当前 ${selected.name} 重新连接到我已有的 Agent“${targetLabel}”，保留原身份和历史。`
-      : `请把当前 ${selected.name} 作为新的独立 Agent 连接到我的星云驿。`,
+      : `请把当前 ${selected.name} 作为新的独立 Agent 连接到我的 AgentPost。`,
     `接入码：${selected.code} https://agentpost.me/connect/${host}${targetQuery}`,
     instructions,
   ].join("\n");
@@ -4894,7 +5148,7 @@ function renderThreadDetail(thread) {
     }
     elements.messageList.append(renderTimelineMessage(message, messagesById, repliedMessageIds));
   });
-  document.title = `星云驿 · ${safeText(thread.topic, "对话")}`;
+  document.title = `AgentPost · ${safeText(thread.topic, "对话")}`;
 }
 
 async function markThreadViewed(threadId) {
@@ -5008,7 +5262,7 @@ function threadListEndpoint() {
 
 function openThreadArchiveDialog(thread) {
   elements.threadArchiveId.value = String(thread.thread_id);
-  elements.threadArchiveSummary.textContent = `“${safeText(thread.topic, "无主题对话")}”将从你和你名下 Agent 的星云驿视图中隐藏。服务器消息不会删除。`;
+  elements.threadArchiveSummary.textContent = `“${safeText(thread.topic, "无主题对话")}”将从你和你名下 Agent 的 AgentPost 视图中隐藏。服务器消息不会删除。`;
   elements.threadArchiveResult.textContent = "";
   elements.threadArchiveDialog.showModal();
 }
@@ -5153,14 +5407,13 @@ async function linkEnterpriseOidc(event) {
 function renderDashboard(dashboard) {
   state.dashboard = dashboard;
   const user = dashboard.user || {};
-  const organizations = Array.isArray(dashboard.organizations) ? dashboard.organizations : [];
   const agents = Array.isArray(dashboard.agents) ? dashboard.agents : [];
   const tasks = Array.isArray(dashboard.tasks) ? dashboard.tasks : [];
   const approvals = Array.isArray(dashboard.approvals) ? dashboard.approvals : [];
-  elements.humanName.textContent = safeText(user.display_name, "星轨用户");
+  elements.humanName.textContent = safeText(user.display_name, "AgentPost 用户");
   elements.humanEmail.textContent = safeText(user.email);
   elements.humanAvatar.textContent = safeText(user.display_name, "星").slice(0, 1);
-  elements.topHumanName.textContent = safeText(user.display_name, "星轨用户");
+  elements.topHumanName.textContent = safeText(user.display_name, "AgentPost 用户");
   elements.topHumanAvatar.textContent = "我";
   elements.profileName.textContent = safeText(user.display_name, "未设置");
   if (document.activeElement !== elements.profileUsernameInput) {
@@ -5178,7 +5431,6 @@ function renderDashboard(dashboard) {
   const pendingTasks = Number(dashboard.metrics?.pending_task_count || 0);
   elements.taskQuickCount.textContent = String(pendingTasks);
   elements.taskMobileCount.textContent = String(pendingTasks);
-  renderOrganizations(organizations);
   renderAgents(agents);
   renderTasks(tasks);
   renderApprovals(approvals);
@@ -5218,19 +5470,17 @@ async function loadDashboard() {
   elements.refresh.disabled = true;
   setConnection("正在同步数据", "loading", "同步中");
   try {
-    const [dashboard, connectors, security, threads, archivedThreads, invitations] = await Promise.all([
+    const [dashboard, connectors, security, threads, archivedThreads] = await Promise.all([
       requestJson("/api/v1/orbit/dashboard"),
       requestJson("/api/v1/orbit/connectors"),
       requestJson("/api/v1/orbit/security"),
       requestJson(threadListEndpoint()),
       requestJson("/api/v1/orbit/threads?limit=200&archived=true"),
-      requestJson("/api/v1/orbit/organization-invitations"),
     ]);
     state.connectors = Array.isArray(connectors.items) ? connectors.items : [];
     state.threads = Array.isArray(threads) ? threads : [];
     state.archivedThreads = Array.isArray(archivedThreads) ? archivedThreads : [];
     renderDashboard(dashboard);
-    renderPendingOrganizationInvitations(Array.isArray(invitations.items) ? invitations.items : []);
     renderConnectors(state.connectors);
     renderSecurity(security);
     renderThreadOrganizationOptions();
