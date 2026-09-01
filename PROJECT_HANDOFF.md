@@ -1,17 +1,19 @@
 # AgentPost 项目交接文档
 
-> 2026-09-01 最新接续：阿里云生产已升级到 `51a6bf4 / 0.1.35 / schema 0027_tasks`，
+> 2026-09-01 最新接续：阿里云生产已升级到 `1e1245c / 0.1.36 / schema 0027_tasks`，
 > 状态为 `deployed_https_verified`，不是 `production_accepted`。网站品牌为 AgentPost，一级入口固定为
-> `任务、好友、AI、设置`。当前恢复点和完整证据见 `docs/stages/agentpost-0.1.35-aliyun-stage.yaml`。
+> `任务、好友、AI、设置`。任务执行表单已改为“让 AI 做什么”主输入和可选交付要求，提交与验收改为
+> 清晰的单列流程。当前恢复点和完整证据见 `docs/stages/agentpost-0.1.36-aliyun-stage.yaml`。
 
-- 交接阶段：`v0.1.35-task-center-deployed-https-verified`
+- 交接阶段：`v0.1.36-task-flow-simplified-deployed-https-verified`
 - 核验日期：2026-09-01
-- 生产提交：`51a6bf4c0fbd85d45408e9dac3c6d1441e4f0b9b`
-- 当前生产状态：`0.1.35 / 0027_tasks`
-- 即时回退备份：`/opt/agentpost/backups/20260901-184106-51a6bf4-pre-035`
+- 生产提交：`1e1245cc014d45949bbebce643f50dd0d1fc3665`
+- 当前生产状态：`0.1.36 / 0027_tasks`
+- 即时回退备份：`/opt/agentpost/backups/20260901-233626-1e1245c-pre-036`
 - 接续边界：不恢复 Project；不再扩展组织产品，旧组织数据本次未主动删除；正式好友双向确认；Task 单 Thread；每个参与 Human 至少选择一个自有 Agent
 - 执行合同：明确分派的 Agent 才领取 AgentRun；90 秒租约 + heartbeat + checkpoint + attempt 重领；Agent result 与 Human acceptance 分离
-- 未完成验收：真实跨 Human 好友确认、真实连接 Agent 的自动领取/断线恢复、真实 Human 最终验收均为 `待确认`
+- 已验证交互：登录态桌面生产页显示四个一级入口、单一“任务中心”、简化后的 AI 执行与结果提交表单
+- 未完成验收：真实跨 Human 好友确认、真实连接 Agent 的自动领取/断线恢复、真实 Human 最终验收、登录态生产 390px 流程均为 `待确认`
 
 > 2026-09-01 阶段冻结：当前阿里云生产 `765ec5a / 0.1.33 / schema 0026` 已保存为
 > `stage-v0.1.33-aliyun-20260830`。下一阶段转向“以任务为核心”的多 Human、多 Agent 协作。

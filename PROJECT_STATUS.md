@@ -2,14 +2,18 @@
 
 Last updated: 2026-09-01
 
-Current handoff stage: `v0.1.35-task-center-deployed-https-verified`; pinned production release: `0.1.35`
+Current handoff stage: `v0.1.36-task-flow-simplified-deployed-https-verified`; pinned production release: `0.1.36`
 
-## AgentPost task center and four-entry product shell (0.1.35 deployed HTTPS verified, 2026-09-01)
+## AgentPost simplified task execution and acceptance flow (0.1.36 deployed HTTPS verified, 2026-09-01)
 
-Production now runs Git commit `51a6bf4`, package `0.1.35`, and Alembic revision `0027_tasks`.
+Production now runs Git commit `1e1245c`, package `0.1.36`, and Alembic revision `0027_tasks`.
 The site is branded AgentPost and exposes exactly four primary entries in this order: `任务、好友、AI、设置`.
 Project is no longer a product container. Organization UI and fetching are removed from the new shell; legacy
 organization tables and APIs remain in place so this release does not perform a destructive data migration.
+
+The task UI no longer repeats a second row of task-center shortcuts. The execution form makes “让 AI 做什么”
+the required plain-language input and moves delivery constraints behind an optional disclosure. Result submission
+uses one full-width delivery field; Human acceptance appears only when the task is actually waiting for acceptance.
 
 Task v1 is a single-Thread aggregate aligned with existing `Message.type=task`. Every Human participant must
 explicitly select at least one owned Agent and one primary Agent. Formal friendship requires a bidirectional
@@ -17,31 +21,32 @@ request/accept flow. Work is assigned to one responsible Human and one selected 
 a durable run. AgentRun uses a 90-second lease, heartbeat, checkpoint, lease-token digest, and expired-run
 reclaim with incremented attempt. Agent result and Human final acceptance are separate state transitions.
 
-Local release evidence: Ruff check and format passed; Orbit JavaScript syntax and all 29 navigation tests passed;
+Local release evidence: Ruff check and format passed; Orbit JavaScript syntax and all 30 navigation tests passed;
 the non-PostgreSQL suite reports 471 passed, one expected loopback sandbox skip, and five PostgreSQL tests
 deselected. A focused integration test verifies friendship confirmation, mandatory Agent selection, Task creation,
 invitation, assignment, expired-lease reclaim, result publication, final submission, and Human acceptance.
 Desktop and 390px local browser acceptance covered Task creation, assignment, list/detail navigation, return flow,
 zero horizontal overflow, and no console warning/error.
 
-The first release commit `7f92abe / 0.1.34` introduced schema `0027_tasks`; guarded deployment and independent
-postflight both passed. Anonymous public verification then found one remaining visible legacy brand phrase. It was
-fixed through a second immutable release, not a production hot edit. Final production is `51a6bf4 / 0.1.35`.
+The first release commit `7f92abe / 0.1.34` introduced schema `0027_tasks`; `51a6bf4 / 0.1.35` completed the
+AgentPost rebrand. The task-flow refinement was released as a third immutable version, `1e1245c / 0.1.36`.
 The clean source, public wheel, and Workbench bundle SHA-256 values are respectively
-`11c902e64c585b143e7a150b5821d2311fad1afa9dc43785d76bd51be2aad096`,
-`7e80a6eea9bcc63111f4eb943811f2c3dbf4db4195b528888c757cce1040a2b8`, and
-`521394758ffa45f6a2a3367a1ad5b2d4b990ef18de531b75b01b3fb7784b8f33`.
+`0999ad519b81b1b9574127a172216fe29bea264959d2dae27511520902e8f2af`,
+`ec3e9d1f8fc29f4d23d231b940f4fa47800abe529e19c22a366275f06f7914c7`, and
+`0f6605db653631f1f91f5541d0bee607b95e2dd29afa9418396ccfee09a368d5`.
 
-The final guarded switch returned `deploy_status=ok release=0.1.35 commit=51a6bf4` in 38 seconds. Its recoverable
-backup is `/opt/agentpost/backups/20260901-184106-51a6bf4-pre-035`. Independent postflight returned
-`postflight_status=ok` with schema `0027_tasks`; counts remained 63 Agents / 471 Messages / 471 Deliveries /
-45 Attachments / 16 Humans. AgentPost PID changed to `353349`; Nginx and PostgreSQL PIDs remained
+The guarded switch returned `deploy_status=ok release=0.1.36 commit=1e1245c` in 39 seconds. Its recoverable
+backup is `/opt/agentpost/backups/20260901-233626-1e1245c-pre-036`. Independent postflight returned
+`postflight_status=ok` with schema `0027_tasks`; live counts were 63 Agents / 480 Messages / 480 Deliveries /
+45 Attachments / 16 Humans. AgentPost PID changed to `358229`; Nginx and PostgreSQL PIDs remained
 `245451 / 321670`. Public health/readiness, exact wheel hash, fabricated wheel 404, backup checksums, rollback
-script syntax, service state, environment permissions, and clean warning log all passed. A fresh anonymous browser
-showed `AgentPost · 任务`, the four-entry footer, no visible `星轨 / 星云驿 / 云驿`, and no console warning/error.
+script syntax, service state, environment permissions, and clean warning log all passed. A fresh authenticated
+desktop page showed the four primary entries, a single task-center heading, and the simplified execution and result
+submission controls. Public health/readiness and connector metadata all report 0.1.36.
 
 Current evidence status is `deployed_https_verified`, not `production_accepted`. Real authenticated cross-Human
-friend confirmation, multi-Agent execution from actual connected hosts, and Human acceptance remain `待确认`.
+friend confirmation, multi-Agent execution from actual connected hosts, Human acceptance, and authenticated
+production 390px task flow remain `待确认`.
 
 ## Aliyun 0.1.33 stage freeze and task-centric redesign starting point (2026-09-01)
 

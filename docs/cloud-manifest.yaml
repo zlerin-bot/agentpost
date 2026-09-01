@@ -1,7 +1,7 @@
 schema_version: "1"
 project: agentpost
 evidence_status: deployed_https_verified
-verified_at: "2026-09-01T18:42:00+08:00"
+verified_at: "2026-09-01T23:38:00+08:00"
 
 provider:
   name: aliyun
@@ -11,13 +11,13 @@ provider:
   operating_system: ubuntu-24.04
 
 release:
-  git_commit: 51a6bf4c0fbd85d45408e9dac3c6d1441e4f0b9b
-  package_version: 0.1.35
+  git_commit: 1e1245cc014d45949bbebce643f50dd0d1fc3665
+  package_version: 0.1.36
   alembic_revision: 0027_tasks
   current_path: /opt/agentpost/current
-  immutable_path: /opt/agentpost/releases/51a6bf4
-  virtualenv_path: /opt/agentpost/venvs/51a6bf4
-  connector_wheel_sha256: 7e80a6eea9bcc63111f4eb943811f2c3dbf4db4195b528888c757cce1040a2b8
+  immutable_path: /opt/agentpost/releases/1e1245c
+  virtualenv_path: /opt/agentpost/venvs/1e1245c
+  connector_wheel_sha256: ec3e9d1f8fc29f4d23d231b940f4fa47800abe529e19c22a366275f06f7914c7
   schema_change_from_prior: false
 
 topology:
@@ -30,8 +30,8 @@ topology:
   public_origin: https://agentpost.me
 
 rollback:
-  backup: /opt/agentpost/backups/20260901-184106-51a6bf4-pre-035
-  immediate_script: /opt/agentpost/backups/20260901-184106-51a6bf4-pre-035/rollback-immediate-0.1.35.sh
+  backup: /opt/agentpost/backups/20260901-233626-1e1245c-pre-036
+  immediate_script: /opt/agentpost/backups/20260901-233626-1e1245c-pre-036/rollback-immediate-0.1.36.sh
   database_dump_verified: true
   attachment_archive_verified: true
   protected_configuration_verified: true
@@ -45,5 +45,7 @@ acceptance:
   unknown_wheel_404: passed
   production_counts_preserved: passed
   anonymous_agentpost_brand: passed
+  authenticated_desktop_task_ui: passed
   authenticated_real_user_task_flow: pending
+  authenticated_production_390px_task_flow: pending
   production_accepted: false

@@ -1,0 +1,63 @@
+schema_version: "1"
+stage_id: v0.1.36-task-flow-simplified-deployed-https-verified
+recorded_at: "2026-09-01T23:38:00+08:00"
+project: agentpost
+stage_purpose: simplify_task_execution_and_acceptance_flow
+
+production:
+  provider: aliyun
+  product: simple-application-server
+  public_origin: https://agentpost.me
+  package_version: 0.1.36
+  git_commit: 1e1245cc014d45949bbebce643f50dd0d1fc3665
+  alembic_revision: 0027_tasks
+  evidence_status: deployed_https_verified
+  production_accepted: false
+
+artifacts:
+  source_sha256: 0999ad519b81b1b9574127a172216fe29bea264959d2dae27511520902e8f2af
+  connector_wheel_url: https://agentpost.me/downloads/agentpost-0.1.36-py3-none-any.whl
+  connector_wheel_sha256: ec3e9d1f8fc29f4d23d231b940f4fa47800abe529e19c22a366275f06f7914c7
+  workbench_bundle_sha256: 0f6605db653631f1f91f5541d0bee607b95e2dd29afa9418396ccfee09a368d5
+
+deployment:
+  prior_release: /opt/agentpost/releases/51a6bf4
+  immutable_release: /opt/agentpost/releases/1e1245c
+  backup: /opt/agentpost/backups/20260901-233626-1e1245c-pre-036
+  switch_status: deploy_status_ok
+  switch_duration_seconds: 39
+  postflight_status: postflight_status_ok
+  postflight_duration_seconds: 2
+  rollback_script: /opt/agentpost/backups/20260901-233626-1e1245c-pre-036/rollback-immediate-0.1.36.sh
+
+production_counts:
+  agents: 63
+  messages: 480
+  deliveries: 480
+  attachments: 45
+  humans: 16
+
+processes:
+  agentpost_pid: 358229
+  nginx_pid: 245451
+  postgresql_pid: 321670
+  protected_services_preserved: true
+
+verification:
+  local_ruff: passed
+  local_orbit_javascript: 30_passed
+  local_non_postgresql: 471_passed_1_sandbox_skip_5_postgresql_deselected
+  production_schema: passed_0027_tasks
+  production_backup_checksums: passed
+  production_public_health_ready: passed_0_1_36
+  production_public_wheel_hash: passed_exact_match
+  production_unknown_wheel: passed_http_404
+  production_counts_not_decreased: passed
+  production_warning_log: clean
+  authenticated_desktop_task_ui: passed_four_entries_and_simplified_execution_flow
+
+acceptance_pending:
+  - authenticated_cross_human_friend_confirmation
+  - real_connected_agent_claim_heartbeat_reclaim_and_result
+  - real_human_final_acceptance
+  - authenticated_production_390px_task_flow
