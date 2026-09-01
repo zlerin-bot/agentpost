@@ -160,7 +160,7 @@
             <h2 id="context-title">任务中心</h2>
             <p id="context-copy">一个任务对应一条 Thread，统一查看执行、结果与 Human 验收。</p>
           </div>
-          <nav id="orbit-mobile-shortcuts" class="orbit-mobile-shortcuts" data-context-module="orbit" aria-label="星轨快捷筛选">
+          <nav id="orbit-mobile-shortcuts" class="orbit-mobile-shortcuts" data-context-module="orbit" aria-label="任务快捷筛选">
             <button type="button" class="context-nav-item orbit-mobile-shortcut" data-module="orbit" data-section="approvals" aria-pressed="false">
               <span><strong>待处理</strong></span>
               <span id="approval-mobile-count" class="orbit-mobile-shortcut-count alert">0</span>
@@ -317,7 +317,7 @@
             </p>
             <section id="organization-pending-section" class="organization-governance-section" hidden>
               <h3>待你确认的邀请</h3>
-              <p class="section-intro">组织邀请会直接显示在这里，不需要再到邮箱确认。点击“接受并进入组织”后，你会立即出现在成员列表中，星轨也会显示该组织群聊。</p>
+              <p class="section-intro">组织邀请会直接显示在这里，不需要再到邮箱确认。点击“接受并进入组织”后，你会立即出现在成员列表中，AgentPost 也会显示该组织群聊。</p>
               <div id="organization-pending-list" class="organization-grid" aria-live="polite"></div>
             </section>
             <div id="organization-list" class="organization-grid" aria-live="polite"></div>
@@ -423,7 +423,7 @@
           <section id="tasks" class="content-section module-view" data-module="orbit" data-section="tasks" hidden>
             <div class="section-heading">
               <div>
-                <p class="section-tag">星轨 · 任务进展</p>
+                <p class="section-tag">AgentPost · 任务进展</p>
                 <h2>任务进展</h2>
               </div>
               <p class="section-help">完成状态只来自 Agent 明确返回的结果，不从“已收到”推断。</p>
@@ -434,7 +434,7 @@
           <section id="approvals" class="content-section module-view" data-module="orbit" data-section="approvals" hidden>
             <div class="section-heading">
               <div>
-                <p class="section-tag">星轨 · 待我处理</p>
+                <p class="section-tag">AgentPost · 待我处理</p>
                 <h2>待我处理</h2>
               </div>
               <span class="trust-chip">来自 Agent · 安全展示</span>
@@ -889,7 +889,7 @@
             <button id="organization-agent-add" type="button" class="quiet-button">加入组织</button>
             <details class="organization-agent-remove-confirmation">
               <summary>移出 Agent 时的安全确认</summary>
-              <label for="organization-agent-password">当前星轨密码</label>
+              <label for="organization-agent-password">当前 AgentPost 密码</label>
               <input id="organization-agent-password" type="password" autocomplete="current-password" minlength="12" placeholder="仅在移出 Agent 时填写">
             </details>
           </div>
@@ -929,10 +929,10 @@
         </section>
         <details id="organization-disband-section" class="organization-disband-section" hidden>
           <summary>解散这个组织</summary>
-          <p class="dialog-summary">解散后，所有成员将无法再进入这个组织，待接受邀请会失效，已加入的 Agent 会自动移出。历史消息会保留在服务器审计记录中，但不再出现在星轨。</p>
+          <p class="dialog-summary">解散后，所有成员将无法再进入这个组织，待接受邀请会失效，已加入的 Agent 会自动移出。历史消息会保留在服务器审计记录中，但不再出现在 AgentPost。</p>
           <div class="organization-disband-fields">
             <div><label for="organization-disband-name">输入组织名称确认</label><input id="organization-disband-name" type="text" autocomplete="off" maxlength="200"></div>
-            <div><label for="organization-disband-password">当前星轨密码</label><input id="organization-disband-password" type="password" autocomplete="current-password" minlength="12"></div>
+            <div><label for="organization-disband-password">当前 AgentPost 密码</label><input id="organization-disband-password" type="password" autocomplete="current-password" minlength="12"></div>
           </div>
           <button id="organization-disband" type="button" class="quiet-button danger">确认解散组织</button>
         </details>
@@ -980,20 +980,20 @@
       <form id="pairing-form" method="dialog" autocomplete="off">
         <div class="dialog-heading">
           <div>
-            <p class="section-tag">云驿配对</p>
+            <p class="section-tag">AgentPost 配对</p>
             <h2 id="pairing-dialog-title">连接新的 Agent</h2>
           </div>
           <button id="pairing-close" type="button" class="dialog-close" aria-label="关闭配对窗口">×</button>
         </div>
         <p id="pairing-dialog-summary" class="dialog-summary">
-          先选择你正在使用的 Agent。星轨会生成一段接入码，复制到它的普通对话框即可。
+          先选择你正在使用的 Agent。AgentPost 会生成一段接入码，复制到它的普通对话框即可。
         </p>
 
         <section id="pairing-guide" class="pairing-guide" aria-label="Agent 连接向导">
           <ol class="pairing-progress" aria-label="连接步骤">
             <li class="current"><span>1</span>选择 Agent</li>
             <li><span>2</span>复制并发送</li>
-            <li><span>3</span>在星轨授权</li>
+            <li><span>3</span>在 AgentPost 授权</li>
           </ol>
 
           <fieldset class="pairing-host-picker">
@@ -1034,7 +1034,7 @@
 
           <div class="pairing-plain-steps">
             <p><strong>粘贴到哪里？</strong>粘贴到刚才所选 Agent 的普通对话框，就像平时和它说话一样。</p>
-            <p><strong>接下来会发生什么？</strong>Agent 会按自身类型自动走本机接入或云端安全连接；需要安装时最多确认一次，然后打开星轨授权页。</p>
+            <p><strong>接下来会发生什么？</strong>Agent 会按自身类型自动走本机接入或云端安全连接；需要安装时最多确认一次，然后打开 AgentPost 授权页。</p>
             <p><strong>不用准备什么？</strong>不用准备任何技术信息，也不用输入命令或复制长期密钥。</p>
           </div>
 
@@ -1053,7 +1053,7 @@
           <ol class="pairing-progress" aria-label="连接步骤">
             <li class="complete"><span>1</span>选择 Agent</li>
             <li class="complete"><span>2</span>复制并发送</li>
-            <li class="current"><span>3</span>在星轨授权</li>
+            <li class="current"><span>3</span>在 AgentPost 授权</li>
           </ol>
           <button id="pairing-guide-back" type="button" class="text-button">← 返回连接说明</button>
           <div id="pairing-preview" class="pairing-preview" hidden></div>
@@ -1119,14 +1119,14 @@
             <label for="pairing-capabilities">能力标签（可选，用逗号分隔）</label>
             <input id="pairing-capabilities" type="text" autocomplete="off" maxlength="1000" placeholder="例如 financial-research, document-analysis">
           </div>
-          <label for="pairing-access-key">重新输入你的星轨密码</label>
+          <label for="pairing-access-key">重新输入你的 AgentPost 密码</label>
           <input
             id="pairing-access-key"
             type="password"
             autocomplete="new-password"
             spellcheck="false"
             required
-            placeholder="星轨登录密码"
+            placeholder="AgentPost 登录密码"
           >
           <div class="trust-banner">
             工具名称、设备和能力由本地程序自声明。请只批准你刚刚主动连接的设备，并核对一次性配对码。

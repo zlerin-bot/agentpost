@@ -271,7 +271,7 @@ test("new Agent guide offers six host-specific paths in the product order", () =
     script,
     /const connectionMode = selected\.connectionMode \|\| state\.authConfig\?\.host_connection_modes\?\.\[host\]/,
   );
-  assert.match(script, /Custom MCP 连接和星轨网页授权直接完成接入/);
+  assert.match(script, /Custom MCP 连接和 AgentPost 网页授权直接完成接入/);
   assert.match(script, /hermes: \{ name: "Hermes", code: "AP-HERMES-V1", defaultHandle: "hermes" \}/);
   assert.match(script, /使用 \$\{selected\.name\} 内置的 Custom MCP 连接/);
   assert.match(script, /不能改用长期密钥或假装已连接/);

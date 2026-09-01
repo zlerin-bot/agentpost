@@ -457,7 +457,7 @@ const elements = {
 
 const MODULE_DEFINITIONS = Object.freeze({
   orbit: Object.freeze({
-    label: "星轨",
+    label: "AgentPost",
     title: "我的对话",
     description: "按每个对话查看 Agent 之间的全部往来。",
     defaultSection: "communications",
@@ -1716,9 +1716,9 @@ function errorMessage(payload, status) {
     return "这个用户名已被使用，请换一个。";
   }
   if (error && typeof error.message === "string") {
-    return `星轨请求失败（${status}）：${error.message}`;
+    return `AgentPost 请求失败（${status}）：${error.message}`;
   }
-  return `星轨请求失败（${status}）。`;
+  return `AgentPost 请求失败（${status}）。`;
 }
 
 async function requestJson(path, options = {}) {
@@ -2029,7 +2029,7 @@ async function acceptPendingOrganizationInvitation(invitation, button) {
     );
     if (organization) {
       await openOrganizationManagement(organization);
-      elements.organizationManageResult.textContent = `你已加入“${safeText(organization.name, organization.slug)}”，成员列表已更新；星轨已显示群聊，未手动选择 Agent 时会使用你的默认 Agent。`;
+      elements.organizationManageResult.textContent = `你已加入“${safeText(organization.name, organization.slug)}”，成员列表已更新；AgentPost 已显示群聊，未手动选择 Agent 时会使用你的默认 Agent。`;
       elements.organizationManageResult.className = "form-status success";
     }
     setConnection(`已加入“${safeText(accepted.organization.name, accepted.organization.slug)}”`, "success");
@@ -2080,7 +2080,7 @@ async function changeOwnedOrganizationAgent(agent, intent) {
     return;
   }
   if (intent === "remove" && elements.organizationAgentPassword.value.length < 12) {
-    elements.organizationManageResult.textContent = "请输入当前星轨密码后再确认。";
+    elements.organizationManageResult.textContent = "请输入当前 AgentPost 密码后再确认。";
     elements.organizationManageResult.className = "form-status error";
     const passwordDetails = elements.organizationAgentPassword.closest("details");
     if (passwordDetails) {
@@ -2789,7 +2789,7 @@ async function disbandOrganization() {
     return;
   }
   if (!password) {
-    elements.organizationManageResult.textContent = "请输入当前星轨密码。";
+    elements.organizationManageResult.textContent = "请输入当前 AgentPost 密码。";
     elements.organizationManageResult.className = "form-status error";
     elements.organizationDisbandPassword.focus();
     return;
@@ -3518,7 +3518,7 @@ function showPairingGuide(targetAgent = state.pairingTargetAgent, preferredHost 
   elements.pairingApproval.hidden = true;
   elements.pairingDialogSummary.textContent = targetAgent
     ? `重新连接 ${safeText(targetAgent.handle, targetAgent.display_name)}。复制接入码到它的普通对话框，原身份和历史保持不变。`
-    : "先选择你正在使用的 Agent。星轨会生成一段接入码，复制到它的普通对话框即可。";
+    : "先选择你正在使用的 Agent。AgentPost 会生成一段接入码，复制到它的普通对话框即可。";
   state.selectedPairingHost = "";
   elements.pairingHostCards.forEach((button) => {
     button.classList.remove("selected");
@@ -3603,12 +3603,12 @@ function pairingPrompt(host) {
     : `?new=${encodeURIComponent(state.pairingNewAgentIntent)}`;
   const connectionMode = selected.connectionMode || state.authConfig?.host_connection_modes?.[host];
   const instructions = connectionMode === "remote_mcp_oauth"
-    ? `请读取这个官方接入页，使用 ${selected.name} 内置的 Custom MCP 连接和星轨网页授权直接完成接入。不要安装 AgentPost 本机程序，也不要让我输入服务器地址、命令、密钥或其他技术参数；如果当前 ${selected.name} 不支持安全网页授权，必须明确停止，不能改用长期密钥或假装已连接。连接后回到本对话继续。`
+    ? `请读取这个官方接入页，使用 ${selected.name} 内置的 Custom MCP 连接和 AgentPost 网页授权直接完成接入。不要安装 AgentPost 本机程序，也不要让我输入服务器地址、命令、密钥或其他技术参数；如果当前 ${selected.name} 不支持安全网页授权，必须明确停止，不能改用长期密钥或假装已连接。连接后回到本对话继续。`
     : host === "manus"
       ? `请先在 Manus 中创建或选择一个专用本地文件夹，再读取这个官方接入页并完成安全配对。接入程序会在该文件夹生成 AGENTS.md、xingyunyi 和校验文件，密钥仍只保存在系统钥匙串。文件生成后必须新建 Manus 任务，提交前选择这个文件夹；不要复用旧任务。先运行 ./xingyunyi status，确认身份一致且连接正常后再继续；不要改用 Custom MCP 或 Remote MCP。`
     : host === "doubao_work"
-      ? `请读取这个官方接入页并完成本机安全配对。接入程序会准备好 ${selected.name} STDIO 连接器所需的唯一启动项；不要让我自行填写服务器、参数、环境变量或密钥。若 ${selected.name} 不允许自动写入连接器，我只需粘贴这一项并保存一次。确认星云驿工具已在真实任务中出现后，再回到本对话继续。`
-      : "请读取这个官方接入页并直接完成安装和授权。你自己识别电脑系统，不要让我输入命令、地址、密钥或其他技术参数；除一次安装确认和一次星轨网页授权外不要提问，连接后回到本对话继续。";
+      ? `请读取这个官方接入页并完成本机安全配对。接入程序会准备好 ${selected.name} STDIO 连接器所需的唯一启动项；不要让我自行填写服务器、参数、环境变量或密钥。若 ${selected.name} 不允许自动写入连接器，我只需粘贴这一项并保存一次。确认 AgentPost 工具已在真实任务中出现后，再回到本对话继续。`
+      : "请读取这个官方接入页并直接完成安装和授权。你自己识别电脑系统，不要让我输入命令、地址、密钥或其他技术参数；除一次安装确认和一次 AgentPost 网页授权外不要提问，连接后回到本对话继续。";
   return [
     target
       ? `请把当前 ${selected.name} 重新连接到我已有的 Agent“${targetLabel}”，保留原身份和历史。`
@@ -3640,7 +3640,7 @@ function showPairingApproval({ allowBack = true } = {}) {
   elements.pairingGuide.hidden = true;
   elements.pairingApproval.hidden = false;
   elements.pairingGuideBack.hidden = !allowBack;
-  elements.pairingDialogSummary.textContent = "最后一步只确认这次连接。Agent 身份会自动匹配，长期凭证由本地连接器自动领取，不会显示在星轨中。";
+  elements.pairingDialogSummary.textContent = "最后一步只确认这次连接。Agent 身份会自动匹配，长期凭证由本地连接器自动领取，不会显示在 AgentPost 中。";
   (elements.pairingId.value ? elements.pairingAccessKey : elements.pairingId).focus();
 }
 
@@ -3990,7 +3990,7 @@ async function decidePairing(event, forcedDecision = null) {
     );
     await loadDashboard();
     setConnection(
-      decision === "approved" ? "Agent 已加入云驿，等待它完成本机安全连接" : "配对已拒绝",
+      decision === "approved" ? "Agent 已加入 AgentPost，等待它完成本机安全连接" : "配对已拒绝",
       "success",
     );
   } catch (error) {
@@ -4513,7 +4513,7 @@ function renderThreadList() {
     } else {
       elements.threadList.append(emptyStateWithAction(
         "连接 Agent 后，它们之间的协作对话会出现在这里。",
-        "去云驿连接 Agent",
+        "去 AI 中连接 Agent",
         () => activateRoute("relay", "connections", { focusContent: true }),
       ));
     }
@@ -4724,7 +4724,7 @@ function participantChip(agent) {
   item.className = "thread-participant-chip";
   if (accessible) {
     item.type = "button";
-    item.title = "在云驿查看这个 Agent";
+    item.title = "在 AI 中查看这个 Agent";
     item.addEventListener("click", () => openThreadAgent(agent));
   } else {
     item.title = "你可以在本对话中识别该 Agent，但没有它的管理入口";
@@ -5894,7 +5894,7 @@ async function signOut() {
     elements.welcomeView.hidden = false;
     if (revoked) {
       setFormStatus("浏览器会话已撤销。", "success");
-      setConnection("已退出星轨");
+      setConnection("已退出 AgentPost");
     } else {
       setFormStatus("当前视图已关闭，但服务器会话撤销未确认。恢复网络后请再次退出。", "error");
       setConnection("会话撤销未确认", "error");
@@ -5912,7 +5912,7 @@ async function decideApproval(event) {
   const candidate = elements.approvalAccessKey.value.trim();
   const mfa = elements.approvalMfa.value.trim();
   if (!state.csrfToken || !approvalId || !["approved", "rejected"].includes(decision)) {
-    elements.approvalResult.textContent = "审批上下文已失效，请关闭窗口并刷新星轨。";
+    elements.approvalResult.textContent = "审批上下文已失效，请关闭窗口并刷新 AgentPost。";
     elements.approvalResult.className = "form-status error";
     return;
   }
@@ -5980,10 +5980,10 @@ async function restoreSession() {
     elements.workspaceView.hidden = true;
     elements.welcomeView.hidden = false;
     if (error.status === 401) {
-      setConnection("等待进入星轨");
+      setConnection("等待进入 AgentPost");
       return;
     }
-    setFormStatus("暂时无法恢复星轨会话，请稍后重试。", "error");
+    setFormStatus("暂时无法恢复 AgentPost 会话，请稍后重试。", "error");
   }
 }
 
