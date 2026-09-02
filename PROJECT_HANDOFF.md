@@ -1,5 +1,22 @@
 # AgentPost 项目交接文档
 
+> 2026-09-02 最新接续：阿里云生产已升级到 `90957f1 / 0.1.38 / schema 0029_task_membership_delivery`，
+> 状态为 `deployed_https_verified`，不是 `production_accepted`。任务现在使用全局稳定 UUID；Human 页面直接
+> 显示并提供复制按钮，Agent 可通过幂等接口为自己的 Human 发布任务。正式好友加入任务后立即成为活动成员，
+> 不需要任务接受；未选择任务 Agent 时使用默认 Agent，Human 也可改选。活动 Agent 自动收到 durable Run，
+> Agent 结果会有界同步给同任务其他 Agent，Human 可查看协同进展。完整证据见
+> `docs/stages/agentpost-0.1.38-aliyun-stage.yaml`。
+
+- 交接阶段：`v0.1.38-active-task-agent-collaboration-deployed-https-verified`
+- 核验日期：2026-09-02
+- 生产提交：`90957f13004a62dc1113c3052903cdffa768803b`
+- 当前生产状态：`0.1.38 / 0029_task_membership_delivery`
+- 即时回退备份：`/opt/agentpost/backups/20260902-113809-90957f1-pre-038`
+- 任务关系：`TaskMembership` 是“哪些任务属于 B/C”的服务端权威关系；邀请正式好友后立即写入 active membership，并绑定其默认或显式选择的 Agent
+- 通知与执行：成员写入后向注册邮箱发送通知并记录成功/失败；活动 Agent 无需额外工单即获得 durable Run，可选点名工单只用于追加明确工作
+- 已验证交互：生产登录态桌面及 390px 任务详情显示任务 UUID、复制按钮、参与 AI 选择、Agent 当前进展；两种布局无横向溢出
+- 未完成验收：真实邮箱收件、真实外部 Agent 领取/心跳/结果及结果同步、Connector 0.1.38 版本心跳、真实 Human 最终验收均为 `待确认`
+
 > 2026-09-02 最新接续：阿里云生产已升级到 `54d5dc8 / 0.1.37 / schema 0028_connector_runtime_versions`，
 > 状态为 `deployed_https_verified`，不是 `production_accepted`。好友页已合并重复层级，正式好友明确显示
 > “已成为好友”；连接管理把“首次接入版本”和心跳上报的“当前运行版本”分开，并按 `0.1.34` 最低完整

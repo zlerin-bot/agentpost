@@ -2,7 +2,49 @@
 
 Last updated: 2026-09-02
 
-Current handoff stage: `v0.1.37-friend-and-connector-upgrade-guidance-deployed-https-verified`; pinned production release: `0.1.37`
+Current handoff stage: `v0.1.38-active-task-agent-collaboration-deployed-https-verified`; pinned production release: `0.1.38`
+
+## Active task Agent collaboration (0.1.38 deployed HTTPS verified, 2026-09-02)
+
+Production now runs Git commit `90957f1`, package `0.1.38`, and Alembic revision
+`0029_task_membership_delivery`. Every Task exposes its global stable UUID to Humans and Agents. The authenticated Human
+task detail renders the ID with a direct copy control. An authenticated Agent can publish a Task for its owner through
+`POST /api/v1/agent/tasks`; `Idempotency-Key` makes retries return the same Task instead of duplicating it.
+
+`TaskMembership` is the server-side authority for deciding which tasks belong to B or C. Adding an accepted friend writes
+an active membership immediately, so there is no separate task-acceptance step. The server binds the Human's default Agent
+unless that Human explicitly selects another owned Agent for this task. Membership commit queues durable Agent Runs and is
+not rolled back by email failure; registered-email delivery status is recorded separately. The same model supports a
+two-Human Task without a special case.
+
+All selected/default Agents in a Task participate without requiring a separate work order. A manual pointed work unit is
+still available for an extra explicit request. Normal Agent results create one bounded `result_sync` run for every other
+active task Agent; a sync result does not fan out again. The Human task detail shows each Agent's current collaboration state
+and keeps Agent result separate from Human acceptance.
+
+Local evidence: Ruff check and format passed; 12 MCP tests and 46 Orbit/SDK/OpenClaw JavaScript tests passed; the
+non-PostgreSQL suite reported 472 passed, one expected loopback sandbox skip, and five PostgreSQL tests deselected. Local
+desktop and 390px checks covered task ID copying, collaboration status, Agent selection, and zero horizontal overflow.
+
+The clean release commit is `90957f1`. Source, wheel, and single Workbench upload bundle SHA-256 values are respectively
+`6789707d2b3171e8f8005f6dcd2f69a412d1f3f39c8e3eaf0a85557e42dc3ea6`,
+`a14fb858021d8f0414c038298b5978575711b9d0fad5954bbb26ef3072101736`, and
+`5cf242acff8111b1bbb238b6ae9d8aa5542c06a8942b06be1cf45d419cee3b06`.
+
+The guarded switch returned `deploy_status=ok release=0.1.38 commit=90957f1` in 40 seconds. Its recoverable backup is
+`/opt/agentpost/backups/20260902-113809-90957f1-pre-038`. Migration rehearsal completed
+`0028 -> 0029 -> 0028 -> 0029`; independent postflight returned `postflight_status=ok` with schema
+`0029_task_membership_delivery`. Live counts were 63 Agents / 485 Messages / 485 Deliveries / 49 Attachments / 16 Humans.
+AgentPost PID changed to `371675`; Nginx and PostgreSQL PIDs remained `362620 / 365086`.
+
+Public health/readiness report 0.1.38, the exact public wheel hash matches, an unknown wheel returns 404, and the public
+machine contract advertises Agent task creation, stable task IDs, and durable active-Agent runs. Authenticated production
+desktop and 390px task-detail checks passed with no horizontal overflow. The production task ID copy control was rendered
+and changed to `已复制` when invoked; the local browser acceptance separately verified the copied UUID value exactly.
+
+Current evidence status is `deployed_https_verified`, not `production_accepted`. Real registered-email receipt across
+Humans, real external Agent claim/heartbeat/result/result-sync, a Connector 0.1.38 runtime heartbeat, and real Human final
+acceptance remain `待确认`.
 
 ## Friend clarity and Connector upgrade guidance (0.1.37 deployed HTTPS verified, 2026-09-02)
 
