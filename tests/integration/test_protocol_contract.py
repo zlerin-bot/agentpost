@@ -30,12 +30,16 @@ def test_public_agent_integration_contract_preserves_machine_and_human_semantics
     assert payload["states"]["agent_result_is_not_human_acceptance"] is True
     assert payload["task_execution"] == {
         "claim_endpoint": "/api/v1/task-runs/claim",
+        "create_endpoint": "/api/v1/agent/tasks",
+        "create_requires_idempotency_key": True,
         "heartbeat_endpoint_template": "/api/v1/task-runs/{run_id}/heartbeat",
         "result_endpoint_template": "/api/v1/task-runs/{run_id}/result",
         "lease_seconds": 90,
         "durable_queue": True,
         "claim_is_idempotent_per_active_lease": True,
         "result_requires_human_acceptance": True,
+        "task_id_is_global_stable_identifier": True,
+        "active_task_agents_receive_durable_runs": True,
     }
     assert payload["heartbeat"]["recommended_interval_seconds"] == 30
     assert payload["heartbeat"]["offline_after_seconds"] == 90

@@ -51,6 +51,8 @@ class StateContract(ContractModel):
 
 
 class TaskExecutionContract(ContractModel):
+    create_endpoint: Literal["/api/v1/agent/tasks"] = "/api/v1/agent/tasks"
+    create_requires_idempotency_key: Literal[True] = True
     claim_endpoint: Literal["/api/v1/task-runs/claim"] = "/api/v1/task-runs/claim"
     heartbeat_endpoint_template: Literal["/api/v1/task-runs/{run_id}/heartbeat"] = (
         "/api/v1/task-runs/{run_id}/heartbeat"
@@ -62,6 +64,8 @@ class TaskExecutionContract(ContractModel):
     durable_queue: Literal[True] = True
     claim_is_idempotent_per_active_lease: Literal[True] = True
     result_requires_human_acceptance: Literal[True] = True
+    task_id_is_global_stable_identifier: Literal[True] = True
+    active_task_agents_receive_durable_runs: Literal[True] = True
 
 
 class HeartbeatContract(ContractModel):
@@ -215,6 +219,16 @@ def build_agent_integration_contract(settings: Settings) -> AgentIntegrationCont
                 path="/connect/heartbeat",
                 purpose="report health for the current active Connector",
                 changes_state=True,
+            ),
+            EndpointContract(
+                method="POST",
+                path="/api/v1/agent/tasks",
+                purpose=(
+                    "publish a task for the authenticated Agent's Human and return its "
+                    "stable task_id"
+                ),
+                changes_state=True,
+                required_headers=["Idempotency-Key"],
             ),
             EndpointContract(
                 method="POST",

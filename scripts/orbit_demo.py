@@ -565,8 +565,8 @@ def _settings(data_dir: Path, port: int) -> Settings:
         email_delivery_mode="test",
         rate_limit_enabled=False,
         public_base_url=f"http://127.0.0.1:{port}",
-        connector_release_version="0.1.37",
-        connector_wheel_url="https://agentpost.me/downloads/agentpost-0.1.37-py3-none-any.whl",
+        connector_release_version="0.1.38",
+        connector_wheel_url="https://agentpost.me/downloads/agentpost-0.1.38-py3-none-any.whl",
         connector_wheel_sha256="edb936aa966ee3559cc12f1cc457c8e6c50a3e965f3f69058e06c7ff5002e34f",
         log_level="WARNING",
     )

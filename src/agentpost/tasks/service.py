@@ -8,6 +8,8 @@ from uuid import UUID
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
+from agentpost.accounts.mailer import EmailDeliveryError, deliver_task_membership_notification
+from agentpost.config import Settings
 from agentpost.control.human_security import add_human_action_audit
 from agentpost.control.models import AgentOwnership, HumanUser
 from agentpost.identity.models import Agent, utc_now
@@ -23,10 +25,12 @@ from agentpost.tasks.models import (
 )
 from agentpost.tasks.schemas import (
     AgentChoice,
+    AgentCollaborationUpdate,
     AgentRunClaim,
     AgentRunResult,
     AgentRunUpdate,
     AgentSummary,
+    AgentTaskCreate,
     FriendResponse,
     TaskAcceptanceDecision,
     TaskActivityResponse,
@@ -434,19 +438,60 @@ def _add_activity(
     target_human_id: UUID | None = None,
     metadata: dict[str, object] | None = None,
     external: bool = False,
-) -> None:
-    session.add(
-        TaskActivity(
-            task_id=task_id,
-            activity_type=kind,
-            actor_type=actor_type,
-            actor_human_user_id=actor_human_id,
-            actor_agent_id=actor_agent_id,
-            target_human_user_id=target_human_id,
-            activity_metadata=metadata or {},
-            security_label="external_agent_content" if external else "platform_event",
-        )
+) -> TaskActivity:
+    activity = TaskActivity(
+        task_id=task_id,
+        activity_type=kind,
+        actor_type=actor_type,
+        actor_human_user_id=actor_human_id,
+        actor_agent_id=actor_agent_id,
+        target_human_user_id=target_human_id,
+        activity_metadata=metadata or {},
+        security_label="external_agent_content" if external else "platform_event",
     )
+    session.add(activity)
+    return activity
+
+
+def _queue_collaboration_assignment(
+    session: Session,
+    *,
+    task: Task,
+    human_id: UUID,
+    agent_id: UUID,
+    created_by_human_id: UUID,
+    assignment_kind: str = "participant_start",
+    trigger_activity_id: UUID | None = None,
+    instruction: str | None = None,
+) -> TaskAssignment:
+    assignment = TaskAssignment(
+        task_id=task.id,
+        responsible_human_user_id=human_id,
+        assignee_agent_id=agent_id,
+        created_by_human_user_id=created_by_human_id,
+        assignment_kind=assignment_kind,
+        trigger_activity_id=trigger_activity_id,
+        instruction=instruction
+        or (
+            "你已加入这个任务的协同。请结合完整任务目标和其他参与者的进展，"
+            "主动贡献、报告阻塞或明确说明暂不需要行动。"
+        ),
+        expected_output=task.expected_output,
+        due_at=task.due_at,
+        status="queued",
+    )
+    session.add(assignment)
+    session.flush()
+    session.add(AgentRun(assignment_id=assignment.id, agent_id=agent_id))
+    _add_activity(
+        session,
+        task_id=task.id,
+        kind="agent_joined_collaboration",
+        actor_type="platform",
+        target_human_id=human_id,
+        metadata={"assignment_id": str(assignment.id), "agent_id": str(agent_id)},
+    )
+    return assignment
 
 
 def _task_detail(session: Session, *, task: Task, viewer_membership: TaskMembership) -> TaskDetail:
@@ -480,6 +525,8 @@ def _task_detail(session: Session, *, task: Task, viewer_membership: TaskMembers
             role=membership.role,  # type: ignore[arg-type]
             status=membership.status,  # type: ignore[arg-type]
             primary_agent_id=membership.primary_agent_id,
+            agent_selection_source=membership.agent_selection_source,  # type: ignore[arg-type]
+            email_notification_status=membership.email_notification_status,  # type: ignore[arg-type]
             agents=agents_by_human.get(human.id, []),
             invited_at=_as_utc(membership.invited_at),
             joined_at=_as_utc(membership.joined_at),
@@ -493,6 +540,18 @@ def _task_detail(session: Session, *, task: Task, viewer_membership: TaskMembers
             .order_by(TaskAssignment.created_at.desc())
         )
     )
+    missing_assignment_agent_ids = {
+        item.assignee_agent_id for item in assignment_rows if item.assignee_agent_id not in agents
+    }
+    if missing_assignment_agent_ids:
+        agents.update(
+            {
+                agent.id: agent
+                for agent in session.scalars(
+                    select(Agent).where(Agent.id.in_(missing_assignment_agent_ids))
+                )
+            }
+        )
     latest_run: dict[UUID, AgentRun] = {}
     if assignment_rows:
         for run in session.scalars(
@@ -508,6 +567,7 @@ def _task_detail(session: Session, *, task: Task, viewer_membership: TaskMembers
             responsible_human_display_name=humans[item.responsible_human_user_id].display_name,
             assignee_agent_id=item.assignee_agent_id,
             assignee_agent_display_name=agents[item.assignee_agent_id].display_name,
+            assignment_kind=item.assignment_kind,  # type: ignore[arg-type]
             instruction=item.instruction,
             expected_output=item.expected_output,
             due_at=_as_utc(item.due_at),
@@ -640,6 +700,8 @@ def create_task(
         task_id=task.id,
         human_user_id=user.id,
         primary_agent_id=payload.primary_agent_id,
+        agent_selection_source="selected",
+        email_notification_status="not_applicable",
         role="owner",
         status="active",
         invited_by_user_id=user.id,
@@ -658,6 +720,13 @@ def create_task(
                 selected_at=now,
             )
         )
+        _queue_collaboration_assignment(
+            session,
+            task=task,
+            human_id=user.id,
+            agent_id=agent.id,
+            created_by_human_id=user.id,
+        )
     _add_activity(
         session,
         task_id=task.id,
@@ -675,6 +744,87 @@ def create_task(
         outcome="success",
         request_id=request_id,
         audit_metadata={"agent_ids": [str(agent.id) for agent in agents]},
+    )
+    session.commit()
+    return _task_detail(session, task=task, viewer_membership=membership)
+
+
+def create_task_by_agent(
+    session: Session,
+    *,
+    agent: Agent,
+    payload: AgentTaskCreate,
+    idempotency_key: str,
+) -> TaskDetail:
+    owner_id = session.scalar(
+        select(AgentOwnership.human_user_id).where(AgentOwnership.agent_id == agent.id)
+    )
+    owner = session.get(HumanUser, owner_id) if owner_id else None
+    if owner is None or owner.status != "active":
+        raise TaskAgentSelectionError
+    existing = session.scalar(
+        select(Task).where(
+            Task.coordinator_agent_id == agent.id,
+            Task.agent_creation_key == idempotency_key,
+        )
+    )
+    if existing is not None:
+        membership = session.get(TaskMembership, (existing.id, owner.id))
+        if membership is None:
+            raise TaskNotFoundError
+        return _task_detail(session, task=existing, viewer_membership=membership)
+    now = utc_now()
+    task = Task(
+        owner_human_user_id=owner.id,
+        coordinator_agent_id=agent.id,
+        agent_creation_key=idempotency_key,
+        title=payload.title,
+        goal=payload.goal,
+        expected_output=payload.expected_output,
+        due_at=payload.due_at,
+        status="active",
+        created_at=now,
+        updated_at=now,
+    )
+    session.add(task)
+    session.flush()
+    membership = TaskMembership(
+        task_id=task.id,
+        human_user_id=owner.id,
+        primary_agent_id=agent.id,
+        agent_selection_source="selected",
+        email_notification_status="not_applicable",
+        role="owner",
+        status="active",
+        invited_by_user_id=owner.id,
+        invited_at=now,
+        joined_at=now,
+        updated_at=now,
+    )
+    session.add(membership)
+    session.add(
+        TaskAgentParticipant(
+            task_id=task.id,
+            agent_id=agent.id,
+            human_user_id=owner.id,
+            role="primary",
+            selected_at=now,
+        )
+    )
+    _queue_collaboration_assignment(
+        session,
+        task=task,
+        human_id=owner.id,
+        agent_id=agent.id,
+        created_by_human_id=owner.id,
+    )
+    _add_activity(
+        session,
+        task_id=task.id,
+        kind="task_created",
+        actor_type="agent",
+        actor_agent_id=agent.id,
+        metadata={"created_for_human_user_id": str(owner.id)},
     )
     session.commit()
     return _task_detail(session, task=task, viewer_membership=membership)
@@ -708,6 +858,7 @@ def invite_task_members(
     human_user_ids: list[UUID],
     human_session_id: UUID | None,
     request_id: str,
+    settings: Settings,
 ) -> TaskDetail:
     task, membership = _task_context(session, task_id=task_id, user=user, lock=True)
     _require_owner(task, membership)
@@ -728,33 +879,210 @@ def invite_task_members(
     )
     if existing_ids.intersection(human_user_ids):
         raise TaskStateConflictError
+    humans = {
+        human.id: human
+        for human in session.scalars(
+            select(HumanUser).where(HumanUser.id.in_(human_user_ids), HumanUser.status == "active")
+        )
+    }
+    default_agents: dict[UUID, Agent] = {}
+    for human_id in human_user_ids:
+        human = humans.get(human_id)
+        if human is None or human.default_agent_id is None:
+            raise TaskAgentSelectionError
+        default_agent = _human_agent(session, human_id, human.default_agent_id)
+        if default_agent is None:
+            raise TaskAgentSelectionError
+        default_agents[human_id] = default_agent
     now = utc_now()
     for human_id in human_user_ids:
+        default_agent = default_agents[human_id]
         row = session.get(TaskMembership, (task_id, human_id))
         if row is None:
             row = TaskMembership(task_id=task_id, human_user_id=human_id)
-        row.primary_agent_id = None
+        row.primary_agent_id = default_agent.id
+        row.agent_selection_source = "default"
+        row.email_notification_status = "pending"
+        row.email_notification_attempts = 0
+        row.email_notified_at = None
         row.role = "member"
-        row.status = "invited"
+        row.status = "active"
         row.invited_by_user_id = user.id
         row.invited_at = now
-        row.joined_at = None
+        row.joined_at = now
         row.updated_at = now
         session.add(row)
+        session.add(
+            TaskAgentParticipant(
+                task_id=task.id,
+                agent_id=default_agent.id,
+                human_user_id=human_id,
+                role="primary",
+                selected_at=now,
+            )
+        )
+        _queue_collaboration_assignment(
+            session,
+            task=task,
+            human_id=human_id,
+            agent_id=default_agent.id,
+            created_by_human_id=user.id,
+        )
         _add_activity(
             session,
             task_id=task_id,
-            kind="member_invited",
+            kind="member_added",
             actor_type="human",
             actor_human_id=user.id,
             target_human_id=human_id,
+            metadata={"agent_id": str(default_agent.id), "selection_source": "default"},
         )
     task.updated_at = now
     add_human_action_audit(
         session,
         human_user_id=user.id,
         human_session_id=human_session_id,
-        action="task.members_invited",
+        action="task.members_added",
+        target_type="task",
+        target_id=str(task.id),
+        outcome="success",
+        request_id=request_id,
+    )
+    session.commit()
+    for human_id in human_user_ids:
+        human = humans[human_id]
+        default_agent = default_agents[human_id]
+        row = session.get(TaskMembership, (task_id, human_id))
+        if row is None:
+            continue
+        row.email_notification_attempts += 1
+        try:
+            deliver_task_membership_notification(
+                settings,
+                email=human.email,
+                inviter_name=user.display_name,
+                task_title=task.title,
+                task_id=str(task.id),
+                agent_name=default_agent.display_name,
+            )
+        except EmailDeliveryError:
+            row.email_notification_status = "failed"
+            _add_activity(
+                session,
+                task_id=task.id,
+                kind="member_email_failed",
+                actor_type="platform",
+                target_human_id=human_id,
+            )
+        else:
+            row.email_notification_status = "sent"
+            row.email_notified_at = utc_now()
+            _add_activity(
+                session,
+                task_id=task.id,
+                kind="member_email_sent",
+                actor_type="platform",
+                target_human_id=human_id,
+            )
+    session.commit()
+    return _task_detail(session, task=task, viewer_membership=membership)
+
+
+def select_task_agents(
+    session: Session,
+    *,
+    user: HumanUser,
+    task_id: UUID,
+    choice: AgentChoice,
+    human_session_id: UUID | None,
+    request_id: str,
+) -> TaskDetail:
+    task, membership = _task_context(session, task_id=task_id, user=user, lock=True)
+    if membership.status != "active" or task.status not in {"active", "paused"}:
+        raise TaskStateConflictError
+    agents = _validate_agent_choice(session, human_id=user.id, choice=choice)
+    now = utc_now()
+    existing = list(
+        session.scalars(
+            select(TaskAgentParticipant).where(
+                TaskAgentParticipant.task_id == task.id,
+                TaskAgentParticipant.human_user_id == user.id,
+            )
+        )
+    )
+    selected_ids = {agent.id for agent in agents}
+    previously_active_ids = {participant.agent_id for participant in existing if participant.active}
+    removed_ids = previously_active_ids - selected_ids
+    for participant in existing:
+        participant.active = participant.agent_id in selected_ids
+        if participant.active:
+            participant.role = (
+                "primary" if participant.agent_id == choice.primary_agent_id else "support"
+            )
+    existing_ids = {participant.agent_id for participant in existing}
+    if removed_ids:
+        removed_assignments = list(
+            session.scalars(
+                select(TaskAssignment).where(
+                    TaskAssignment.task_id == task.id,
+                    TaskAssignment.responsible_human_user_id == user.id,
+                    TaskAssignment.assignee_agent_id.in_(removed_ids),
+                    TaskAssignment.status.in_(["queued", "running", "waiting_human"]),
+                )
+            )
+        )
+        for assignment in removed_assignments:
+            assignment.status = "cancelled"
+            assignment.updated_at = now
+            for run in session.scalars(
+                select(AgentRun).where(
+                    AgentRun.assignment_id == assignment.id,
+                    AgentRun.status.in_(
+                        ["queued", "leased", "starting", "running", "waiting_human"]
+                    ),
+                )
+            ):
+                run.status = "cancelled"
+                run.finished_at = now
+                run.lease_expires_at = None
+                run.lease_token_digest = None
+    for agent in agents:
+        if agent.id not in existing_ids:
+            session.add(
+                TaskAgentParticipant(
+                    task_id=task.id,
+                    agent_id=agent.id,
+                    human_user_id=user.id,
+                    role="primary" if agent.id == choice.primary_agent_id else "support",
+                    selected_at=now,
+                )
+            )
+        if agent.id not in previously_active_ids:
+            _queue_collaboration_assignment(
+                session,
+                task=task,
+                human_id=user.id,
+                agent_id=agent.id,
+                created_by_human_id=user.id,
+            )
+    membership.primary_agent_id = choice.primary_agent_id
+    membership.agent_selection_source = "selected"
+    membership.updated_at = now
+    task.updated_at = now
+    _add_activity(
+        session,
+        task_id=task.id,
+        kind="member_agents_selected",
+        actor_type="human",
+        actor_human_id=user.id,
+        target_human_id=user.id,
+        metadata={"agent_ids": [str(agent.id) for agent in agents]},
+    )
+    add_human_action_audit(
+        session,
+        human_user_id=user.id,
+        human_session_id=human_session_id,
+        action="task.agents_selected",
         target_type="task",
         target_id=str(task.id),
         outcome="success",
@@ -785,6 +1113,7 @@ def decide_task_invitation(
     now = utc_now()
     membership.status = "active" if accept else "declined"
     membership.primary_agent_id = choice.primary_agent_id if accept and choice else None
+    membership.agent_selection_source = "selected"
     membership.joined_at = now if accept else None
     membership.updated_at = now
     for agent in agents:
@@ -796,6 +1125,13 @@ def decide_task_invitation(
                 role="primary" if choice and agent.id == choice.primary_agent_id else "support",
                 selected_at=now,
             )
+        )
+        _queue_collaboration_assignment(
+            session,
+            task=task,
+            human_id=user.id,
+            agent_id=agent.id,
+            created_by_human_id=user.id,
         )
     _add_activity(
         session,
@@ -849,6 +1185,7 @@ def create_assignment(
         responsible_human_user_id=payload.responsible_human_user_id,
         assignee_agent_id=payload.assignee_agent_id,
         created_by_human_user_id=user.id,
+        assignment_kind="human_directed",
         instruction=payload.instruction,
         expected_output=payload.expected_output or task.expected_output,
         due_at=payload.due_at,
@@ -1033,6 +1370,45 @@ def _digest_lease(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
+def _agent_collaboration_context(
+    session: Session, *, task_id: UUID
+) -> tuple[list[UUID], list[AgentCollaborationUpdate]]:
+    participant_ids = list(
+        session.scalars(
+            select(TaskAgentParticipant.agent_id)
+            .where(
+                TaskAgentParticipant.task_id == task_id,
+                TaskAgentParticipant.active.is_(True),
+            )
+            .order_by(TaskAgentParticipant.selected_at)
+        )
+    )
+    result_rows = list(
+        session.scalars(
+            select(TaskActivity)
+            .where(
+                TaskActivity.task_id == task_id,
+                TaskActivity.activity_type == "assignment_result",
+                TaskActivity.actor_agent_id.is_not(None),
+            )
+            .order_by(TaskActivity.created_at)
+            .limit(100)
+        )
+    )
+    updates = [
+        AgentCollaborationUpdate(
+            activity_id=item.id,
+            agent_id=item.actor_agent_id,
+            status=str(item.activity_metadata.get("status", "completed")),
+            summary=str(item.activity_metadata.get("summary", "")),
+            created_at=_as_utc(item.created_at),
+        )
+        for item in result_rows
+        if item.actor_agent_id is not None
+    ]
+    return participant_ids, updates
+
+
 def claim_agent_run(session: Session, *, agent: Agent) -> AgentRunClaim | None:
     now = utc_now()
     expired = list(
@@ -1060,7 +1436,7 @@ def claim_agent_run(session: Session, *, agent: Agent) -> AgentRunClaim | None:
     run = session.scalar(
         select(AgentRun)
         .where(AgentRun.agent_id == agent.id, AgentRun.status == "queued")
-        .order_by(AgentRun.created_at)
+        .order_by(AgentRun.attempt.desc(), AgentRun.created_at)
         .with_for_update(skip_locked=True)
         .limit(1)
     )
@@ -1090,6 +1466,9 @@ def claim_agent_run(session: Session, *, agent: Agent) -> AgentRunClaim | None:
         metadata={"assignment_id": str(assignment.id), "run_id": str(run.id)},
     )
     session.commit()
+    participant_agent_ids, collaboration_updates = _agent_collaboration_context(
+        session, task_id=task.id
+    )
     return AgentRunClaim(
         run_id=run.id,
         lease_token=token,
@@ -1103,6 +1482,8 @@ def claim_agent_run(session: Session, *, agent: Agent) -> AgentRunClaim | None:
         expected_output=assignment.expected_output,
         due_at=_as_utc(assignment.due_at),
         attempt=run.attempt,
+        participant_agent_ids=participant_agent_ids,
+        collaboration_updates=collaboration_updates,
     )
 
 
@@ -1138,6 +1519,7 @@ def update_agent_run(
         session, agent=agent, run_id=run_id, lease_token=payload.lease_token
     )
     now = utc_now()
+    previous_status = run.status
     run.status = payload.status
     run.last_heartbeat_at = now
     run.lease_expires_at = now + timedelta(seconds=RUN_LEASE_SECONDS)
@@ -1146,7 +1528,23 @@ def update_agent_run(
         run.started_at = now
     assignment.status = "waiting_human" if payload.status == "waiting_human" else "running"
     assignment.updated_at = now
+    if payload.status != previous_status:
+        _add_activity(
+            session,
+            task_id=task.id,
+            kind="run_waiting_human" if payload.status == "waiting_human" else "run_progress",
+            actor_type="agent",
+            actor_agent_id=agent.id,
+            metadata={
+                "assignment_id": str(assignment.id),
+                "run_id": str(run.id),
+                "status": payload.status,
+            },
+        )
     session.commit()
+    participant_agent_ids, collaboration_updates = _agent_collaboration_context(
+        session, task_id=task.id
+    )
     return AgentRunClaim(
         run_id=run.id,
         lease_token=payload.lease_token,
@@ -1160,6 +1558,8 @@ def update_agent_run(
         expected_output=assignment.expected_output,
         due_at=_as_utc(assignment.due_at),
         attempt=run.attempt,
+        participant_agent_ids=participant_agent_ids,
+        collaboration_updates=collaboration_updates,
     )
 
 
@@ -1182,7 +1582,7 @@ def complete_agent_run(
     assignment.updated_at = now
     assignment.completed_at = now
     task.updated_at = now
-    _add_activity(
+    result_activity = _add_activity(
         session,
         task_id=task.id,
         kind="assignment_result",
@@ -1196,4 +1596,30 @@ def complete_agent_run(
         },
         external=True,
     )
+    session.flush()
+    if assignment.assignment_kind != "result_sync":
+        other_participants = list(
+            session.scalars(
+                select(TaskAgentParticipant).where(
+                    TaskAgentParticipant.task_id == task.id,
+                    TaskAgentParticipant.active.is_(True),
+                    TaskAgentParticipant.agent_id != agent.id,
+                )
+            )
+        )
+        for participant in other_participants:
+            _queue_collaboration_assignment(
+                session,
+                task=task,
+                human_id=participant.human_user_id,
+                agent_id=participant.agent_id,
+                created_by_human_id=task.owner_human_user_id,
+                assignment_kind="result_sync",
+                trigger_activity_id=result_activity.id,
+                instruction=(
+                    "另一位任务 Agent 已提交协同结果。请结合共享任务上下文和以下结果，"
+                    "补充、校验或说明无需进一步行动：\n\n"
+                    f"{payload.summary}"
+                ),
+            )
     session.commit()

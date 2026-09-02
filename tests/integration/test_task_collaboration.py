@@ -122,24 +122,41 @@ def test_confirmed_friends_task_agent_selection_run_and_human_acceptance(
         )
         assert accepted.status_code == 200, accepted.text
 
-        owner_csrf = _login(client, "task-owner")
         owner_agent_id = owner_agent["agent"]["id"]
         created = client.post(
-            "/api/v1/tasks",
-            headers={"X-CSRF-Token": owner_csrf},
+            "/api/v1/agent/tasks",
+            headers={
+                "Authorization": f"Bearer {owner_agent['api_key']}",
+                "Idempotency-Key": "two-human-task-create",
+            },
             json={
                 "title": "联合完成客户方案",
                 "goal": "形成双方确认的客户方案",
                 "expected_output": "一份可验收的方案",
-                "agent_ids": [owner_agent_id],
-                "primary_agent_id": owner_agent_id,
             },
         )
         assert created.status_code == 201, created.text
         task = created.json()
         task_id = task["task_id"]
         assert task["members"][0]["agents"][0]["role"] == "primary"
+        assert task["members"][0]["primary_agent_id"] == owner_agent_id
         assert task["thread_id"]
+        assert task["task_id"]
+        repeated = client.post(
+            "/api/v1/agent/tasks",
+            headers={
+                "Authorization": f"Bearer {owner_agent['api_key']}",
+                "Idempotency-Key": "two-human-task-create",
+            },
+            json={
+                "title": "联合完成客户方案",
+                "goal": "形成双方确认的客户方案",
+                "expected_output": "一份可验收的方案",
+            },
+        )
+        assert repeated.status_code == 201, repeated.text
+        assert repeated.json()["task_id"] == task_id
+        owner_csrf = _login(client, "task-owner")
         listed = client.get("/api/v1/tasks")
         assert listed.status_code == 200, listed.text
         assert listed.json()["items"][0]["task_id"] == task_id
@@ -150,37 +167,56 @@ def test_confirmed_friends_task_agent_selection_run_and_human_acceptance(
             json={"human_user_ids": [member["user"]["id"]]},
         )
         assert invited.status_code == 200, invited.text
-        assert invited.json()["invited_member_count"] == 1
+        invited_body = invited.json()
+        assert invited_body["active_member_count"] == 2
+        assert invited_body["invited_member_count"] == 0
+        added_member = next(
+            item
+            for item in invited_body["members"]
+            if item["human_user_id"] == member["user"]["id"]
+        )
+        member_agent_id = member_agent["agent"]["id"]
+        assert added_member["status"] == "active"
+        assert added_member["primary_agent_id"] == member_agent_id
+        assert added_member["agent_selection_source"] == "default"
+        assert added_member["email_notification_status"] == "sent"
 
         member_csrf = _login(client, "task-member")
-        missing_selection = client.post(
-            f"/api/v1/tasks/{task_id}/accept",
-            headers={"X-CSRF-Token": member_csrf},
-            json={},
-        )
-        assert missing_selection.status_code == 422
-        member_agent_id = member_agent["agent"]["id"]
-        joined = client.post(
-            f"/api/v1/tasks/{task_id}/accept",
+        member_tasks = client.get("/api/v1/tasks")
+        assert member_tasks.status_code == 200, member_tasks.text
+        assert member_tasks.json()["items"][0]["task_id"] == task_id
+        selected = client.put(
+            f"/api/v1/tasks/{task_id}/my-agents",
             headers={"X-CSRF-Token": member_csrf},
             json={"agent_ids": [member_agent_id], "primary_agent_id": member_agent_id},
         )
-        assert joined.status_code == 200, joined.text
-        assert joined.json()["active_member_count"] == 2
+        assert selected.status_code == 200, selected.text
+        selected_member = next(
+            item
+            for item in selected.json()["members"]
+            if item["human_user_id"] == member["user"]["id"]
+        )
+        assert selected_member["agent_selection_source"] == "selected"
+        assert len(selected.json()["assignments"]) == 2
 
-        owner_csrf = _login(client, "task-owner")
-        assigned = client.post(
-            f"/api/v1/tasks/{task_id}/assignments",
-            headers={"X-CSRF-Token": owner_csrf},
+        owner_run_response = client.post(
+            "/api/v1/task-runs/claim",
+            headers={"Authorization": f"Bearer {owner_agent['api_key']}"},
+        )
+        assert owner_run_response.status_code == 200, owner_run_response.text
+        owner_run = owner_run_response.json()
+        assert owner_run["task_id"] == task_id
+        assert set(owner_run["participant_agent_ids"]) == {owner_agent_id, member_agent_id}
+        owner_result = client.post(
+            f"/api/v1/task-runs/{owner_run['run_id']}/result",
+            headers={"Authorization": f"Bearer {owner_agent['api_key']}"},
             json={
-                "responsible_human_user_id": member["user"]["id"],
-                "assignee_agent_id": member_agent_id,
-                "instruction": "完成风险分析",
+                "lease_token": owner_run["lease_token"],
+                "status": "completed",
+                "summary": "已整理目标、材料与协同边界",
             },
         )
-        assert assigned.status_code == 200, assigned.text
-        assert assigned.json()["assignments"][0]["status"] == "queued"
-        assert assigned.json()["assignments"][0]["expected_output"] == "一份可验收的方案"
+        assert owner_result.status_code == 204, owner_result.text
 
         claim = client.post(
             "/api/v1/task-runs/claim",
@@ -190,6 +226,7 @@ def test_confirmed_friends_task_agent_selection_run_and_human_acceptance(
         run = claim.json()
         assert run["task_id"] == task_id
         assert run["security_label"] == "external_agent_content"
+        assert run["collaboration_updates"][0]["summary"] == "已整理目标、材料与协同边界"
 
         heartbeat = client.post(
             f"/api/v1/task-runs/{run['run_id']}/heartbeat",
@@ -224,9 +261,49 @@ def test_confirmed_friends_task_agent_selection_run_and_human_acceptance(
         )
         assert result.status_code == 204, result.text
 
+        owner_sync_response = client.post(
+            "/api/v1/task-runs/claim",
+            headers={"Authorization": f"Bearer {owner_agent['api_key']}"},
+        )
+        assert owner_sync_response.status_code == 200, owner_sync_response.text
+        owner_sync = owner_sync_response.json()
+        assert "识别三项风险并给出措施" in owner_sync["instruction"]
+        assert len(owner_sync["collaboration_updates"]) == 2
+        owner_sync_result = client.post(
+            f"/api/v1/task-runs/{owner_sync['run_id']}/result",
+            headers={"Authorization": f"Bearer {owner_agent['api_key']}"},
+            json={
+                "lease_token": owner_sync["lease_token"],
+                "status": "completed",
+                "summary": "已校验风险措施，可以汇总",
+            },
+        )
+        assert owner_sync_result.status_code == 204, owner_sync_result.text
+
+        member_sync_response = client.post(
+            "/api/v1/task-runs/claim",
+            headers={"Authorization": f"Bearer {member_agent['api_key']}"},
+        )
+        assert member_sync_response.status_code == 200, member_sync_response.text
+        member_sync = member_sync_response.json()
+        assert "已整理目标、材料与协同边界" in member_sync["instruction"]
+        member_sync_result = client.post(
+            f"/api/v1/task-runs/{member_sync['run_id']}/result",
+            headers={"Authorization": f"Bearer {member_agent['api_key']}"},
+            json={
+                "lease_token": member_sync["lease_token"],
+                "status": "completed",
+                "summary": "已吸收共同目标，无需补充",
+            },
+        )
+        assert member_sync_result.status_code == 204, member_sync_result.text
+
         owner_csrf = _login(client, "task-owner")
         detail = client.get(f"/api/v1/tasks/{task_id}")
-        assert detail.json()["assignments"][0]["result_status"] == "completed"
+        assert all(
+            assignment["result_status"] == "completed"
+            for assignment in detail.json()["assignments"]
+        )
         submitted = client.post(
             f"/api/v1/tasks/{task_id}/submit",
             headers={"X-CSRF-Token": owner_csrf},

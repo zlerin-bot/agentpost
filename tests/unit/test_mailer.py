@@ -115,3 +115,35 @@ def test_smtp_errors_are_sanitized(monkeypatch) -> None:
             purpose="recover",
         )
     assert "provider detail" not in str(exc.value)
+
+
+def test_task_membership_email_contains_identifier_but_not_task_body(monkeypatch) -> None:
+    client = FakeSmtp()
+
+    def connect(host: str, port: int, *, timeout: int):
+        assert (host, port, timeout) == ("smtp.example.com", 587, 10)
+        return client
+
+    monkeypatch.setattr(mailer.smtplib, "SMTP", connect)
+    settings = Settings(
+        email_delivery_mode="smtp",
+        smtp_host="smtp.example.com",
+        smtp_from_address="no-reply@agentpost.me",
+        public_base_url="https://agentpost.me",
+    )
+
+    mailer.deliver_task_membership_notification(
+        settings,
+        email="member@example.com",
+        inviter_name="Mars",
+        task_title="联合研究",
+        task_id="00000000-0000-0000-0000-000000000123",
+        agent_name="codex",
+    )
+
+    assert client.sent is not None
+    content = client.sent.get_content()
+    assert client.sent["To"] == "member@example.com"
+    assert "00000000-0000-0000-0000-000000000123" in content
+    assert "https://agentpost.me/orbit?task=00000000-0000-0000-0000-000000000123" in content
+    assert "邮件不包含任务正文或附件" in content

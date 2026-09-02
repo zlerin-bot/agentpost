@@ -157,6 +157,8 @@ const elements = {
   projectDetail: document.querySelector("#project-detail"),
   projectDetailType: document.querySelector("#project-detail-type"),
   projectDetailTitle: document.querySelector("#project-detail-title"),
+  projectTaskId: document.querySelector("#project-task-id"),
+  projectTaskIdCopy: document.querySelector("#project-task-id-copy"),
   projectDetailDescription: document.querySelector("#project-detail-description"),
   projectDetailStatus: document.querySelector("#project-detail-status"),
   projectInvitationActions: document.querySelector("#project-invitation-actions"),
@@ -167,10 +169,14 @@ const elements = {
   projectDue: document.querySelector("#project-due"),
   projectActionResult: document.querySelector("#project-action-result"),
   projectMemberList: document.querySelector("#project-member-list"),
+  taskMyAgentForm: document.querySelector("#task-my-agent-form"),
+  taskMyAgentSelect: document.querySelector("#task-my-agent-select"),
+  taskMyAgentHelp: document.querySelector("#task-my-agent-help"),
   projectInvite: document.querySelector("#project-invite"),
   projectMemberInvite: document.querySelector("#project-member-invite"),
   projectArchive: document.querySelector("#project-archive"),
   projectActivityList: document.querySelector("#project-activity-list"),
+  projectCollaborationList: document.querySelector("#project-collaboration-list"),
   taskOwnerControls: document.querySelector("#task-owner-controls"),
   taskAssignmentForm: document.querySelector("#task-assignment-form"),
   taskAssignmentAgent: document.querySelector("#task-assignment-agent"),
@@ -635,7 +641,10 @@ async function loadProjects({ preserveSelection = true } = {}) {
     const payload = await requestJson("/api/v1/tasks");
     state.projects = Array.isArray(payload?.items) ? payload.items : [];
     state.projectsLoaded = true;
-    if (!preserveSelection || !projectById(state.selectedProjectId)) {
+    const requestedTaskId = new URL(window.location.href).searchParams.get("task") || "";
+    if (requestedTaskId && projectById(requestedTaskId)) {
+      state.selectedProjectId = requestedTaskId;
+    } else if (!preserveSelection || !projectById(state.selectedProjectId)) {
       state.selectedProjectId = isMobileWorkspace() ? "" : (state.projects[0]?.task_id || "");
     }
     renderProjectBrowser();
@@ -741,9 +750,18 @@ function activityText(activity) {
     created: actor + "创建了任务",
     task_created: actor + "创建了任务",
     member_invited: actor + "邀请" + target + "加入任务",
+    member_added: actor + "已将" + target + "加入任务",
     member_joined: target + "已加入任务",
     member_declined: target + "拒绝了任务邀请",
     assignment_created: actor + "创建了 AI 执行单元",
+    agent_joined_collaboration: target + "的 Agent 已进入协同队列",
+    member_agents_selected: target + "更新了参与 Agent",
+    member_email_sent: "已向" + target + "的注册邮箱发送任务通知",
+    member_email_failed: target + "的邮件通知发送失败，任务成员关系不受影响",
+    run_leased: actor + "已领取任务并准备协同",
+    run_progress: actor + "正在协同处理任务",
+    run_waiting_human: actor + "正在等待 Human 决策",
+    assignment_result: actor + "提交了协同结果",
     run_claimed: actor + "开始执行",
     run_updated: actor + "更新了执行进度",
     result_submitted: actor + "提交了执行结果",
@@ -786,6 +804,7 @@ function renderProjectDetail() {
   elements.projectInvitationActions.hidden = !invited;
   elements.projectDetailType.textContent = projectKind(project);
   elements.projectDetailTitle.textContent = project.title;
+  elements.projectTaskId.textContent = project.task_id;
   elements.projectDetailDescription.textContent = project.goal + "\n预期交付：" + project.expected_output;
   elements.projectDetailStatus.textContent = invited ? "待确认" : projectStatusLabel(project);
   elements.projectDetailStatus.classList.toggle("archived", project.status === "archived");
@@ -843,6 +862,23 @@ function renderProjectDetail() {
     });
   }
 
+  const currentUserId = String(state.dashboard?.user?.id || "");
+  const currentMember = project.members.find(
+    (member) => String(member.human_user_id) === currentUserId,
+  );
+  elements.taskMyAgentSelect.replaceChildren();
+  ownedTaskAgents().forEach((agent) => {
+    const option = document.createElement("option");
+    option.value = agent.id;
+    option.textContent = agentDisplayName(agent);
+    option.selected = String(currentMember?.primary_agent_id || "") === String(agent.id);
+    elements.taskMyAgentSelect.append(option);
+  });
+  elements.taskMyAgentForm.hidden = !currentMember || !ownedTaskAgents().length;
+  elements.taskMyAgentHelp.textContent = currentMember?.agent_selection_source === "default"
+    ? "当前由你的默认 Agent 自动参与；你可以在这里改成更适合本任务的 Agent。"
+    : "当前使用你为这个任务明确选择的 Agent。";
+
   elements.projectMemberList.replaceChildren();
   [...project.members].sort((left, right) => {
     if (left.role === right.role) {
@@ -864,10 +900,13 @@ function renderProjectDetail() {
     name.textContent = member.display_name + (member.role === "owner" ? " · 负责人" : "");
     const agent = document.createElement("small");
     const selectedAgents = Array.isArray(member.agents) ? member.agents : [];
+    const source = member.agent_selection_source === "default" ? " · 默认选择" : " · Human 选择";
+    const email = member.email_notification_status === "sent" ? " · 邮件已通知"
+      : (member.email_notification_status === "failed" ? " · 邮件发送失败" : "");
     agent.textContent = member.status === "invited"
-      ? "等待对方确认邀请"
+      ? "历史邀请待处理"
       : (selectedAgents.length
-        ? selectedAgents.map((item) => item.display_name + (item.role === "primary" ? "（主）" : "")).join("、")
+        ? selectedAgents.map((item) => item.display_name + (item.role === "primary" ? "（主）" : "")).join("、") + source + email
         : "尚未选择 AI");
     copy.append(name, agent);
     row.append(avatar, copy);
@@ -889,6 +928,41 @@ function renderProjectDetail() {
     empty.className = "prototype-inline-empty";
     empty.textContent = "当前任务还没有成员信息。";
     elements.projectMemberList.append(empty);
+  }
+
+  elements.projectCollaborationList.replaceChildren();
+  (project.assignments || []).forEach((assignment) => {
+    const row = document.createElement("article");
+    row.className = "project-collaboration-row";
+    const heading = document.createElement("div");
+    const name = document.createElement("strong");
+    name.textContent = assignment.responsible_human_display_name + " 的 "
+      + assignment.assignee_agent_display_name;
+    const status = document.createElement("span");
+    const statusLabels = {
+      queued: "等待 Agent 上线",
+      leased: "已领取",
+      starting: "正在启动",
+      running: "协同中",
+      waiting_human: "等待 Human",
+      completed: "已贡献",
+      partial: "部分完成",
+      failed: "执行异常",
+      cancelled: "已取消",
+    };
+    status.textContent = statusLabels[assignment.run_status || assignment.status]
+      || assignment.run_status || assignment.status;
+    heading.append(name, status);
+    const summary = document.createElement("p");
+    summary.textContent = assignment.result_summary || assignment.instruction;
+    row.append(heading, summary);
+    elements.projectCollaborationList.append(row);
+  });
+  if (!(project.assignments || []).length) {
+    const empty = document.createElement("p");
+    empty.className = "prototype-inline-empty";
+    empty.textContent = "参与 Agent 加入后会在这里显示送达、执行、阻塞和结果。";
+    elements.projectCollaborationList.append(empty);
   }
 
   elements.projectActivityList.replaceChildren();
@@ -1209,7 +1283,7 @@ async function inviteProjectFriends(event) {
     state.selectedProject = updated;
     closeProjectInviteDialog();
     await loadProjects();
-    elements.projectActionResult.textContent = "邀请已经发送，等待对方确认。";
+    elements.projectActionResult.textContent = "好友已加入任务，其默认 Agent 已进入协同队列，邮件通知已安排发送。";
   } catch (error) {
     elements.projectInviteResult.textContent = error.message;
   }
@@ -1277,6 +1351,29 @@ async function decideSelectedProjectInvitation(accept) {
     if (accept) {
       elements.projectActionResult.textContent = "你已经选择 AI 并加入任务。";
     }
+  } catch (error) {
+    elements.projectActionResult.textContent = error.message;
+  }
+}
+
+async function saveMyTaskAgent(event) {
+  event.preventDefault();
+  const project = state.selectedProject;
+  const agentId = elements.taskMyAgentSelect.value;
+  if (!project || !agentId) {
+    return;
+  }
+  try {
+    state.selectedProject = await requestJson(
+      `/api/v1/tasks/${encodeURIComponent(project.task_id)}/my-agents`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": state.csrfToken },
+        body: JSON.stringify({ agent_ids: [agentId], primary_agent_id: agentId }),
+      },
+    );
+    renderProjectDetail();
+    elements.projectActionResult.textContent = "参与 Agent 已更新，新 Agent 已进入协同队列。";
   } catch (error) {
     elements.projectActionResult.textContent = error.message;
   }
@@ -1407,6 +1504,22 @@ function initializeCollaborationModules() {
   elements.projectInviteClose.addEventListener("click", closeProjectInviteDialog);
   elements.projectInviteCancel.addEventListener("click", closeProjectInviteDialog);
   elements.taskAssignmentForm.addEventListener("submit", createTaskAssignment);
+  elements.taskMyAgentForm.addEventListener("submit", saveMyTaskAgent);
+  elements.projectTaskIdCopy.addEventListener("click", async () => {
+    const taskId = state.selectedProject?.task_id;
+    if (!taskId) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(taskId);
+      elements.projectTaskIdCopy.textContent = "已复制";
+      window.setTimeout(() => {
+        elements.projectTaskIdCopy.textContent = "复制";
+      }, 1600);
+    } catch (_error) {
+      elements.projectActionResult.textContent = "浏览器未允许自动复制，请手动选择任务 ID。";
+    }
+  });
   elements.taskSubmissionForm.addEventListener("submit", submitTaskForAcceptance);
   elements.taskAcceptFinal.addEventListener("click", () => decideTaskAcceptance("accept"));
   elements.taskRequestChanges.addEventListener("click", () => decideTaskAcceptance("request_changes"));

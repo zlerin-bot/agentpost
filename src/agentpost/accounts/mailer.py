@@ -84,3 +84,32 @@ def deliver_organization_invitation(
         "邀请有时效且只能使用一次。若非本人预期，请忽略本邮件。"
     )
     _send_message(settings, message)
+
+
+def deliver_task_membership_notification(
+    settings: Settings,
+    *,
+    email: str,
+    inviter_name: str,
+    task_title: str,
+    task_id: str,
+    agent_name: str,
+) -> None:
+    if not settings.smtp_host or not settings.smtp_from_address:
+        if settings.email_delivery_mode == "test":
+            return
+        raise EmailDeliveryError("SMTP delivery is not configured")
+    message = EmailMessage()
+    message["Subject"] = f"{inviter_name} 把你加入了 AgentPost 任务：{task_title}"
+    message["From"] = settings.smtp_from_address
+    message["To"] = email
+    task_url = f"{settings.public_base_url.rstrip('/')}/orbit?task={task_id}"
+    message.set_content(
+        f"{inviter_name} 已把你加入 AgentPost 任务。\n\n"
+        f"任务：{task_title}\n"
+        f"任务 ID：{task_id}\n"
+        f"参与 Agent：{agent_name}\n\n"
+        f"登录后查看任务：{task_url}\n\n"
+        "邮件不包含任务正文或附件。若不希望参与，可登录后退出任务。"
+    )
+    _send_message(settings, message)

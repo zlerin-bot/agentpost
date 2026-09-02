@@ -52,6 +52,26 @@ class TaskCreate(AgentChoice):
         return _aware(value)
 
 
+class AgentTaskCreate(TaskModel):
+    title: str = Field(min_length=1, max_length=200)
+    goal: str = Field(min_length=1, max_length=10_000)
+    expected_output: str = Field(min_length=1, max_length=10_000)
+    due_at: datetime | None = None
+
+    @field_validator("title", "goal", "expected_output")
+    @classmethod
+    def clean_required_text(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("value cannot be blank")
+        return cleaned
+
+    @field_validator("due_at")
+    @classmethod
+    def normalize_due_at(cls, value: datetime | None) -> datetime | None:
+        return _aware(value)
+
+
 class TaskMembersInvite(TaskModel):
     human_user_ids: list[UUID] = Field(min_length=1, max_length=50)
 
@@ -153,6 +173,8 @@ class TaskMember(TaskModel):
     role: Literal["owner", "member"]
     status: Literal["invited", "active"]
     primary_agent_id: UUID | None
+    agent_selection_source: Literal["selected", "default"]
+    email_notification_status: Literal["not_applicable", "pending", "sent", "failed"]
     agents: list[AgentSummary]
     invited_at: datetime
     joined_at: datetime | None
@@ -164,6 +186,7 @@ class TaskAssignmentResponse(TaskModel):
     responsible_human_display_name: str
     assignee_agent_id: UUID
     assignee_agent_display_name: str
+    assignment_kind: Literal["participant_start", "human_directed", "result_sync"]
     instruction: str
     expected_output: str
     due_at: datetime | None
@@ -214,6 +237,14 @@ class TaskDetail(TaskSummary):
     activities: list[TaskActivityResponse]
 
 
+class AgentCollaborationUpdate(TaskModel):
+    activity_id: UUID
+    agent_id: UUID
+    status: str
+    summary: str
+    created_at: datetime
+
+
 class AgentRunClaim(TaskModel):
     run_id: UUID
     lease_token: str
@@ -227,6 +258,8 @@ class AgentRunClaim(TaskModel):
     expected_output: str
     due_at: datetime | None
     attempt: int
+    participant_agent_ids: list[UUID]
+    collaboration_updates: list[AgentCollaborationUpdate]
     security_label: Literal["external_agent_content"] = "external_agent_content"
 
 

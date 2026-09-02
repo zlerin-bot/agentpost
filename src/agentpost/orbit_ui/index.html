@@ -476,6 +476,7 @@
                 <div>
                   <p class="section-tag">任务 · <span id="project-detail-type">多人任务</span></p>
                   <h2 id="project-detail-title" tabindex="-1">—</h2>
+                  <div class="task-id-row"><span>任务 ID</span><code id="project-task-id">—</code><button id="project-task-id-copy" type="button" class="text-button">复制</button></div>
                   <p id="project-detail-description" class="section-intro">—</p>
                 </div>
                 <div class="prototype-detail-actions">
@@ -494,14 +495,22 @@
                 <div id="project-member-list" class="project-member-list"></div>
                 <p id="project-action-result" class="form-status" role="status"></p>
               </section>
+              <section class="prototype-card">
+                <div class="prototype-card-heading"><div><span>代表我参与</span><h3>我的参与 AI</h3></div></div>
+                <form id="task-my-agent-form" class="task-agent-choice-row">
+                  <select id="task-my-agent-select" aria-label="我的参与 AI" required></select>
+                  <button type="submit" class="quiet-button">保存选择</button>
+                </form>
+                <p id="task-my-agent-help" class="task-field-help">未手动选择时，任务自动使用你的默认 Agent。</p>
+              </section>
               <section id="task-owner-controls" class="prototype-card" hidden>
-                <div class="prototype-card-heading"><div><span>执行调度</span><h3>交给指定 AI</h3></div></div>
+                <div class="prototype-card-heading"><div><span>可选点名</span><h3>追加一项明确工作</h3></div></div>
                 <form id="task-assignment-form" class="entry-form">
                   <label for="task-assignment-agent">执行 AI</label>
                   <select id="task-assignment-agent" required></select>
                   <label for="task-assignment-instruction">让 AI 做什么</label>
                   <textarea id="task-assignment-instruction" rows="3" maxlength="10000" placeholder="例如：分析现有资料，列出主要风险并提出处理建议" required></textarea>
-                  <p class="task-field-help">写清本次要完成的工作，AI 会据此领取并执行。</p>
+                  <p class="task-field-help">任务成员中的 AI 已经自动参与协同；这里只在需要明确点名追加工作时使用。</p>
                   <details class="task-optional-field">
                     <summary>单独设置本次交付要求（可选）</summary>
                     <p>留空时沿用整个任务的预期交付：<strong id="task-assignment-output-inherited">—</strong></p>
@@ -541,6 +550,10 @@
                   <span>任务已验收通过</span>
                   <p id="task-completed-summary">—</p>
                 </div>
+              </section>
+              <section class="prototype-card project-collaboration-card">
+                <div class="prototype-card-heading"><div><span>Agent 协同</span><h3>当前进展</h3></div></div>
+                <div id="project-collaboration-list" class="project-collaboration-list"></div>
               </section>
               <section class="prototype-card project-activity-card">
                 <div class="prototype-card-heading"><div><span>执行与验收</span><h3>任务动态</h3></div></div>
@@ -740,7 +753,7 @@
           <div><p class="section-tag">任务 · 邀请好友</p><h2 id="project-invite-title">选择任务成员</h2></div>
           <button id="project-invite-close" type="button" class="dialog-close" aria-label="关闭邀请好友窗口">×</button>
         </div>
-        <p id="project-invite-summary" class="dialog-summary">只能邀请已双向确认的好友。</p>
+        <p id="project-invite-summary" class="dialog-summary">只能添加已双向确认的好友；添加后对方立即进入任务，并由其默认 Agent 开始协同。</p>
         <div id="project-invite-options" class="project-invite-options"></div>
         <p id="project-invite-result" class="form-status" role="status"></p>
         <div class="dialog-actions">

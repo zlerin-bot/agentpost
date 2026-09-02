@@ -3,15 +3,17 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, Header, HTTPException, Query, Request, Response, status
 
 from agentpost.api.dependencies import CurrentAgentDep, SessionDep
 from agentpost.control.auth import CurrentHumanDep
 from agentpost.control.human_security import HumanCsrfDep, human_session_id_from_request
 from agentpost.tasks.schemas import (
+    AgentChoice,
     AgentRunClaim,
     AgentRunResult,
     AgentRunUpdate,
+    AgentTaskCreate,
     FriendRequestCreate,
     FriendRequestDecision,
     FriendResponse,
@@ -38,6 +40,7 @@ from agentpost.tasks.service import (
     complete_agent_run,
     create_assignment,
     create_task,
+    create_task_by_agent,
     decide_friendship,
     decide_task_acceptance,
     decide_task_invitation,
@@ -49,6 +52,7 @@ from agentpost.tasks.service import (
     list_tasks,
     remove_friendship,
     request_friendship,
+    select_task_agents,
     submit_task,
     update_agent_run,
     update_task_status,
@@ -189,6 +193,24 @@ def create_human_task(
         raise _not_found("agent_not_found") from exc
 
 
+@router.post("/agent/tasks", response_model=TaskDetail, status_code=201)
+def create_agent_task(
+    payload: AgentTaskCreate,
+    current_agent: CurrentAgentDep,
+    session: SessionDep,
+    idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=255)],
+) -> TaskDetail:
+    try:
+        return create_task_by_agent(
+            session,
+            agent=current_agent,
+            payload=payload,
+            idempotency_key=idempotency_key,
+        )
+    except TaskAgentSelectionError as exc:
+        raise _not_found("agent_owner_not_found") from exc
+
+
 @router.get("/tasks/{task_id}", response_model=TaskDetail)
 def get_human_task(
     task_id: UUID, current_human: CurrentHumanDep, session: SessionDep
@@ -236,11 +258,41 @@ def invite_human_task_members(
             human_user_ids=payload.human_user_ids,
             human_session_id=human_session_id_from_request(request),
             request_id=request.state.request_id,
+            settings=request.app.state.settings,
         )
     except (TaskNotFoundError, FriendshipNotFoundError) as exc:
         raise _not_found() from exc
     except TaskOwnerRequiredError as exc:
         raise _forbidden() from exc
+    except TaskStateConflictError as exc:
+        raise _conflict() from exc
+    except TaskAgentSelectionError as exc:
+        raise _conflict("friend_default_agent_required") from exc
+
+
+@router.put("/tasks/{task_id}/my-agents", response_model=TaskDetail)
+def select_human_task_agents(
+    task_id: UUID,
+    payload: AgentChoice,
+    request: Request,
+    current_human: CurrentHumanDep,
+    session: SessionDep,
+    csrf: HumanCsrfDep,
+) -> TaskDetail:
+    del csrf
+    try:
+        return select_task_agents(
+            session,
+            user=current_human,
+            task_id=task_id,
+            choice=payload,
+            human_session_id=human_session_id_from_request(request),
+            request_id=request.state.request_id,
+        )
+    except TaskNotFoundError as exc:
+        raise _not_found() from exc
+    except TaskAgentSelectionError as exc:
+        raise _not_found("agent_not_found") from exc
     except TaskStateConflictError as exc:
         raise _conflict() from exc
 

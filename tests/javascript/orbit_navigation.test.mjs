@@ -94,6 +94,20 @@ test("task workspace removes duplicate shortcuts and separates assignment, submi
   assert.match(script, /elements\.taskSubmitFinal\.disabled = unfinishedAssignments > 0/);
 });
 
+test("task detail exposes its stable ID, automatic Agent participation, and Human progress", () => {
+  assert.match(html, /id="project-task-id"/);
+  assert.match(html, /id="project-task-id-copy"[^>]*>复制</);
+  assert.match(script, /navigator\.clipboard\.writeText\(taskId\)/);
+  assert.match(html, /id="task-my-agent-form"/);
+  assert.match(html, /未手动选择时，任务自动使用你的默认 Agent/);
+  assert.match(script, /\/my-agents/);
+  assert.match(html, /任务成员中的 AI 已经自动参与协同/);
+  assert.match(html, /id="project-collaboration-list"/);
+  assert.match(script, /等待 Agent 上线/);
+  assert.match(script, /邮件通知已安排发送/);
+  assert.match(script, /invited_member_count/);
+});
+
 test("module and selected view survive navigation and browser history", () => {
   assert.match(script, /searchParams\.set\("module", module\)/);
   assert.match(script, /searchParams\.set\("view", section\)/);

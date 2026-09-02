@@ -58,6 +58,11 @@ class Friendship(Base):
 class Task(Base):
     __tablename__ = "tasks"
     __table_args__ = (
+        UniqueConstraint(
+            "coordinator_agent_id",
+            "agent_creation_key",
+            name="uq_tasks_agent_creation_key",
+        ),
         CheckConstraint(
             "status IN ('active', 'paused', 'awaiting_acceptance', 'completed', "
             "'cancelled', 'archived')",
@@ -78,6 +83,7 @@ class Task(Base):
     thread_id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True), nullable=False, unique=True, index=True, default=uuid4
     )
+    agent_creation_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     goal: Mapped[str] = mapped_column(Text, nullable=False)
     expected_output: Mapped[str] = mapped_column(Text, nullable=False)
@@ -118,6 +124,14 @@ class TaskMembership(Base):
         CheckConstraint(
             "status IN ('invited', 'active', 'declined')", name="ck_task_memberships_status"
         ),
+        CheckConstraint(
+            "agent_selection_source IN ('selected', 'default')",
+            name="ck_task_memberships_agent_selection_source",
+        ),
+        CheckConstraint(
+            "email_notification_status IN ('not_applicable', 'pending', 'sent', 'failed')",
+            name="ck_task_memberships_email_notification_status",
+        ),
     )
 
     task_id: Mapped[UUID] = mapped_column(
@@ -131,6 +145,16 @@ class TaskMembership(Base):
     )
     primary_agent_id: Mapped[UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("agents.id", ondelete="RESTRICT"), nullable=True
+    )
+    agent_selection_source: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="selected"
+    )
+    email_notification_status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="not_applicable"
+    )
+    email_notification_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    email_notified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
     role: Mapped[str] = mapped_column(String(32), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False)
@@ -173,6 +197,15 @@ class TaskAgentParticipant(Base):
 class TaskAssignment(Base):
     __tablename__ = "task_assignments"
     __table_args__ = (
+        UniqueConstraint(
+            "assignee_agent_id",
+            "trigger_activity_id",
+            name="uq_task_assignments_agent_trigger",
+        ),
+        CheckConstraint(
+            "assignment_kind IN ('participant_start', 'human_directed', 'result_sync')",
+            name="ck_task_assignments_kind",
+        ),
         CheckConstraint(
             "status IN ('queued', 'running', 'waiting_human', 'completed', "
             "'partial', 'failed', 'cancelled')",
@@ -192,6 +225,14 @@ class TaskAssignment(Base):
     )
     created_by_human_user_id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("human_users.id", ondelete="RESTRICT"), nullable=False
+    )
+    assignment_kind: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="human_directed"
+    )
+    trigger_activity_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("task_activities.id", ondelete="CASCADE"),
+        nullable=True,
     )
     instruction: Mapped[str] = mapped_column(Text, nullable=False)
     expected_output: Mapped[str] = mapped_column(Text, nullable=False)
