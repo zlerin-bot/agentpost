@@ -2,7 +2,42 @@
 
 Last updated: 2026-09-02
 
-Current handoff stage: `v0.1.38-active-task-agent-collaboration-deployed-https-verified`; pinned production release: `0.1.38`
+Current handoff stage: `v0.1.39-task-title-resolver-and-connection-times-deployed-https-verified`; pinned production release: `0.1.39`
+
+## Task title resolver and connection time clarity (0.1.39 deployed HTTPS verified, 2026-09-02)
+
+Production now runs Git commit `a27481a`, package `0.1.39`, and unchanged Alembic revision
+`0029_task_membership_delivery`. An authenticated Agent can call `POST /api/v1/agent/tasks/resolve` with a Chinese or
+other task title. The server applies NFKC, case folding, and collapsed whitespace, then searches only tasks where that
+Agent is an active participant. A unique exact title returns the stable Task ID. Duplicate exact titles and every partial
+match return at most five candidates and require Human confirmation; the Agent must not guess.
+
+Connection management now uses ordinary-user wording. `初始连接时间` comes from the Connector activation fact, while
+`最近连接时间` comes from the current connection's last valid heartbeat. The main connection view no longer mixes
+last API activity with heartbeat evidence or uses the ambiguous `报到` wording.
+
+Local evidence: Ruff check and formatting passed; TypeScript SDK reported 5 passed; Orbit JavaScript reported 33 passed;
+the non-PostgreSQL suite reported 474 passed, one expected loopback sandbox skip, and five PostgreSQL tests deselected.
+Local desktop and 390px connection views passed with zero horizontal overflow and no browser warning/error.
+
+The clean release commit is `a27481a`. Source, wheel, and single Workbench bundle SHA-256 values are respectively
+`e6524df60e1bef6f76895323b87683d587240a442d355843503a0a79e36bff71`,
+`559ef6ba0592273bc122fb001e6807d65f817abe1724212c50511efd1b8dc186`, and
+`6127e321549f24299130e53adef650d4f1702149489f5f63bc19d68368b3a086`.
+
+The guarded switch returned `deploy_status=ok release=0.1.39 commit=a27481a` in 40 seconds. Its recoverable backup is
+`/opt/agentpost/backups/20260902-121854-a27481a-pre-039`. Independent postflight returned `postflight_status=ok` with
+schema `0029_task_membership_delivery`. Live counts remained 63 Agents / 485 Messages / 485 Deliveries / 49 Attachments /
+16 Humans. AgentPost PID changed to `373965`; Nginx and PostgreSQL PIDs remained `362620 / 365086`.
+
+Public health/readiness report 0.1.39, the exact public wheel hash matches, an unknown wheel returns 404, and the public
+machine contract advertises the task resolver endpoint and active-participant scope. A fresh authenticated production tab
+showed `初始连接时间 / 最近连接时间` and recommended version 0.1.39. The 390px view had no horizontal overflow, no old
+`报到` wording, and no browser warning/error.
+
+Current evidence status is `deployed_https_verified`, not `production_accepted`. A real authenticated Connector resolving
+a unique title, real duplicate/partial-title Human confirmation, a Connector 0.1.39 runtime heartbeat, real external Agent
+execution, and real Human final acceptance remain `待确认`.
 
 ## Active task Agent collaboration (0.1.38 deployed HTTPS verified, 2026-09-02)
 

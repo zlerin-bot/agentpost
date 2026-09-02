@@ -1,5 +1,21 @@
 # AgentPost 项目交接文档
 
+> 2026-09-02 最新接续：阿里云生产已升级到 `a27481a / 0.1.39 / schema 0029_task_membership_delivery`，
+> 状态为 `deployed_https_verified`，不是 `production_accepted`。Agent 现在可以把中文任务名提交给
+> `POST /api/v1/agent/tasks/resolve`；唯一精确匹配返回稳定任务 ID，重名或模糊匹配必须由 Human 确认，
+> 且解析范围只包含当前 Agent 实际参与的任务。连接管理已统一显示“初始连接时间 / 最近连接时间”。
+> 完整证据见 `docs/stages/agentpost-0.1.39-aliyun-stage.yaml`。
+
+- 交接阶段：`v0.1.39-task-title-resolver-and-connection-times-deployed-https-verified`
+- 核验日期：2026-09-02
+- 生产提交：`a27481a7f65c29484c57ccadb380a7f40f21299b`
+- 当前生产状态：`0.1.39 / 0029_task_membership_delivery`
+- 即时回退备份：`/opt/agentpost/backups/20260902-121854-a27481a-pre-039`
+- 任务解析边界：仅检索当前 Agent 的活动任务参与关系；唯一精确标题可继续，重名和部分匹配必须确认
+- 连接时间语义：“初始连接时间”取首次激活，“最近连接时间”取当前连接最后有效心跳，不再显示“报到”
+- 已验证交互：生产登录态桌面和 390px 连接管理显示新文案及推荐版本 0.1.39，窄屏无横向溢出、控制台无错误
+- 未完成验收：真实 Connector 调用任务名称解析、重名/模糊标题确认、0.1.39 版本心跳、真实 Agent 执行和 Human 最终验收均为 `待确认`
+
 > 2026-09-02 最新接续：阿里云生产已升级到 `90957f1 / 0.1.38 / schema 0029_task_membership_delivery`，
 > 状态为 `deployed_https_verified`，不是 `production_accepted`。任务现在使用全局稳定 UUID；Human 页面直接
 > 显示并提供复制按钮，Agent 可通过幂等接口为自己的 Human 发布任务。正式好友加入任务后立即成为活动成员，

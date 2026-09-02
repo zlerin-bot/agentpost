@@ -1,0 +1,85 @@
+schema_version: "1"
+stage_id: v0.1.39-task-title-resolver-and-connection-times-deployed-https-verified
+recorded_at: "2026-09-02T12:21:00+08:00"
+project: agentpost
+stage_purpose: resolve_participating_tasks_by_title_and_clarify_connection_times
+
+production:
+  provider: aliyun
+  product: simple-application-server
+  public_origin: https://agentpost.me
+  package_version: 0.1.39
+  git_commit: a27481a7f65c29484c57ccadb380a7f40f21299b
+  alembic_revision: 0029_task_membership_delivery
+  evidence_status: deployed_https_verified
+  production_accepted: false
+
+artifacts:
+  source_sha256: e6524df60e1bef6f76895323b87683d587240a442d355843503a0a79e36bff71
+  connector_wheel_url: https://agentpost.me/downloads/agentpost-0.1.39-py3-none-any.whl
+  connector_wheel_sha256: 559ef6ba0592273bc122fb001e6807d65f817abe1724212c50511efd1b8dc186
+  workbench_bundle_sha256: 6127e321549f24299130e53adef650d4f1702149489f5f63bc19d68368b3a086
+
+deployment:
+  prior_release: /opt/agentpost/releases/90957f1
+  immutable_release: /opt/agentpost/releases/a27481a
+  backup: /opt/agentpost/backups/20260902-121854-a27481a-pre-039
+  switch_status: deploy_status_ok
+  switch_duration_seconds: 40
+  postflight_status: postflight_status_ok
+  postflight_duration_seconds: 1
+  rollback_script: /opt/agentpost/backups/20260902-121854-a27481a-pre-039/rollback-immediate-0.1.39.sh
+
+production_counts:
+  agents: 63
+  messages: 485
+  deliveries: 485
+  attachments: 49
+  humans: 16
+
+processes:
+  agentpost_pid: 373965
+  nginx_pid: 362620
+  postgresql_pid: 365086
+  protected_services_preserved: true
+
+task_title_resolver_contract:
+  endpoint: /api/v1/agent/tasks/resolve
+  unique_exact_title_resolves_automatically: true
+  duplicate_exact_title_requires_confirmation: true
+  partial_title_requires_confirmation: true
+  candidate_limit: 5
+  scope: authenticated_agent_active_task_participation
+  unicode_normalization: NFKC_casefold_collapsed_whitespace
+  returns_stable_task_id: true
+
+connection_time_contract:
+  initial_connection_time_source: connector_activated_at
+  latest_connection_time_source: current_connector_last_heartbeat_at
+  old_report_wording_removed: true
+
+verification:
+  local_ruff: passed
+  local_typescript_sdk: 5_passed
+  local_orbit_javascript: 33_passed
+  local_non_postgresql: 474_passed_1_sandbox_skip_5_postgresql_deselected
+  local_desktop_and_390px: passed_zero_horizontal_overflow
+  production_release_compatibility_rehearsal: passed_same_schema_target
+  production_schema: passed_0029_task_membership_delivery
+  production_backup_checksums: passed
+  production_public_health_ready: passed_0_1_39
+  production_public_wheel_hash: passed_exact_match
+  production_unknown_wheel: passed_http_404
+  production_protocol_contract: passed_task_resolver_endpoint_and_scope
+  production_counts_not_decreased: passed
+  production_warning_log: clean
+  authenticated_desktop_connection_view: passed
+  authenticated_production_390px_connection_view: passed_zero_horizontal_overflow
+  authenticated_production_console: no_warning_or_error
+
+acceptance_pending:
+  - real_agent_title_resolution_using_existing_authenticated_connector
+  - duplicate_and_partial_title_human_confirmation_on_real_agent_host
+  - real_connector_upgrade_and_0_1_39_runtime_heartbeat
+  - real_external_agent_task_claim_heartbeat_result_and_result_sync
+  - real_human_final_acceptance
