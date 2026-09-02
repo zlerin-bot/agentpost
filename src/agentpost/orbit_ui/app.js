@@ -57,7 +57,7 @@ const state = {
   friendsLoaded: false,
   selectedFriendId: "",
   friendQuery: "",
-  friendFilter: "all",
+  friendFilter: "accepted",
   activeModule: "projects",
   activeSection: "board",
   lastSectionByModule: {
@@ -485,7 +485,7 @@ const MODULE_DEFINITIONS = Object.freeze({
   }),
   friends: Object.freeze({
     label: "好友",
-    title: "我的好友",
+    title: "好友",
     description: "好友必须双向确认，确认后才能邀请对方加入任务。",
     defaultSection: "directory",
     sections: Object.freeze(["directory"]),
@@ -576,14 +576,28 @@ function filteredProjects() {
 function filteredFriends() {
   const query = state.friendQuery.trim().toLowerCase();
   return state.friends.filter((friend) => {
+    const matchesFilter = state.friendFilter === "accepted"
+      ? friend.relation_status === "accepted"
+      : state.friendFilter === "pending"
+        ? ["pending_incoming", "pending_outgoing"].includes(friend.relation_status)
+        : friend.relation_status === "suggested";
     const searchable = [
       friend.display_name,
       friend.username,
       ...friend.agents.flatMap((agent) => agent.capabilities || []),
       ...friend.agents.flatMap((agent) => [agent.display_name, agent.address]),
     ].join(" ").toLowerCase();
-    return !query || searchable.includes(query);
+    return matchesFilter && (!query || searchable.includes(query));
   });
+}
+
+function friendRelationLabel(friend) {
+  return {
+    accepted: "已成为好友",
+    pending_incoming: "待你确认",
+    pending_outgoing: "等待对方确认",
+    suggested: "可申请好友",
+  }[friend.relation_status] || "关系待确认";
 }
 
 function createCollaborationListButton({ title, meta, badge, active, avatar, onClick }) {
@@ -911,7 +925,7 @@ function renderFriendBrowser() {
     elements.friendBrowserList.append(createCollaborationListButton({
       title: friend.display_name,
       meta: "@" + friend.username + " · " + friend.agents.length + " 个 Agent",
-      badge: dateOnlyText(friend.last_contact_at),
+      badge: friendRelationLabel(friend),
       active: state.selectedFriendId === friend.human_user_id,
       avatar: friend.display_name.slice(0, 1),
       onClick: () => {
@@ -1364,6 +1378,17 @@ function initializeCollaborationModules() {
   elements.friendSearchInput.addEventListener("input", () => {
     state.friendQuery = elements.friendSearchInput.value;
     renderFriendBrowser();
+  });
+  elements.friendFilters.forEach((button) => {
+    button.addEventListener("click", () => {
+      state.friendFilter = button.dataset.friendFilter;
+      elements.friendFilters.forEach((item) => {
+        const active = item === button;
+        item.classList.toggle("active", active);
+        item.setAttribute("aria-pressed", String(active));
+      });
+      renderFriendBrowser();
+    });
   });
   [elements.projectBrowserNew, elements.projectEmptyNew].forEach((button) => {
     button.addEventListener("click", openProjectCreateDialog);
@@ -3127,7 +3152,7 @@ function renderCurrentAgentConnection(agent) {
   const summary = document.createElement("summary");
   summary.textContent = "查看连接详情";
   const version = document.createElement("p");
-  version.textContent = `连接版本：${safeText(agent.current_connector_version, "未提供")}`;
+  version.textContent = `首次接入版本：${safeText(agent.current_connector_version, "未提供")}；当前运行版本请到“连接管理”查看。`;
   technical.append(summary, version);
   elements.agentCurrentConnection.append(facts, technical);
 }
@@ -3424,6 +3449,53 @@ function openRevokeDialog(connector) {
   elements.revokeAccessKey.focus();
 }
 
+function connectorVersionLabel(status) {
+  return {
+    current: "已是最新版",
+    update_available: "建议升级",
+    update_required: "需要升级",
+    unknown: "需要检查",
+  }[status] || "需要检查";
+}
+
+function connectorVersionAdvice(connector) {
+  const advice = document.createElement("section");
+  advice.className = `connector-version-advice ${connector.version_status}`;
+  const heading = document.createElement("div");
+  const title = document.createElement("strong");
+  title.textContent = connectorVersionLabel(connector.version_status);
+  const target = document.createElement("span");
+  target.textContent = `推荐版本 ${safeText(connector.recommended_version)}`;
+  heading.append(title, target);
+  const reason = document.createElement("p");
+  reason.textContent = safeText(connector.upgrade_reason);
+  advice.append(heading, reason);
+
+  if (connector.upgrade_prompt) {
+    const details = document.createElement("details");
+    const summary = document.createElement("summary");
+    summary.textContent = "查看安全升级方法";
+    const prompt = document.createElement("pre");
+    prompt.textContent = connector.upgrade_prompt;
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.className = "quiet-button";
+    copy.textContent = "复制升级指令";
+    copy.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(connector.upgrade_prompt);
+        copy.textContent = "已复制";
+      } catch (_error) {
+        details.open = true;
+        copy.textContent = "请手动复制上方指令";
+      }
+    });
+    details.append(summary, prompt, copy);
+    advice.append(details);
+  }
+  return advice;
+}
+
 function connectorCard(connector, historical = false) {
   const card = document.createElement("article");
   card.className = historical ? "connector-card historical" : "connector-card";
@@ -3442,6 +3514,8 @@ function connectorCard(connector, historical = false) {
   [
     ["Agent 类型", connector.connector_type],
     ["设备", connector.device_name],
+    ["当前版本", connector.runtime_version || "未上报"],
+    ["升级建议", connectorVersionLabel(connector.version_status)],
     ["最近连接", dateText(connector.last_seen_at)],
     ["最近报到", dateText(connector.last_heartbeat_at)],
     ["连接状态", statusLabel(connector.health_status)],
@@ -3463,7 +3537,11 @@ function connectorCard(connector, historical = false) {
   const technicalFacts = document.createElement("dl");
   [
     ["规范地址", connector.agent?.address],
-    ["连接版本", connector.client_version],
+    ["首次接入版本", connector.client_version],
+    ["当前运行版本", connector.runtime_version],
+    ["版本上报时间", dateText(connector.runtime_version_reported_at)],
+    ["推荐版本", connector.recommended_version],
+    ["最低完整协作版本", connector.minimum_supported_version],
   ].forEach(([label, value]) => {
     const cell = document.createElement("div");
     const term = document.createElement("dt");
@@ -3475,6 +3553,14 @@ function connectorCard(connector, historical = false) {
   });
   technicalDetails.append(technicalSummary, technicalFacts);
   card.append(technicalDetails);
+
+  if (
+    connector.is_current
+    && connector.status === "active"
+    && connector.version_status !== "current"
+  ) {
+    card.append(connectorVersionAdvice(connector));
+  }
 
   if (connector.is_current && connector.status === "active") {
     const actions = document.createElement("div");

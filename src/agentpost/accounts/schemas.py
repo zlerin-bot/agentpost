@@ -141,6 +141,7 @@ class SecurityOverview(AccountModel):
 
 class ConnectorReleaseInfo(AccountModel):
     version: str
+    minimum_supported_version: str
     wheel_url: str
     wheel_sha256: str
 

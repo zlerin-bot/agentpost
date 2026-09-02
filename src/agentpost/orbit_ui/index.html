@@ -185,11 +185,7 @@
               </button>
             </div>
             <div data-context-module="projects" hidden></div>
-            <div data-context-module="friends" hidden>
-              <button type="button" class="context-nav-item" data-module="friends" data-section="directory">
-                <span><strong>我的好友</strong><small>双向确认后共同参与任务</small></span><span aria-hidden="true">›</span>
-              </button>
-            </div>
+            <div data-context-module="friends" hidden></div>
             <div data-context-module="settings" hidden>
               <button type="button" class="context-nav-item" data-module="settings" data-section="profile">
                 <span><strong>个人资料</strong><small>账户基本信息</small></span><span aria-hidden="true">›</span>
@@ -271,16 +267,15 @@
             <div id="project-browser-list" class="prototype-browser-list" aria-live="polite"></div>
           </section>
           <section id="friend-browser" class="prototype-browser" hidden aria-label="好友列表">
-            <div class="prototype-browser-heading">
-              <div><span>个人通讯录</span><strong>协作好友</strong></div>
-              <span id="friend-browser-count" class="count-pill">0 人</span>
-            </div>
             <label class="thread-search" for="friend-search-input">
               <span>搜索好友</span>
               <input id="friend-search-input" type="search" autocomplete="off" maxlength="100" placeholder="姓名代号、能力或 Agent">
             </label>
             <div id="friend-filter" class="prototype-filter" aria-label="好友筛选">
-              <button type="button" class="active" data-friend-filter="all" aria-pressed="true">全部</button>
+              <button type="button" class="active" data-friend-filter="accepted" aria-pressed="true">好友</button>
+              <button type="button" data-friend-filter="pending" aria-pressed="false">待确认</button>
+              <button type="button" data-friend-filter="suggested" aria-pressed="false">联系过的人</button>
+              <span id="friend-browser-count" class="count-pill">0 人</span>
             </div>
             <div id="friend-browser-list" class="prototype-browser-list" aria-live="polite"></div>
           </section>

@@ -14,6 +14,7 @@ from agentpost.accounts.service import (
     verify_human_reauthentication,
 )
 from agentpost.api.dependencies import CurrentAgentDep, SessionDep, SettingsDep
+from agentpost.config import CONNECTOR_MINIMUM_SUPPORTED_VERSION
 from agentpost.control.auth import CurrentHumanDep, OptionalHumanAccessKeyDep
 from agentpost.control.human_security import (
     HUMAN_CONFIRMATION_HEADER,
@@ -592,6 +593,9 @@ def orbit_list_connectors(
             session,
             user=current_human,
             heartbeat_interval_seconds=settings.connector_heartbeat_interval_seconds,
+            recommended_version=settings.connector_release_version,
+            minimum_supported_version=CONNECTOR_MINIMUM_SUPPORTED_VERSION,
+            public_base_url=settings.public_base_url,
         )
     )
 

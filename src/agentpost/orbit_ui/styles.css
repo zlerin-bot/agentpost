@@ -1803,6 +1803,58 @@ summary:focus-visible {
   margin-top: 12px;
 }
 
+.connector-version-advice {
+  display: grid;
+  gap: 9px;
+  border: 1px solid rgba(255, 188, 92, 0.34);
+  border-radius: 12px;
+  background: rgba(255, 188, 92, 0.07);
+  padding: 13px;
+}
+
+.connector-version-advice.update_required {
+  border-color: rgba(255, 118, 132, 0.42);
+  background: rgba(255, 118, 132, 0.08);
+}
+
+.connector-version-advice > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.connector-version-advice > div span,
+.connector-version-advice p {
+  color: var(--muted);
+  font-size: 0.67rem;
+  line-height: 1.6;
+}
+
+.connector-version-advice p {
+  margin: 0;
+}
+
+.connector-version-advice details summary {
+  width: fit-content;
+  cursor: pointer;
+  color: var(--cyan);
+  font-size: 0.68rem;
+  font-weight: 720;
+}
+
+.connector-version-advice pre {
+  max-height: 220px;
+  margin: 10px 0;
+  overflow: auto;
+  border-radius: 9px;
+  background: rgba(2, 8, 18, 0.72);
+  color: #c8d7e5;
+  padding: 11px;
+  font: 0.64rem/1.6 ui-monospace, "SFMono-Regular", Consolas, monospace;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
 .connector-actions {
   align-items: center;
 }
@@ -5105,7 +5157,8 @@ footer {
 }
 
 .prototype-filter:has([data-friend-filter]) {
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  align-items: center;
 }
 
 .prototype-filter button {
@@ -5779,6 +5832,15 @@ footer {
 
   .prototype-browser-list {
     max-height: 280px;
+  }
+
+  .prototype-filter:has([data-friend-filter]) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .prototype-filter:has([data-friend-filter]) .count-pill {
+    grid-column: 1 / -1;
+    justify-self: end;
   }
 
   .prototype-module {

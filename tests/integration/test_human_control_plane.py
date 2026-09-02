@@ -166,6 +166,7 @@ def test_orbit_site_is_branded_and_does_not_persist_credentials(
     }
     assert auth_config.json()["connector_release"] == {
         "version": "0.1.0",
+        "minimum_supported_version": "0.1.34",
         "wheel_url": "https://agentpost.me/downloads/agentpost-0.1.0-py3-none-any.whl",
         "wheel_sha256": "1fc3f42e8c1141ce65481778587544fc9bf441438c852c0332594ab24a75fdf7",
     }
@@ -575,6 +576,7 @@ def test_auth_config_exposes_release_platforms_per_host(
     }
     assert response.json()["connector_release"] == {
         "version": "0.1.1",
+        "minimum_supported_version": "0.1.34",
         "wheel_url": "https://agentpost.me/downloads/agentpost-0.1.1-py3-none-any.whl",
         "wheel_sha256": "a" * 64,
     }

@@ -193,6 +193,8 @@ def _connector_response(connector: ConnectorInstance) -> PairingConnectorRespons
         display_name=connector.display_name,
         device_name=connector.device_name,
         client_version=connector.client_version,
+        runtime_version=connector.runtime_version,
+        runtime_version_reported_at=connector.runtime_version_reported_at,
         status=connector.status,
         health_status=connector.health_status,
         created_at=connector.created_at,
@@ -726,6 +728,9 @@ def list_human_connectors(
     *,
     user: HumanUser,
     heartbeat_interval_seconds: int = 30,
+    recommended_version: str,
+    minimum_supported_version: str,
+    public_base_url: str,
 ) -> list[OrbitConnector]:
     rows = session.execute(
         select(ConnectorInstance, Agent)
@@ -756,15 +761,81 @@ def list_human_connectors(
                 now=utc_now(),
                 heartbeat_interval_seconds=heartbeat_interval_seconds,
             )
+        version_status, upgrade_reason = _connector_version_status(
+            connector.runtime_version,
+            recommended_version=recommended_version,
+            minimum_supported_version=minimum_supported_version,
+        )
+        upgrade_prompt = None
+        if is_current and connector.status == "active" and version_status != "current":
+            upgrade_prompt = _connector_upgrade_prompt(
+                connector.connector_type,
+                public_base_url=public_base_url,
+                recommended_version=recommended_version,
+            )
         results.append(
             OrbitConnector(
                 **_connector_response(connector).model_dump(),
                 agent=_agent_response(agent),
                 is_current=is_current,
                 connection_state=connection_state,
+                recommended_version=recommended_version,
+                minimum_supported_version=minimum_supported_version,
+                version_status=version_status,
+                upgrade_reason=upgrade_reason,
+                upgrade_prompt=upgrade_prompt,
             )
         )
     return results
+
+
+def _connector_version_tuple(value: str | None) -> tuple[int, int, int] | None:
+    if value is None:
+        return None
+    matched = re.fullmatch(
+        r"(?:agentpost-connect/)?([0-9]+)\.([0-9]+)\.([0-9]+)",
+        value.strip(),
+    )
+    if matched is None:
+        return None
+    return tuple(int(part) for part in matched.groups())  # type: ignore[return-value]
+
+
+def _connector_version_status(
+    runtime_version: str | None,
+    *,
+    recommended_version: str,
+    minimum_supported_version: str,
+) -> tuple[str, str]:
+    current = _connector_version_tuple(runtime_version)
+    recommended = _connector_version_tuple(recommended_version)
+    minimum = _connector_version_tuple(minimum_supported_version)
+    if current is None or recommended is None or minimum is None:
+        return "unknown", "当前运行版本尚未由 Agent 心跳确认。"
+    if current < minimum:
+        return "update_required", "当前版本缺少完整任务协作能力，需要升级后再执行新任务。"
+    if current < recommended:
+        return "update_available", "当前连接仍可使用，升级后可获得最新功能和修复。"
+    return "current", "当前运行版本已经符合最新推荐版本。"
+
+
+def _connector_upgrade_prompt(
+    connector_type: str,
+    *,
+    public_base_url: str,
+    recommended_version: str,
+) -> str:
+    origin = public_base_url.rstrip("/")
+    return (
+        f"请将当前 {connector_type} 的 AgentPost 连接安全升级到 {recommended_version}。"
+        f"先读取 {origin}/connect/{connector_type} 和 {origin}/api/v1/protocol/contract；"
+        "确认现有连接能完成一次已认证读取，并从当前宿主配置取得准确的非敏感 "
+        "AGENTPOST_PROFILE。必须复用该 profile 和系统凭据库，不得重新配对、创建新 Agent、"
+        "复制 API Key 或覆盖正在运行的旧 runtime。校验公开 wheel 哈希后安装新的按宿主和版本隔离的 "
+        "runtime，将当前宿主配置切换到新 runtime；只重启该 Agent 的连接进程。"
+        "最后验证心跳已上报新版本、"
+        "Inbox 可读且宿主适配器可用。验证失败时恢复原宿主配置并保留旧 runtime。"
+    )
 
 
 def get_owned_connector(
@@ -904,6 +975,9 @@ def record_connector_heartbeat(
     connector.last_error_code = payload.last_error_code
     connector.last_error_at = now if payload.last_error_code is not None else None
     agent.last_seen_at = now
+    if payload.client_version is not None:
+        connector.runtime_version = payload.client_version
+        connector.runtime_version_reported_at = now
     session.commit()
     return ConnectorHeartbeatResponse(
         connector=_connector_response(connector),

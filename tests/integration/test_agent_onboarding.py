@@ -356,7 +356,11 @@ def test_new_codex_and_workbuddy_pairings_stay_active_as_independent_agents(
     settings: Settings,
     database: Database,
 ) -> None:
-    runtime = _runtime_settings(settings)
+    runtime = _runtime_settings(
+        settings,
+        connector_release_version="0.1.36",
+        connector_wheel_url="https://agentpost.me/downloads/agentpost-0.1.36-py3-none-any.whl",
+    )
     with TestClient(create_app(settings=runtime, database=database)) as client:
         human = _create_human(client, "mars@example.com", "Mars")
         csrf = _login(client, human)
@@ -434,11 +438,16 @@ def test_new_codex_and_workbuddy_pairings_stay_active_as_independent_agents(
         awaiting_connectors = client.get("/api/v1/orbit/connectors").json()["items"]
         assert awaiting_dashboard["metrics"]["connected_agent_count"] == 0
         assert {item["connection_state"] for item in awaiting_connectors} == {"awaiting_agent"}
-        for token in (codex_token, workbuddy_token):
+        assert {item["version_status"] for item in awaiting_connectors} == {"unknown"}
+        assert {item["client_version"] for item in awaiting_connectors} == {"1.0.0"}
+        for token, client_version in (
+            (codex_token, "agentpost-connect/0.1.33"),
+            (workbuddy_token, "agentpost-connect/0.1.36"),
+        ):
             heartbeat = client.post(
                 "/api/v1/connect/heartbeat",
                 headers={"Authorization": f"Bearer {token}"},
-                json={"health_status": "healthy"},
+                json={"health_status": "healthy", "client_version": client_version},
             )
             assert heartbeat.status_code == 200, heartbeat.text
         dashboard = client.get("/api/v1/orbit/dashboard").json()
@@ -450,6 +459,13 @@ def test_new_codex_and_workbuddy_pairings_stay_active_as_independent_agents(
     assert len([item for item in connectors if item["is_current"]]) == 2
     assert {item["status"] for item in connectors} == {"active"}
     assert {item["connection_state"] for item in connectors} == {"connected"}
+    versions = {item["connector_type"]: item for item in connectors}
+    assert versions["codex"]["runtime_version"] == "agentpost-connect/0.1.33"
+    assert versions["codex"]["version_status"] == "update_required"
+    assert versions["codex"]["upgrade_prompt"] is not None
+    assert versions["workbuddy"]["runtime_version"] == "agentpost-connect/0.1.36"
+    assert versions["workbuddy"]["version_status"] == "current"
+    assert versions["workbuddy"]["upgrade_prompt"] is None
     with database.session_factory() as session:
         assert session.scalar(select(func.count()).select_from(AgentConnectorBinding)) == 2
 

@@ -93,6 +93,8 @@ class PairingConnectorResponse(OnboardingModel):
     display_name: str
     device_name: str | None
     client_version: str | None
+    runtime_version: str | None = None
+    runtime_version_reported_at: datetime | None = None
     status: Literal["active", "replaced", "revoked"]
     health_status: Literal["unknown", "healthy", "degraded", "error"]
     created_at: datetime
@@ -238,6 +240,11 @@ class OrbitConnector(PairingConnectorResponse):
         "connection_error",
         "historical",
     ]
+    recommended_version: str
+    minimum_supported_version: str
+    version_status: Literal["current", "update_available", "update_required", "unknown"]
+    upgrade_reason: str
+    upgrade_prompt: str | None = None
 
 
 class OrbitConnectorList(OnboardingModel):
@@ -258,6 +265,7 @@ class ConnectorConfirmationCreate(OnboardingModel):
 
 class ConnectorHeartbeatCreate(OnboardingModel):
     health_status: Literal["healthy", "degraded", "error"] = "healthy"
+    client_version: str | None = Field(default=None, max_length=100)
     last_error_code: str | None = Field(
         default=None,
         min_length=1,
@@ -272,6 +280,13 @@ class ConnectorHeartbeatCreate(OnboardingModel):
         if self.health_status == "error" and self.last_error_code is None:
             raise ValueError("error heartbeat requires last_error_code")
         return self
+
+    @field_validator("client_version")
+    @classmethod
+    def clean_client_version(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return value.strip() or None
 
 
 class ConnectorHeartbeatResponse(OnboardingModel):

@@ -44,6 +44,7 @@ from agentpost.accounts.service import (
 )
 from agentpost.accounts.usernames import HumanUsernameAlreadyRegisteredError
 from agentpost.api.dependencies import SessionDep, SettingsDep
+from agentpost.config import CONNECTOR_MINIMUM_SUPPORTED_VERSION
 from agentpost.control.auth import CurrentHumanDep
 from agentpost.control.human_security import HumanCsrfDep, human_session_id_from_request
 from agentpost.control.models import HumanSession
@@ -74,6 +75,7 @@ def human_auth_config(settings: SettingsDep) -> HumanAuthConfig:
         host_connection_modes=settings.enabled_host_connection_modes,
         connector_release=ConnectorReleaseInfo(
             version=settings.connector_release_version,
+            minimum_supported_version=CONNECTOR_MINIMUM_SUPPORTED_VERSION,
             wheel_url=settings.connector_wheel_url,
             wheel_sha256=settings.connector_wheel_sha256,
         ),

@@ -8,6 +8,8 @@ from urllib.parse import urlsplit
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+CONNECTOR_MINIMUM_SUPPORTED_VERSION = "0.1.34"
+
 
 class Settings(BaseSettings):
     """Runtime settings loaded from environment variables or an optional .env file."""
@@ -326,6 +328,7 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def connector_release_is_consistent(self) -> Settings:
+        release_version = tuple(int(part) for part in self.connector_release_version.split("."))
         expected_filename = f"agentpost-{self.connector_release_version}-"
         if expected_filename not in self.connector_wheel_url.rsplit("/", maxsplit=1)[-1]:
             raise ValueError(
@@ -333,8 +336,7 @@ class Settings(BaseSettings):
             )
         setup_is_enabled = any(self.enabled_host_setup_platforms.values())
         if setup_is_enabled:
-            version = tuple(int(part) for part in self.connector_release_version.split("."))
-            if version < (0, 1, 1):
+            if release_version < (0, 1, 1):
                 raise ValueError("Agent setup platforms require Connector release 0.1.1 or newer")
         if self.is_production and setup_is_enabled:
             release_origin = urlsplit(self.connector_wheel_url)

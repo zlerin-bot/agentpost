@@ -44,6 +44,9 @@ class ConnectorState(BaseModel):
     display_name: str
     status: Literal["active", "replaced", "revoked"]
     health_status: Literal["unknown", "healthy", "degraded", "error"]
+    client_version: str | None = None
+    runtime_version: str | None = None
+    runtime_version_reported_at: datetime | None = None
     last_heartbeat_at: datetime | None = None
     last_error_code: str | None = None
     credential_rotated_at: datetime | None = None

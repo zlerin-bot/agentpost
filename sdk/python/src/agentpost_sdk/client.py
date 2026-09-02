@@ -8,6 +8,7 @@ import webbrowser
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from datetime import datetime
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, BinaryIO
 from urllib.parse import urlparse
@@ -42,6 +43,14 @@ if TYPE_CHECKING:
     from agentpost_sdk.onboarding import PairingInstructions, PairingSession
 
 _BODY_FORMATS = {"text", "markdown", "json"}
+
+
+def _runtime_client_version() -> str | None:
+    try:
+        release = version("agentpost")
+    except PackageNotFoundError:
+        return None
+    return f"agentpost-connect/{release}"
 
 
 def _idempotency_key() -> str:
@@ -305,7 +314,11 @@ class _ConnectorResource:
         data = self._owner._request(
             "POST",
             "/connect/heartbeat",
-            json={"health_status": health_status, "last_error_code": last_error_code},
+            json={
+                "health_status": health_status,
+                "last_error_code": last_error_code,
+                "client_version": _runtime_client_version(),
+            },
         )
         try:
             return ConnectorHeartbeat.model_validate(data)

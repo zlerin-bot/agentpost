@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -139,6 +140,7 @@ def test_connector_heartbeat_and_rotation_switch_client_credential_atomically() 
         authorizations.append(authorization)
         if request.url.path == "/api/v1/connect/heartbeat":
             assert authorization == "Bearer agt_old-connector-key"
+            assert json.loads(request.content)["client_version"].startswith("agentpost-connect/")
             return httpx.Response(
                 200,
                 json={

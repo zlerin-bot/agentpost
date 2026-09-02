@@ -43,6 +43,10 @@ class ConnectorInstance(Base):
     display_name: Mapped[str] = mapped_column(String(200), nullable=False)
     device_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     client_version: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    runtime_version: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    runtime_version_reported_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="active", index=True)
     health_status: Mapped[str] = mapped_column(
         String(16), nullable=False, default="unknown", index=True

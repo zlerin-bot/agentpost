@@ -484,6 +484,8 @@ def _seed(settings: Settings) -> None:
                 display_name="这台 Mac 上的 Codex",
                 device_name="当前设备",
                 client_version="agentpost-connect/0.1.36",
+                runtime_version="agentpost-connect/0.1.33",
+                runtime_version_reported_at=now - timedelta(minutes=2),
                 status="active",
                 health_status="healthy",
                 created_at=now - timedelta(days=2),

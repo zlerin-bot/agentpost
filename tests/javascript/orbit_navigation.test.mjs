@@ -52,6 +52,29 @@ test("tasks and formal friends are separate API-backed collaboration modules", (
   assert.doesNotMatch(`${html}\n${script}`, /李月|张冠群|崔孝林|胡曦元|zhangziliang|panyongtong/);
 });
 
+test("friends use one clear hierarchy and explicit relationship states", () => {
+  const friendNavigation = html.match(/<div data-context-module="friends" hidden>([\s\S]*?)<\/div>/)?.[1] || "";
+  assert.doesNotMatch(friendNavigation, /我的好友/);
+  assert.doesNotMatch(html, /个人通讯录|协作好友/);
+  assert.match(html, /data-friend-filter="accepted"[^>]*>好友</);
+  assert.match(html, /data-friend-filter="pending"[^>]*>待确认</);
+  assert.match(html, /data-friend-filter="suggested"[^>]*>联系过的人</);
+  assert.match(script, /accepted: "已成为好友"/);
+  assert.match(script, /pending_incoming: "待你确认"/);
+  assert.match(script, /badge: friendRelationLabel\(friend\)/);
+  assert.doesNotMatch(script, /badge: dateOnlyText\(friend\.last_contact_at\)/);
+});
+
+test("connection management separates first pairing from reported runtime version", () => {
+  assert.match(script, /\["当前版本", connector\.runtime_version \|\| "未上报"\]/);
+  assert.match(script, /\["首次接入版本", connector\.client_version\]/);
+  assert.match(script, /\["最低完整协作版本", connector\.minimum_supported_version\]/);
+  assert.match(script, /update_required: "需要升级"/);
+  assert.match(script, /navigator\.clipboard\.writeText\(connector\.upgrade_prompt\)/);
+  assert.match(script, /查看安全升级方法/);
+  assert.match(script, /复制升级指令/);
+});
+
 test("task workspace removes duplicate shortcuts and separates assignment, submission, and review", () => {
   assert.doesNotMatch(html, /class="sidebar-quick"/);
   assert.doesNotMatch(html, /id="approval-quick-count"|id="task-quick-count"/);
