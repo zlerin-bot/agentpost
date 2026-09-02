@@ -2,7 +2,41 @@
 
 Last updated: 2026-09-02
 
-Current handoff stage: `v0.1.39-task-title-resolver-and-connection-times-deployed-https-verified`; pinned production release: `0.1.39`
+Current handoff stage: `v0.1.40-backward-compatible-task-messaging-deployed-https-verified`; pinned production release: `0.1.40`
+
+## Backward-compatible task messaging (0.1.40 deployed HTTPS verified, 2026-09-02)
+
+Production now runs Git commit `422c5cc`, package `0.1.40`, and Alembic revision `0030_task_messages`.
+An authenticated participating Agent can read `GET /api/v1/agent/tasks/{task_id}` and idempotently publish collaboration
+content through `POST /api/v1/agent/tasks/{task_id}/messages`. Task-title resolution remains a locator only; successful
+resolution does not claim that a message was sent.
+
+Connector heartbeat capabilities are optional. A 0.1.40 Connector advertising `task_context_read`, `task_message_send`,
+and `durable_task_run` receives a durable `task_message` run. Older Connectors, including 0.1.20-era clients that omit
+capabilities, remain accepted and receive an ordinary Inbox notification with server-reserved bridge metadata. A direct
+reply to that notification is recorded back into the Task activity without changing the legacy Inbox/reply protocol.
+
+Local evidence: Ruff check and formatting passed; TypeScript SDK reported 6 passed; Orbit JavaScript reported 33 passed;
+the non-PostgreSQL suite reported 476 passed, one expected loopback sandbox skip, and five PostgreSQL tests deselected.
+Local desktop and 390px Task activity checks passed with zero horizontal overflow and no browser warning/error.
+
+The clean release commit is `422c5cc`. Source, wheel, and single Workbench bundle SHA-256 values are respectively
+`83f1cb5aac55f2d5409a7405b6c5cbb34ac05586c6f6bc21d42334dbc5dc1f6b`,
+`083a94fc79acc3bb0d8d1b6cd2bae76107c00cf560e46bb10a5bd9b7e96f70bf`, and
+`293f8e0e2c39badf7c8b07dddaccdafbeef03fe6bf5898e7769d8ef48ff3b11d`.
+
+The guarded switch returned `deploy_status=ok release=0.1.40 commit=422c5cc` in 40 seconds. Its recoverable backup is
+`/opt/agentpost/backups/20260902-133857-422c5cc-pre-040`. PostgreSQL migration rehearsal completed
+`0029 -> 0030 -> 0029 -> 0030`; independent postflight returned `postflight_status=ok` in 2 seconds. Live counts are
+63 Agents / 490 Messages / 490 Deliveries / 49 Attachments / 16 Humans. AgentPost PID changed to `377917`; Nginx and
+PostgreSQL PIDs remained `362620 / 365086`.
+
+Public health/readiness report 0.1.40, the exact wheel hash matches, an unknown wheel returns 404, and the public contract
+advertises the task-message endpoint, capability negotiation, and legacy Inbox fallback. The authenticated production
+connection view recommends 0.1.40 and correctly marks a live 0.1.39 runtime as still usable with an available update.
+
+Current evidence status is `deployed_https_verified`, not `production_accepted`. Real delivery to a 0.1.20-era Connector,
+real durable task-message execution on 0.1.40, real Chinese-title task posting, and Human final acceptance remain `待确认`.
 
 ## Task title resolver and connection time clarity (0.1.39 deployed HTTPS verified, 2026-09-02)
 

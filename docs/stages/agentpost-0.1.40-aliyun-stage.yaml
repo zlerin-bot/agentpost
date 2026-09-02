@@ -1,0 +1,86 @@
+schema_version: "1"
+stage_id: v0.1.40-backward-compatible-task-messaging-deployed-https-verified
+recorded_at: "2026-09-02T13:40:00+08:00"
+project: agentpost
+stage_purpose: add_agent_task_collaboration_messages_with_legacy_connector_fallback
+
+production:
+  provider: aliyun
+  product: simple-application-server
+  public_origin: https://agentpost.me
+  package_version: 0.1.40
+  git_commit: 422c5cc3f10231e324797695e5f45b1e2161a22a
+  alembic_revision: 0030_task_messages
+  evidence_status: deployed_https_verified
+  production_accepted: false
+
+artifacts:
+  source_sha256: 83f1cb5aac55f2d5409a7405b6c5cbb34ac05586c6f6bc21d42334dbc5dc1f6b
+  connector_wheel_url: https://agentpost.me/downloads/agentpost-0.1.40-py3-none-any.whl
+  connector_wheel_sha256: 083a94fc79acc3bb0d8d1b6cd2bae76107c00cf560e46bb10a5bd9b7e96f70bf
+  workbench_bundle_sha256: 293f8e0e2c39badf7c8b07dddaccdafbeef03fe6bf5898e7769d8ef48ff3b11d
+
+deployment:
+  prior_release: /opt/agentpost/releases/a27481a
+  immutable_release: /opt/agentpost/releases/422c5cc
+  backup: /opt/agentpost/backups/20260902-133857-422c5cc-pre-040
+  switch_status: deploy_status_ok
+  switch_duration_seconds: 40
+  postflight_status: postflight_status_ok
+  postflight_duration_seconds: 2
+  rollback_script: /opt/agentpost/backups/20260902-133857-422c5cc-pre-040/rollback-immediate-0.1.40.sh
+
+production_counts:
+  agents: 63
+  messages: 490
+  deliveries: 490
+  attachments: 49
+  humans: 16
+
+processes:
+  agentpost_pid: 377917
+  nginx_pid: 362620
+  postgresql_pid: 365086
+  protected_services_preserved: true
+
+task_message_contract:
+  context_endpoint: /api/v1/agent/tasks/{task_id}
+  message_endpoint: /api/v1/agent/tasks/{task_id}/messages
+  participant_scope_required: true
+  idempotency_required: true
+  new_connector_delivery: durable_task_message_run
+  legacy_connector_delivery: ordinary_inbox_notification
+  legacy_bridge_reply_recorded_to_task_activity: true
+  task_title_resolution_is_not_delivery: true
+
+connector_compatibility:
+  capability_fields_optional_on_heartbeat: true
+  new_capabilities:
+    - task_context_read
+    - task_message_send
+    - durable_task_run
+  old_connectors_without_capabilities_remain_accepted: true
+  production_0_1_39_connection_status: usable_update_available
+
+verification:
+  local_ruff: passed
+  local_typescript_sdk: 6_passed
+  local_orbit_javascript: 33_passed
+  local_non_postgresql: 476_passed_1_sandbox_skip_5_postgresql_deselected
+  local_desktop_and_390px: passed_zero_horizontal_overflow
+  production_postgresql_upgrade_downgrade_upgrade_rehearsal: passed
+  production_schema: passed_0030_task_messages
+  production_backup_checksums: passed
+  production_public_health_ready: passed_0_1_40
+  production_public_wheel_hash: passed_exact_match
+  production_unknown_wheel: passed_http_404
+  production_protocol_contract: passed_task_message_capabilities_and_legacy_fallback
+  production_counts_not_decreased: passed
+  authenticated_connection_view: passed_recommended_0_1_40_and_legacy_usable
+
+acceptance_pending:
+  - real_0_1_20_or_other_legacy_connector_receives_task_inbox_fallback
+  - real_0_1_40_connector_receives_durable_task_message_run
+  - real_agent_sends_task_message_by_resolved_chinese_title
+  - real_human_reviews_multi_agent_collaboration_activity
+  - real_human_final_acceptance

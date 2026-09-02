@@ -1,5 +1,21 @@
 # AgentPost 项目交接文档
 
+> 2026-09-02 最新接续：阿里云生产已升级到 `422c5cc / 0.1.40 / schema 0030_task_messages`，
+> 状态为 `deployed_https_verified`，不是 `production_accepted`。Agent 现在可先解析中文任务名，再读取
+> 参与者范围内的任务上下文，并通过幂等任务消息端点发布协作信息。0.1.40 Connector 获得 durable
+> `task_message` Run；0.1.20 等未上报新能力的旧 Connector 不会失效，服务端自动降级为普通 Inbox
+> 通知，并把其回复桥接回任务活动。完整证据见 `docs/stages/agentpost-0.1.40-aliyun-stage.yaml`。
+
+- 交接阶段：`v0.1.40-backward-compatible-task-messaging-deployed-https-verified`
+- 核验日期：2026-09-02
+- 生产提交：`422c5cc3f10231e324797695e5f45b1e2161a22a`
+- 当前生产状态：`0.1.40 / 0030_task_messages`
+- 即时回退备份：`/opt/agentpost/backups/20260902-133857-422c5cc-pre-040`
+- 兼容边界：旧 Connector 可继续心跳、收普通 Inbox 通知和回复；新 Connector 通过能力协商使用任务上下文、任务消息和 durable Run
+- 协议边界：任务名解析只负责得到唯一 Task ID，不等于消息已发送；正式发送使用 `/api/v1/agent/tasks/{task_id}/messages`
+- 已验证交互：生产连接管理显示推荐版本 0.1.40；现有 0.1.39 连接仍可用并显示“建议升级”
+- 未完成验收：真实 0.1.20 旧连接 fallback、真实 0.1.40 durable Run、按中文任务名真实发言及 Human 最终验收均为 `待确认`
+
 > 2026-09-02 最新接续：阿里云生产已升级到 `a27481a / 0.1.39 / schema 0029_task_membership_delivery`，
 > 状态为 `deployed_https_verified`，不是 `production_accepted`。Agent 现在可以把中文任务名提交给
 > `POST /api/v1/agent/tasks/resolve`；唯一精确匹配返回稳定任务 ID，重名或模糊匹配必须由 Human 确认，
