@@ -55,7 +55,7 @@ src/agentpost/
   identity/     address rules, API-key hashing, Agent models and service
   messaging/    messages, deliveries, cursors, audit, transaction service
   onboarding/   short-lived Pairing, Connector instances, active bindings
-  sso/          enterprise OIDC providers, identity links, one-time login state
+  tasks/        Task membership, one-thread context, Agent Runs, results, acceptance
   orbit_ui/     星轨 no-dependency product UI assets
   storage/      filesystem/S3-compatible attachment port
   observability/structured logs and request context
@@ -102,18 +102,11 @@ read-only; owners/operators may record approval decisions, while auditors receiv
 metadata with Agent-supplied content redacted. Admin bootstrap endpoints create
 Humans and grant/revoke access, but neither return nor retrieve an Agent API key.
 
-`organizations`, `organization_memberships`, and `organization_agents` add a
-second, server-authoritative access path. One Agent can belong to at most one
-organization in the current model. A Human may belong to many organizations.
-Direct access and organization-derived access are merged by the strongest visible
-role without mutating either source; removing a membership therefore cannot erase
-direct ownership or grants. Organization auditors remain body-redacted. Admin
-bootstrap owns organization writes. CSRF, step-up confirmation, and Human action
-audit primitives are implemented, but delegated organization mutation has not
-been opened to Human roles.
-
-Task work state is derived from `task` and explicit `result` messages. Delivery
-state remains independent: `acked` never projects to `completed`.
+`tasks`, `task_memberships`, `task_member_agents`, `task_runs`, and task events are
+the only shared multi-Human access path. Membership is server-authored, every Task
+has one stable ID and one main Thread, and Agent execution uses durable claim,
+lease, heartbeat, result, submission, and Human acceptance records. Delivery state
+remains independent: `acked` never projects to Task completion or acceptance.
 
 ## Agent onboarding and Connector identity
 
@@ -139,27 +132,6 @@ binding. The Connector then derives and claims its credential over the device
 channel; the browser never receives it. Production Pairing is HTTPS-only and is
 disabled by default in the production Compose manifest.
 
-## Enterprise Human identity federation
-
-Enterprise OIDC is a Human authentication adapter, not an Agent identity source.
-An organization Owner may configure a provider only after DNS-verifying at least
-one organization domain, and the issuer must also appear in an operator-controlled
-deployment allowlist. Provider discovery, token, authorization, and JWKS endpoints
-are constrained to that issuer host; client secrets and PKCE verifiers are
-encrypted at rest.
-
-Login uses Authorization Code + PKCE with server-held one-time state and nonce.
-The callback validates the signed ID token's issuer, audience, timestamps, nonce,
-subject, verified email, and exact organization-domain membership. A new subject
-may provision a Human plus `member` membership. An existing local email is never
-silently linked: the Human must start an explicit password/MFA-protected link from
-星轨. The resulting `hss_` browser session remains the same revocable, CSRF-bound
-session used by email/password login.
-
-This layer does not implement SCIM, generic account merge, or automatic IdP
-deprovisioning. Disabling a provider blocks future logins without deleting Human
-identity, membership, Agent ownership, or audit history.
-
 ## Human approval transaction
 
 An Agent creates an `approval_request` under its authenticated UUID and a
@@ -168,7 +140,7 @@ type plus Agent-supplied summary, justification, risk, and JSON payload; all of
 those content fields remain `external_agent_content`. The Agent can list, poll, or
 cancel only its own requests.
 
-星轨 builds the Human queue from the same direct/organization Agent access graph
+AgentPost builds the Human queue from the direct Agent ownership/grant graph
 used by observation. Owners/operators may decide; viewers may observe and auditors
 receive redacted metadata. A browser decision is split into two requests:
 

@@ -5,7 +5,7 @@
 
 ## Context
 
-The MVP must work across Agent frameworks, machines, and organizations, including
+The MVP must work across Agent frameworks, machines, and deployment boundaries, including
 clients that run only occasionally. It needs the smallest interoperable retrieval
 mechanism that is easy to test and does not weaken durable inbox semantics.
 

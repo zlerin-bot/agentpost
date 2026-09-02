@@ -303,9 +303,9 @@ def test_outdated_connector_heartbeat_requests_upgrade_once_and_keeps_inbox_comp
 ) -> None:
     runtime = _runtime_settings(
         settings,
-        connector_release_version="0.1.41",
+        connector_release_version="0.1.42",
         connector_wheel_url=(
-            "https://agentpost.example/downloads/agentpost-0.1.41-py3-none-any.whl"
+            "https://agentpost.example/downloads/agentpost-0.1.42-py3-none-any.whl"
         ),
     )
     with TestClient(create_app(settings=runtime, database=database)) as client:
@@ -342,11 +342,11 @@ def test_outdated_connector_heartbeat_requests_upgrade_once_and_keeps_inbox_comp
         assert first.status_code == 200, first.text
         directive = first.json()["upgrade"]
         assert directive["action"] == "upgrade_required"
-        assert directive["target_version"] == "0.1.41"
+        assert directive["target_version"] == "0.1.42"
         assert directive["minimum_supported_version"] == "0.1.34"
         assert "不要重新配对" in directive["prompt"]
         assert first.headers["X-AgentPost-Upgrade-Action"] == "upgrade_required"
-        assert first.headers["X-AgentPost-Upgrade-Version"] == "0.1.41"
+        assert first.headers["X-AgentPost-Upgrade-Version"] == "0.1.42"
 
         second = client.post(
             "/api/v1/connect/heartbeat",
@@ -383,7 +383,7 @@ def test_outdated_connector_heartbeat_requests_upgrade_once_and_keeps_inbox_comp
             headers={"Authorization": f"Bearer {agent_key}"},
             json={
                 "health_status": "healthy",
-                "client_version": "agentpost-connect/0.1.41",
+                "client_version": "agentpost-connect/0.1.42",
                 "capabilities": ["task_context_read"],
             },
         )
@@ -395,7 +395,7 @@ def test_outdated_connector_heartbeat_requests_upgrade_once_and_keeps_inbox_comp
             select(ConnectorInstance).where(ConnectorInstance.connector_id == connector_id)
         )
         assert connector is not None
-        assert connector.upgrade_target_version == "0.1.41"
+        assert connector.upgrade_target_version == "0.1.42"
         assert connector.upgrade_status == "completed"
         assert connector.upgrade_requested_at is not None
         assert connector.upgrade_completed_at is not None

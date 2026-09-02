@@ -559,19 +559,7 @@ def _thread_messages(session: Session, thread_id: UUID, *, agent_id: UUID) -> li
             .order_by(Message.created_at.asc(), Message.id.asc())
         ).unique()
     )
-    deduplicated: list[Message] = []
-    channel_events: dict[str, Message] = {}
-    for message in messages:
-        event_id = (message.message_metadata or {}).get("organization_event_id")
-        if not event_id:
-            deduplicated.append(message)
-            continue
-        current = channel_events.get(str(event_id))
-        if current is None or message.delivery.recipient_agent_id == agent_id:
-            channel_events[str(event_id)] = message
-    deduplicated.extend(channel_events.values())
-    deduplicated.sort(key=lambda item: (item.created_at, item.id))
-    return deduplicated
+    return messages
 
 
 def _thread_participants(messages: list[Message]) -> list[AgentReference]:

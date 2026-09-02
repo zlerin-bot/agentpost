@@ -212,7 +212,7 @@ def test_default_policy_is_public_and_policy_resources_are_owner_only(
             "post",
             {
                 "effect": "allow",
-                "subject_type": "organization",
+                "subject_type": "team",
                 "subject": "agents.local",
             },
         ),

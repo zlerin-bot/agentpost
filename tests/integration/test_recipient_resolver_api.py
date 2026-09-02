@@ -8,10 +8,8 @@ from sqlalchemy import select
 
 from agentpost.control.models import (
     AgentOwnership,
+    HumanAgentGrant,
     HumanUser,
-    Organization,
-    OrganizationAgent,
-    OrganizationMembership,
 )
 from agentpost.db import Database
 from agentpost.identity.models import Agent
@@ -57,8 +55,6 @@ def _relationship_scope(
     owner_name: str,
     owner_email: str,
     owner_username: str | None = None,
-    organization_slug: str,
-    organization_name: str,
     connector_type: str = "codex",
 ) -> None:
     with database.session_factory() as session:
@@ -96,29 +92,18 @@ def _relationship_scope(
         if target_owner.default_agent_id is None:
             target_owner.default_agent_id = target.id
 
-        organization = session.scalar(
-            select(Organization).where(Organization.slug == organization_slug)
+        existing_grant = session.scalar(
+            select(HumanAgentGrant).where(
+                HumanAgentGrant.human_user_id == caller_owner.id,
+                HumanAgentGrant.agent_id == target.id,
+            )
         )
-        if organization is None:
-            organization = Organization(
-                slug=organization_slug,
-                name=organization_name,
-                status="active",
-            )
-            session.add(organization)
-            session.flush()
+        if existing_grant is None:
             session.add(
-                OrganizationMembership(
-                    organization_id=organization.id,
+                HumanAgentGrant(
                     human_user_id=caller_owner.id,
-                    role="member",
-                )
-            )
-        if session.get(OrganizationAgent, target.id) is None:
-            session.add(
-                OrganizationAgent(
                     agent_id=target.id,
-                    organization_id=organization.id,
+                    role="viewer",
                 )
             )
 
@@ -226,8 +211,6 @@ def test_unique_human_username_resolves_their_scoped_agent(
         owner_name="李华",
         owner_username="020",
         owner_email="human-020@example.com",
-        organization_slug="username-scope",
-        organization_name="用户名联调",
     )
 
     response = _resolve(client, caller, "把报告发给 020 的 Codex")
@@ -442,8 +425,6 @@ def test_human_name_and_agent_type_resolve_unique_codex_and_send(
         target_address=target["agent"]["address"],
         owner_name="张子良",
         owner_email="ziliang@example.com",
-        organization_slug="product",
-        organization_name="产品组",
     )
 
     response = _resolve(client, caller, query)
@@ -539,8 +520,6 @@ def test_human_constraint_wins_over_incidental_global_type_handle(
         target_address=target["agent"]["address"],
         owner_name="020",
         owner_email="020@example.com",
-        organization_slug="doubao-canary",
-        organization_name="豆包联调",
     )
 
     response = _resolve(client, caller, query)
@@ -599,8 +578,6 @@ def test_human_constraint_can_select_one_owner_scoped_handle(
             target_address=target["agent"]["address"],
             owner_name="张子良",
             owner_email="ziliang@example.com",
-            organization_slug="product",
-            organization_name="产品组",
         )
 
     response = _resolve(client, caller, "给张子良的 kcode 发消息")
@@ -649,8 +626,6 @@ def test_same_human_with_multiple_codex_agents_asks_once_with_short_labels(
             target_address=target["agent"]["address"],
             owner_name="张子良",
             owner_email="ziliang@example.com",
-            organization_slug="product",
-            organization_name="产品组",
         )
 
     response = _resolve(client, caller, "把报告发给张子良的 Codex")
@@ -658,13 +633,13 @@ def test_same_human_with_multiple_codex_agents_asks_once_with_short_labels(
     result = response.json()
     assert result["status"] == "needs_clarification"
     assert result["total_candidates"] == 2
-    assert [item["label"] for item in result["candidates"]] == [
+    assert sorted(item["label"] for item in result["candidates"]) == [
         "张子良的 Codex（kcode）",
         "张子良的 Codex（research-agent）",
     ]
 
 
-def test_same_human_display_name_is_distinguished_by_shared_organization(
+def test_same_human_display_name_is_distinguished_by_agent_handle(
     client: TestClient,
     database: Database,
 ) -> None:
@@ -682,8 +657,6 @@ def test_same_human_display_name_is_distinguished_by_shared_organization(
         target_address=first["agent"]["address"],
         owner_name="张子良",
         owner_email="first-ziliang@example.com",
-        organization_slug="research-one",
-        organization_name="研究一部",
     )
     _relationship_scope(
         database,
@@ -691,8 +664,6 @@ def test_same_human_display_name_is_distinguished_by_shared_organization(
         target_address=second["agent"]["address"],
         owner_name="张子良",
         owner_email="second-ziliang@example.com",
-        organization_slug="research-two",
-        organization_name="研究二部",
     )
 
     response = _resolve(client, caller, "给张子良的 Codex 发消息")
@@ -700,8 +671,8 @@ def test_same_human_display_name_is_distinguished_by_shared_organization(
     result = response.json()
     assert result["status"] == "needs_clarification"
     assert [item["label"] for item in result["candidates"]] == [
-        "张子良（研究一部）的 Codex",
-        "张子良（研究二部）的 Codex",
+        "张子良的 Codex（first-code）",
+        "张子良的 Codex（second-code）",
     ]
     assert all("@" not in item["label"] for item in result["candidates"])
 

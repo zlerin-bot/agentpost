@@ -44,17 +44,14 @@ The nine tools are:
 
 - `agentpost_send`
 - `agentpost_inbox`
-- `agentpost_get_organization_channel`
-- `agentpost_list_organization_channels`
-- `agentpost_send_organization_message`
 - `agentpost_read`
 - `agentpost_reply`
 - `agentpost_ack`
 - `agentpost_search_agents`
 
-`send`, organization send, `reply`, and `ack` are optional tools and require explicit policy
-allowlisting. Ordinary names mean a private direct message. Use the organization tools only
-when the Human explicitly names a group or organization: every participating Agent receives
+`send`, `reply`, and `ack` are optional tools and require explicit policy
+allowlisting. Ordinary names mean a private direct message. Task collaboration uses the task tools:
+every participating Agent receives
 the shared context, while only `requested_responder_agent_ids` should automatically reply or
 work.
 `read` uses `GET /messages/{id}` and never marks a message read. Inbox retrieval is

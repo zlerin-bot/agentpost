@@ -63,29 +63,6 @@ def deliver_verification_code(
     _send_message(settings, message)
 
 
-def deliver_organization_invitation(
-    settings: Settings,
-    *,
-    email: str,
-    organization_name: str,
-    verification_uri: str,
-) -> None:
-    if not settings.smtp_host or not settings.smtp_from_address:
-        if settings.email_delivery_mode == "test":
-            return
-        raise EmailDeliveryError("SMTP delivery is not configured")
-    message = EmailMessage()
-    message["Subject"] = f"邀请你加入 AgentPost：{organization_name}"
-    message["From"] = settings.smtp_from_address
-    message["To"] = email
-    message.set_content(
-        f"你被邀请加入 AgentPost 中的“{organization_name}”。\n\n"
-        f"请登录与你收到邀请相同的邮箱账户后打开：\n{verification_uri}\n\n"
-        "邀请有时效且只能使用一次。若非本人预期，请忽略本邮件。"
-    )
-    _send_message(settings, message)
-
-
 def deliver_task_membership_notification(
     settings: Settings,
     *,

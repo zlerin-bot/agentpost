@@ -1,5 +1,5 @@
 const RUNTIME_CAPABILITIES = ["task_context_read", "task_message_send", "durable_task_run"];
-const RUNTIME_VERSION = "agentpost-connect/0.1.41";
+const RUNTIME_VERSION = "agentpost-connect/0.1.42";
 export class AgentPostError extends Error {
     code;
     statusCode;

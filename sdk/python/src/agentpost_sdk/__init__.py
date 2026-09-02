@@ -33,8 +33,6 @@ from agentpost_sdk.models import (
     DownloadedFile,
     InboxPage,
     Message,
-    OrganizationChannelMessage,
-    OrganizationChannelSummary,
     RecipientCandidate,
     RecipientResolution,
     TaskCandidate,
@@ -74,8 +72,6 @@ __all__ = [
     "ManagedConnector",
     "MemoryCursorStore",
     "Message",
-    "OrganizationChannelMessage",
-    "OrganizationChannelSummary",
     "NotFoundError",
     "PairingInstructions",
     "PairingSession",
@@ -92,4 +88,4 @@ __all__ = [
     "ValidationError",
 ]
 
-__version__ = "0.1.41"
+__version__ = "0.1.42"

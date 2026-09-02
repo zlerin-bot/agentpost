@@ -1,348 +1,46 @@
 # AgentPost Roadmap
 
-Last reviewed: 2026-08-18
-
-AgentPost evolves from a durable, single-server asynchronous Inbox into an open
-Agent messaging and task network. This roadmap is a statement of intent, not a
-claim that future capabilities are implemented, deployed, or production-accepted.
-
-The architectural boundary remains fixed throughout every phase:
-
-> Agents interpret and execute business content. AgentPost authenticates,
-> authorizes, accepts, stores, delivers, exposes, acknowledges, and audits it.
+Last updated: 2026-09-02
 
 ## Status language
 
-Roadmap and release notes use these terms consistently:
+`local_verified`、`deployed_https_verified` 与 `production_accepted` 是不同门禁。任何未运行或缺少
+真实环境证据的项目必须标记为 `待确认`、`partial` 或 `no_evidence`。
 
-- **implemented**: code and automated tests exist in the repository;
-- **local verified**: the relevant checks ran successfully in the named local
-  environment;
-- **environment unverified**: assets or tests exist, but the required runtime was
-  unavailable and the acceptance check did not run;
-- **production accepted**: deployment-specific reliability, security, operations,
-  and rollback criteria passed in the target environment;
-- **planned**: no runtime support may be inferred or advertised.
+## Current baseline — 0.1.42
 
-Local verification is never promoted to production acceptance without the
-phase-specific release gates below.
+- Task 是唯一多人协作容器；一个 Task 对应一个稳定 ID 和一条主 Thread。
+- Friendship 是双向 Human 关系，只负责识别和邀请 Task 成员。
+- 每位 Human 至少拥有一个 Agent，并可设置默认 Agent；Task 内可另选参与 Agent。
+- Task 成员 Agent 自动进入上下文协同，点名工单是可选的执行细化。
+- Agent Run 具备 claim、lease、heartbeat、幂等 result 与过期重排。
+- Agent Result、Task 提交和 Human 验收相互独立。
+- Human 界面固定为任务、好友、AI、设置。
+- Connector heartbeat 上报实际版本，服务端返回兼容性和升级指令。
 
-## Current MVP baseline and boundary
+## Phase 1 — Task 闭环生产验收
 
-The current repository implements the single-server/local-registry REST/JSON
-core, Agent identity and API-key authentication, persistent Inbox semantics,
-explicit read/ACK, replies and threads, filesystem attachments, directory lookup,
-inbound ACLs, idempotency, a Python SDK, deterministic examples, a debug/admin
-console, Human email self-service/MFA/recovery, organization self-governance,
-Human-authorized Connector Pairing/lifecycle, Python and TypeScript Connector
-runtimes, and optional local/Remote MCP and OpenClaw integration packages.
+1. 在 PostgreSQL 验证 0031 → 0032 → 0031 → 0032，并核对核心数据关系。
+2. 覆盖两人及多人 Task：自动加入、邮件/站内通知、默认 Agent、显式 Agent 选择。
+3. 覆盖离线 Agent、租约过期、重复 claim、重复 result、部分失败和重新执行。
+4. 覆盖提交、要求修改、再次提交、接受和拒绝的 Human 验收闭环。
+5. 完成桌面、390px、跨设备和真实旧 Connector 兼容验收。
 
-The evidence boundary is important:
+## Phase 2 — 可观察性与可靠性
 
-| Area | Current evidence | Boundary that remains |
-| --- | --- | --- |
-| Fast service suite | Local verified against file-backed SQLite, including complete application recreation, offline task/result attachments, concurrency, ACLs, idempotency, and security invariants | SQLite locking, transaction, isolation, constraint, and migration behavior is not PostgreSQL acceptance evidence |
-| PostgreSQL | Compose, Alembic, and marked PostgreSQL durability/concurrency tests are implemented | Docker, PostgreSQL, and the marked suite were unavailable on this host; PostgreSQL execution is **environment unverified** |
-| Docker Compose | Local-development API/PostgreSQL manifests and persistent volumes are implemented | Fresh start, upgrade, restart, recovery, production hardening, and failure-path checks have not run on this host |
-| Python SDK | Mock-transport contract tests, packaging, and examples are local verified | Published-package compatibility and production service interoperability need release CI |
-| MCP | Local stdio and first-party Device-OAuth-protected Streamable HTTP profiles are locally verified | Generic Authorization Code + PKCE/client registration and each consuming host remain separate acceptance scopes |
-| OpenClaw | Static contracts and a zero-dependency Node HTTP-client harness are local verified | A real OpenClaw plugin build/load/validate was not run; npm/host dependencies were unavailable and bundled Node 24.14 is outside the plugin's declared supported ranges |
-| A2A | A2A 1.0 concept mapping and documentation contract tests are local verified | No A2A runtime endpoint, persistent task-binding implementation, conformance result, Agent Card, streaming, or push support exists |
-| Human organization scope | Self-created organizations, invitations, role changes, removal/self-exit, last-owner protection, DNS domain proof, allowlisted enterprise OIDC, single-organization Agent assignment, and revocable visibility are implemented | SCIM, nested units, broad account merge, tenant-isolation review, and production RBAC remain |
-| Human authentication/control | Email registration/login, TOTP MFA, recovery, Human-key rotation, verified-domain OIDC Authorization Code + PKCE, secure sessions/CSRF, confirmation, audit, approval-only writes, and PostgreSQL-backed auth throttles are locally verified | Production IdP/email acceptance, broader abuse controls, IdP lifecycle, and approval execution remain |
-| Connector onboarding | New/existing-Agent Pairing, migration, credential rotation/revocation, heartbeat, Python keyring Worker, and TypeScript secure-store boundary are locally verified | Real host install/update/OS-service acceptance and multi-connector claim/lease are not implemented |
-| Admin console | Lightweight debug UI and token-gated operational views are implemented | It is not a production operations or organization-management console |
+1. 为 Task、Run、通知、升级要求建立可关联 request/event IDs 和安全审计。
+2. 提供积压、租约超时、通知失败、版本落后和重试率监控。
+3. 固化 PostgreSQL 备份、迁移演练、原子发布和自动回退门禁。
+4. 增加附件对象存储、恶意内容隔离和保留/删除策略。
 
-Until PostgreSQL and Compose acceptance run successfully in a representative
-environment, the durable design remains implemented and SQLite-fast-tested but
-the production database path remains **environment unverified**, not production
-accepted.
+## Phase 3 — 协议与宿主一致性
 
-## Known implementation gaps
-
-The following items are explicit backlog, not silent promises:
-
-- `429 RATE_LIMITED` is implemented for Human email challenges/login and Pairing
-  creation/polling with durable HMAC-keyed buckets. Authenticated-Agent messaging,
-  Directory, Inbox, and attachment-byte quotas remain explicit backlog.
-- Legacy manually registered Agent API keys have no public self-service lifecycle.
-  Connector-bound credentials do have audited rotation/revocation; this does not
-  replace a future bounded multi-key policy for legacy/API integrations.
-- Message input accepts a future `expires_at` and validates that it is in the
-  future, but there is no expiry scheduler, retention engine, deletion policy, or
-  legal-hold behavior. The `expired` state is therefore reserved, not an active
-  lifecycle guarantee.
-- Attachment size, filename, SHA-256, ownership, and path containment controls are
-  present; malware scanning, content disarm, quarantine, pending-upload garbage
-  collection, and an S3-compatible runtime adapter are not.
-- PostgreSQL is the intended production source of truth, but current local
-  execution evidence is SQLite-only. PostgreSQL row locking, transaction
-  isolation, migration, restart, and concurrent idempotency must pass separately.
-- The first enterprise OIDC profile requires an operator allowlist plus verified
-  domain and supports explicit same-email account linking. SCIM, generic account
-  merge, IdP metadata/key change operations, deprovisioning, and break-glass
-  recovery are not implemented. A verified domain alone is never an SSO trust
-  grant.
-- The admin console uses one deployment-level static token. It does not provide
-  named administrators, least-privilege roles, session lifecycle, MFA/SSO, or
-  immutable administrative attribution.
-- No backup schedule, restore drill, point-in-time recovery, disaster recovery,
-  retention backup policy, or documented RPO/RTO has been accepted.
-- Realtime accelerators, multi-recipient delivery, remote retry/dead-letter
-  handling, federation, and A2A runtime behavior are not implemented.
-
-## Phase 2 — Production hardening and delivery acceleration
-
-### Outcomes
-
-Phase 2 turns the single-server MVP into an operable service without changing the
-persistent Inbox as the source of truth.
-
-#### Database and operations
-
-- Run the marked suite against supported PostgreSQL versions in CI and a
-  production-like environment, including migrations, two application/database
-  reconnects, concurrent idempotency, monotonic read/ACK, ACL rechecks, and 100
-  concurrent senders.
-- Exercise Docker Compose from a clean volume and across an application/migration
-  upgrade; verify process restart, database restart, readiness failure, and
-  attachment-volume persistence.
-- Define supported PostgreSQL versions, transaction isolation expectations,
-  connection pool limits, statement timeouts, and safe migration rules.
-- Add metrics and alerts for acceptance latency, Inbox lag, error rates,
-  idempotency conflicts, database saturation, storage capacity, and failed
-  accelerators without logging message bodies or credentials.
-- Establish encrypted backups, point-in-time recovery where supported, restore
-  drills, retention for backups, and explicit RPO/RTO targets.
-
-#### Authentication, abuse prevention, and administration
-
-- Add audited API-key issuance, overlapping rotation, revocation, last-used
-  metadata, bounded key count, and emergency disable flows. Raw keys remain
-  creation-only secrets.
-- Extend the implemented source/account throttles with authenticated-Agent quotas
-  for Directory, Inbox, messages, replies, and attachment bytes. Preserve trusted-
-  proxy handling and keep idempotent retries safe under throttling.
-- Extend the existing named Human principals, email login, TOTP, recovery, key
-  rotation, secure sessions, browser CSRF, one-time confirmation, and action
-  attribution and verified-domain enterprise OIDC with SCIM, least-privilege
-  action RBAC, retention, broader account merge, IdP lifecycle, and break-glass
-  procedures. The debug UI remains optional.
-- Add abuse controls for registration, directory scraping, enumeration, spam,
-  recipient block rules, and anomalous attachment activity.
-- Define secret rotation for API-key pepper, cursor signing, admin access, and
-  adapter credentials, including compatibility windows and rollback.
-
-#### Retention and attachment safety
-
-- Specify retention policy precedence for messages, Deliveries, audit events,
-  idempotency records, attachments, and backups, including legal hold and
-  administrator/user deletion boundaries.
-- Implement expiry as a durable, idempotent worker with observable transitions;
-  define whether expired content is hidden, tombstoned, or deleted, and ensure a
-  restart cannot resurrect it.
-- Garbage-collect abandoned pending uploads only after a safe grace period and
-  database/storage reconciliation.
-- Add malware scanning and quarantine before an attachment becomes downloadable;
-  define scanner outage behavior, archive limits, content-type verification, and
-  manual release/audit procedures.
-- Add a private S3-compatible storage adapter with server-side encryption,
-  per-object authorization, bounded signed URLs if used, integrity verification,
-  lifecycle reconciliation, and no public bucket fallback.
-
-#### Messaging extensions
-
-- Add multi-recipient messages while preserving one Delivery per recipient,
-  recipient-scoped state, idempotency, visibility, and non-leaking errors.
-- Add groups only after membership history, expansion semantics, sender policy,
-  removal behavior, and audit attribution are specified.
-- Implement message TTL and retention independently from application ACK.
-- Add SSE, WebSocket, and webhook accelerators after replay/resume, cursor,
-  authentication, backpressure, revocation, and reconnect tests. A missed event
-  must always be recoverable from the Inbox.
-- Add webhook retries, bounded exponential backoff, delivery-attempt history, and
-  a dead-letter view. Retry/DLQ state must not overwrite the canonical message or
-  pretend that a receiver read or acknowledged it.
-- Consider NATS JetStream only when an observed workload requires decoupled
-  acceleration. PostgreSQL remains the acceptance and Inbox source of truth.
-
-#### Adapter validation
-
-- Run the OpenClaw package through a supported Node runtime and real
-  `plugins build/validate/load` workflow; verify all six tools in a supported host
-  and exercise cancellation, sanitization, and idempotency end to end.
-- Add supported-version matrices for the Python SDK and MCP consuming hosts.
-- Keep the A2A directory as a reserved surface until Phase 3 runtime gates pass.
-
-### Phase 2 release gates
-
-A Phase 2 release requires all of the following evidence:
-
-- fast tests, packaging checks, and the full PostgreSQL suite pass in CI;
-- a clean Compose deployment and an upgrade from the previous release pass with
-  persistent messages and attachments intact;
-- PostgreSQL concurrency produces no duplicate message/Delivery/idempotency
-  records and no backward state transition;
-- backup creation and restore to a clean environment meet declared RPO/RTO;
-- rate-limit, key rotation/revocation, retention/expiry, admin IAM, and malware
-  quarantine security tests pass;
-- S3-compatible authorization, integrity, failure cleanup, and reconciliation
-  tests pass if that adapter is enabled;
-- each advertised realtime accelerator passes reconnect, replay, authorization,
-  and Inbox recovery tests;
-- OpenClaw host compatibility is stated only for the exact host/runtime versions
-  actually validated;
-- an operator runbook covers migrations, rollback, credential rotation, restore,
-  capacity, incident response, and audit access.
-
-### Phase 2 non-goals
-
-- cross-domain federation or public Internet routing;
-- reputation, marketplace, payments, bidding, or SLA enforcement;
-- distributed exactly-once execution;
-- Kafka, Kubernetes, or microservice decomposition without measured need;
-- a workflow engine, LLM router, or server-side interpretation of task content;
-- a complex human messaging/social UI.
-
-## Phase 3 — Federation, signing, and A2A interoperability
-
-### Outcomes
-
-Phase 3 allows independently operated domains to discover and exchange durable
-messages without discarding local mailbox semantics.
-
-#### Cross-domain federation
-
-- Define `/.well-known/` discovery metadata, supported protocol versions,
-  endpoint selection, cache TTL, negative caching, redirect policy, and DNS/TLS
-  verification.
-- Add authenticated server-to-server transport, domain trust policy, signed
-  messages and receipts, replay windows, clock-skew handling, key discovery,
-  key rotation, and revocation.
-- Persist outbound remote delivery attempts separately from immutable message
-  content; add bounded retry, backoff, remote acceptance receipts, terminal
-  failure, and operator-visible dead letters.
-- Preserve recipient-domain Inbox acceptance as the delivery guarantee. A sender
-  server's queued attempt is not the receiver's `delivered` state.
-- Enforce local Agent/domain ACLs and anti-spam controls before federation send and
-  again at the receiving domain. Avoid user and address enumeration.
-- Transfer attachments with audience-bound, expiring authorization and integrity
-  checks; defend against SSRF, redirect abuse, oversized content, malicious media,
-  and credential leakage.
-- Add cross-domain directory discovery only with provenance, freshness, trust,
-  and capability-verification status. Discovery never implies authorization.
-
-#### A2A runtime compatibility
-
-- Implement an adapter-owned A2A endpoint for a selected, pinned protocol version
-  without importing A2A into AgentPost core.
-- Persist principal- and endpoint-scoped Task/Message/context bindings so retries
-  and restarts return the same resources.
-- Keep AgentPost Delivery and A2A Task as independent state machines: AgentPost
-  ACK never means A2A Task `completed`, and A2A completion never silently ACKs an
-  Inbox Delivery.
-- Generate schema-valid Agent Cards and Skills from reachable endpoints and
-  truthful, self-declared or verified capabilities. Use the documented generic
-  asynchronous-messaging fallback when no valid skill exists.
-- Map Parts and Artifacts through the normal untrusted-content and attachment
-  authorization boundary.
-- Advertise polling, streaming, push notifications, cancellation, and extended
-  Cards only when the corresponding runtime operation and conformance suite pass.
-- Keep the AgentPost Inbox available to HTTP/SDK clients even when the A2A adapter
-  is enabled.
-
-### Phase 3 release gates
-
-- Two independently configured server domains complete send, offline acceptance,
-  restart, retrieval, explicit ACK, reply, retry, and attachment scenarios over
-  real TLS.
-- Discovery poisoning, DNS rebinding, TLS failure, stale metadata, redirect, and
-  downgrade tests fail closed without losing accepted local mail.
-- Server and signing-key rotation/revocation pass without accepting replayed or
-  impersonated messages and without stranding valid deliveries.
-- Cross-domain idempotency and receipts survive loss, duplication, reordering,
-  timeout, and either server restarting.
-- Federation abuse tests cover allow/block precedence, rate limits, spam,
-  enumeration, domain isolation, and dead-letter operations.
-- The selected official A2A conformance suite passes, plus AgentPost-specific
-  restart, binding-isolation, ACK/task separation, and attachment-security tests.
-- Agent Card output validates against the pinned A2A schema and does not advertise
-  an operation absent from the runtime.
-- A protocol compatibility, deprecation, and rollback policy is published before
-  more than one federation or A2A version is accepted.
-
-### Phase 3 non-goals
-
-- replacing the persistent Inbox with A2A Task history, streaming, or push;
-- trusting address domains, Agent Cards, metadata, or self-declared capabilities
-  as proof of identity or quality;
-- forking or reimplementing the complete A2A project;
-- public marketplace ranking, payment settlement, or autonomous task bidding;
-- making a broker, realtime socket, or remote server the local source of truth.
-
-## Phase 4 — Trust, organizations, and the Agent task network
-
-### Outcomes
-
-Phase 4 adds optional network-level coordination after durable communication and
-federation have operational evidence.
-
-- Extend the basic local organization scope into a directory with delegated
-  administration, verified domain ownership, membership history, private/public
-  visibility, and auditable capability assertions.
-- Add capability verification with evidence provenance, issuer identity, expiry,
-  revocation, and a clear distinction between self-declared, externally verified,
-  and observed performance claims.
-- Develop abuse-resistant reputation signals. Separate delivery reliability,
-  task quality, timeliness, disputes, and policy violations; never collapse them
-  into an unexplained universal score.
-- Add Agent availability and presence as expiring hints only. Offline delivery
-  never depends on a presence service.
-- Add delegation chains with bounded authority, expiry, revocation, audience,
-  task scope, and human approval where required.
-- Extend group addresses across organizations with membership privacy, historical
-  delivery semantics, moderation, and rate limits.
-- Explore marketplace discovery, paid tasks, SLA offers, task bidding, escrow,
-  receipts, and dispute workflows as opt-in services outside the core Inbox.
-- Define interoperable Agent Address, capability, delegation, and signed-receipt
-  profiles through open, versioned specifications.
-
-### Phase 4 release gates
-
-- Organization and delegation authorization is formally modeled and tested for
-  confused-deputy, privilege escalation, stale membership, replay, and revocation.
-- Capability and reputation inputs expose provenance, uncertainty, expiry, appeal,
-  correction, and Sybil/abuse defenses.
-- Any paid-task path completes legal/compliance review, payment-security review,
-  sanctions/fraud controls where applicable, refund and dispute handling, ledger
-  reconciliation, and human approval boundaries.
-- SLA measurement uses auditable timestamps and explicitly separates network
-  delivery from task execution quality.
-- Privacy review covers public directory exposure, cross-domain correlation,
-  retention, deletion, organization exports, and data-subject requests.
-- Failure of directory, reputation, presence, marketplace, or payment services
-  cannot prevent retrieval of already accepted Inbox messages.
-
-### Phase 4 non-goals
-
-- blockchain as a default identity, delivery, reputation, or payment mechanism;
-- autonomous access to funds or irreversible actions without explicit policy and
-  approval;
-- treating reputation, payment, or marketplace rank as authentication;
-- moving LLM routing, task interpretation, or a general workflow engine into the
-  AgentPost core;
-- centralizing every Agent or requiring one framework, model, or cloud provider;
-- weakening Inbox durability, sender authentication, ACLs, untrusted-content
-  labeling, or auditability to improve marketplace conversion.
+1. 对 Codex、WorkBuddy、豆包工作、OpenClaw、Hermes、Manus 做统一合同测试。
+2. 保持 macOS、Linux、Windows 独立 runtime 升级，验证旧进程不被破坏。
+3. 发布签名制品、版本矩阵、SHA-256 和机器可读兼容策略。
+4. 只有机器合同发布真实运行端点后，才扩展 A2A 或跨服务能力。
 
 ## Sequencing rule
 
-Later-phase work must not bypass earlier release gates. In particular:
-
-1. PostgreSQL/Compose reliability and operational security precede federation.
-2. Honest adapter host validation precedes compatibility claims.
-3. Signed cross-domain identity and abuse controls precede public discovery.
-4. Proven federation safety precedes reputation, marketplace, payment, or SLA
-   features.
-5. At every phase, optional acceleration and coordination layers may fail while
-   the persistent Inbox remains retrievable.
+任何新多人能力都必须扩展 TaskMembership、Task Thread 和 Agent Run，不得建立平行容器、第二套
+成员角色或另一套共享消息语义。实施节奏固定为：设计 → 小切片 → 测试 → 真实界面 → 修复 → 提交。

@@ -28,11 +28,6 @@ from agentpost.control.models import (
     HumanThreadArchive,
     HumanThreadView,
     HumanUser,
-    Organization,
-)
-from agentpost.control.organization_service import (
-    list_orbit_organizations,
-    list_organization_agent_access,
 )
 from agentpost.control.schemas import (
     AgentAccessResponse,
@@ -46,7 +41,6 @@ from agentpost.control.schemas import (
     OrbitMessageAgent,
     OrbitMessageAttachment,
     OrbitMetrics,
-    OrbitOrganizationReference,
     OrbitTask,
     OrbitThreadArchiveState,
     OrbitThreadDetail,
@@ -91,9 +85,6 @@ class AccessEntry:
     agent: Agent
     role: str
     granted_at: datetime
-    source: str = "direct"
-    organization: Organization | None = None
-    organization_role: str | None = None
 
 
 def human_profile(user: HumanUser) -> HumanProfile:
@@ -416,33 +407,6 @@ def list_agent_access(session: Session, user: HumanUser) -> list[AccessEntry]:
         if existing is None or priority[entry.role] > priority[existing.role]:
             entries[entry.agent.id] = entry
 
-    organization_role_projection = {
-        "owner": "operator",
-        "admin": "operator",
-        "member": "viewer",
-        "auditor": "auditor",
-    }
-    for organization_access in list_organization_agent_access(session, user):
-        organization_entry = AccessEntry(
-            agent=organization_access.agent,
-            role=organization_role_projection[organization_access.membership_role],
-            granted_at=organization_access.granted_at,
-            source="organization",
-            organization=organization_access.organization,
-            organization_role=organization_access.membership_role,
-        )
-        existing = entries.get(organization_entry.agent.id)
-        if existing is None or priority[organization_entry.role] > priority[existing.role]:
-            entries[organization_entry.agent.id] = organization_entry
-        elif existing.organization is None:
-            entries[organization_entry.agent.id] = AccessEntry(
-                agent=existing.agent,
-                role=existing.role,
-                granted_at=existing.granted_at,
-                source=existing.source,
-                organization=organization_access.organization,
-                organization_role=organization_access.membership_role,
-            )
     return sorted(entries.values(), key=lambda entry: entry.agent.address)
 
 
@@ -622,7 +586,6 @@ def _message_rows(
     if thread_id is not None:
         statement = statement.where(Message.thread_id == thread_id)
     rows = list(session.execute(statement).all())
-    rows = _deduplicate_channel_rows(rows)
     return rows[:limit] if limit is not None else rows
 
 
@@ -651,23 +614,7 @@ def _task_rows(
         .order_by(desc(Message.created_at), desc(Message.id))
     )
     rows = list(session.execute(statement).all())
-    rows = _deduplicate_channel_rows(rows)
     return rows[:limit] if limit is not None else rows
-
-
-def _deduplicate_channel_rows(
-    rows: list[tuple[Message, Delivery, Agent, Agent]],
-) -> list[tuple[Message, Delivery, Agent, Agent]]:
-    result: list[tuple[Message, Delivery, Agent, Agent]] = []
-    seen_events: set[str] = set()
-    for row in rows:
-        event_id = (row[0].message_metadata or {}).get("organization_event_id")
-        if event_id:
-            if str(event_id) in seen_events:
-                continue
-            seen_events.add(str(event_id))
-        result.append(row)
-    return result
 
 
 def _responses_for_tasks(session: Session, task_ids: list[str]) -> dict[str, Message]:
@@ -760,33 +707,6 @@ def _orbit_message_agent(
     )
 
 
-def _requested_responder_agents(
-    metadata: dict[str, object],
-    agents_by_id: dict[UUID, Agent],
-    connector_types: dict[UUID, str],
-    owner_humans: dict[UUID, HumanUser],
-    current_human_id: UUID,
-) -> list[OrbitMessageAgent]:
-    responders: list[OrbitMessageAgent] = []
-    for raw_agent_id in metadata.get("requested_responder_agent_ids", []):
-        try:
-            agent_id = UUID(str(raw_agent_id))
-        except (TypeError, ValueError):
-            continue
-        agent = agents_by_id.get(agent_id)
-        if agent is None:
-            continue
-        responders.append(
-            _orbit_message_agent(
-                agent,
-                connector_types,
-                owner_humans,
-                current_human_id,
-            )
-        )
-    return responders
-
-
 def _as_utc(value: datetime | None) -> datetime | None:
     if value is None:
         return None
@@ -815,7 +735,6 @@ def _orbit_message(
     task_results: dict[str, Message],
     connector_types: dict[UUID, str],
     owner_humans: dict[UUID, HumanUser],
-    agents_by_id: dict[UUID, Agent],
     current_human_id: UUID,
 ) -> OrbitMessage:
     message, delivery, sender, recipient = row
@@ -826,7 +745,6 @@ def _orbit_message(
     )
     task_payload = message.task_payload or {}
     result_payload = message.result_payload or {}
-    metadata = message.message_metadata or {}
     return OrbitMessage(
         message_id=message.id,
         sender=_orbit_message_agent(
@@ -883,28 +801,6 @@ def _orbit_message(
         ),
         communication_state=delivery.delivery_status,
         work_state=_work_state_for(message, task_results),
-        channel_scope=(
-            "organization" if metadata.get("channel_scope") == "organization" else "direct"
-        ),
-        organization_id=(
-            UUID(str(metadata["organization_id"]))
-            if metadata.get("channel_scope") == "organization" and metadata.get("organization_id")
-            else None
-        ),
-        organization_name=(
-            str(metadata["organization_name"]) if metadata.get("organization_name") else None
-        ),
-        requested_responder_addresses=[
-            str(address) for address in metadata.get("requested_responder_addresses", [])
-        ],
-        requested_responders=_requested_responder_agents(
-            metadata,
-            agents_by_id,
-            connector_types,
-            owner_humans,
-            current_human_id,
-        ),
-        organization_recipient_count=int(metadata.get("organization_recipient_count") or 0),
         created_at=message.created_at,
     )
 
@@ -918,7 +814,6 @@ def list_orbit_messages(
     entries = list_agent_access(session, user)
     role_map = {entry.agent.id: entry.role for entry in entries}
     entries_by_agent = {entry.agent.id: entry for entry in entries}
-    agents_by_id = {entry.agent.id: entry.agent for entry in entries}
     rows = [
         row
         for row in _message_rows(session, agent_ids=set(role_map), limit=limit)
@@ -938,39 +833,9 @@ def list_orbit_messages(
             task_results=task_results,
             connector_types=connector_types,
             owner_humans=owner_humans,
-            agents_by_id=agents_by_id,
             current_human_id=user.id,
         )
         for row in rows
-    ]
-
-
-def _thread_channel_organization(
-    rows: list[tuple[Message, Delivery, Agent, Agent]],
-) -> list[OrbitOrganizationReference]:
-    """Project an organization Thread from its durable channel metadata only."""
-
-    organization_message = next(
-        (
-            message
-            for message, _, _, _ in rows
-            if (message.message_metadata or {}).get("channel_scope") == "organization"
-        ),
-        None,
-    )
-    if organization_message is None:
-        return []
-    metadata = organization_message.message_metadata or {}
-    organization_id = metadata.get("organization_id")
-    if not organization_id:
-        return []
-    return [
-        OrbitOrganizationReference(
-            id=UUID(str(organization_id)),
-            slug=str(metadata.get("organization_slug") or "organization"),
-            name=str(metadata.get("organization_name") or "组织协作"),
-            membership_role=None,
-        )
     ]
 
 
@@ -978,51 +843,23 @@ def _row_visible_after_access_grant(
     row: tuple[Message, Delivery, Agent, Agent],
     entries_by_agent: dict[UUID, AccessEntry],
 ) -> bool:
-    """Do not expose pre-assignment history through organization-derived access."""
-
-    return _message_visible_after_access_grant(
-        row[0],
-        recipient_agent_id=row[1].recipient_agent_id,
-        entries_by_agent=entries_by_agent,
+    message, delivery, _, _ = row
+    return (
+        message.sender_agent_id in entries_by_agent
+        or delivery.recipient_agent_id in entries_by_agent
     )
-
-
-def _message_visible_after_access_grant(
-    message: Message,
-    *,
-    recipient_agent_id: UUID,
-    entries_by_agent: dict[UUID, AccessEntry],
-) -> bool:
-    created_at = _as_utc(message.created_at)
-    for participant_id in (message.sender_agent_id, recipient_agent_id):
-        entry = entries_by_agent.get(participant_id)
-        if entry is None:
-            continue
-        if entry.source != "organization":
-            return True
-        organization = entry.organization
-        metadata = message.message_metadata or {}
-        if (
-            organization is not None
-            and created_at >= _as_utc(entry.granted_at)
-            and metadata.get("channel_scope") == "organization"
-            and metadata.get("organization_id") == str(organization.id)
-        ):
-            return True
-    return False
 
 
 def _thread_rows_match_query(
     rows: list[tuple[Message, Delivery, Agent, Agent]],
     *,
     role_map: dict[UUID, str],
-    organizations: list[OrbitOrganizationReference],
     query: str | None,
 ) -> bool:
     if query is None or not query.strip():
         return True
     needle = query.strip().casefold()
-    searchable: list[str] = [item.name for item in organizations]
+    searchable: list[str] = []
     for message, delivery, sender, recipient in rows:
         searchable.extend(
             [
@@ -1062,30 +899,6 @@ def _orbit_thread_data(
         row
         for row in _message_rows(session, agent_ids=agent_ids, limit=None, thread_id=thread_id)
         if _row_visible_after_access_grant(row, entries_by_agent)
-    ]
-    organization_ids = {
-        UUID(str(metadata["organization_id"]))
-        for message, _, _, _ in rows
-        if (metadata := message.message_metadata or {}).get("channel_scope") == "organization"
-        and metadata.get("organization_id")
-    }
-    active_organization_ids = (
-        set(
-            session.scalars(
-                select(Organization.id).where(
-                    Organization.id.in_(organization_ids),
-                    Organization.status == "active",
-                )
-            )
-        )
-        if organization_ids
-        else set()
-    )
-    rows = [
-        row
-        for row in rows
-        if (metadata := row[0].message_metadata or {}).get("channel_scope") != "organization"
-        or UUID(str(metadata["organization_id"])) in active_organization_ids
     ]
     grouped: dict[UUID, list[tuple[Message, Delivery, Agent, Agent]]] = {}
     for row in rows:
@@ -1149,23 +962,9 @@ def list_orbit_threads(
         participant_ids = set(participant_agents)
         if agent_id is not None and agent_id not in participant_ids:
             continue
-        organization_message = next(
-            (
-                message
-                for message, _, _, _ in rows
-                if (message.message_metadata or {}).get("channel_scope") == "organization"
-            ),
-            None,
-        )
-        is_organization_channel = organization_message is not None
-        organization_metadata = (
-            organization_message.message_metadata or {} if organization_message is not None else {}
-        )
-        organizations = _thread_channel_organization(rows)
         if not _thread_rows_match_query(
             rows,
             role_map=role_map,
-            organizations=organizations,
             query=query,
         ):
             continue
@@ -1228,18 +1027,6 @@ def list_orbit_threads(
                         key=lambda item: (item.display_name.casefold(), item.address),
                     )
                 ],
-                organizations=organizations,
-                channel_scope=("organization" if is_organization_channel else "direct"),
-                organization_id=(
-                    UUID(str(organization_metadata["organization_id"]))
-                    if organization_metadata.get("organization_id")
-                    else None
-                ),
-                organization_name=(
-                    str(organization_metadata["organization_name"])
-                    if organization_metadata.get("organization_name")
-                    else None
-                ),
                 latest_message_id=latest_message.id,
                 latest_message_type=latest_message.message_type,
                 latest_message_summary=(latest_message.content_body if latest_allowed else None),
@@ -1286,7 +1073,6 @@ def get_orbit_thread(
     for _, _, sender, recipient in rows:
         participant_agents[sender.id] = sender
         participant_agents[recipient.id] = recipient
-    agents_by_id = {entry.agent.id: entry.agent for entry in entries}
     thread_view = session.get(HumanThreadView, (user.id, thread_id))
     thread_archive = session.get(HumanThreadArchive, (user.id, thread_id))
     latest_message = rows[-1][0]
@@ -1305,7 +1091,6 @@ def get_orbit_thread(
                 key=lambda item: (item.display_name.casefold(), item.address),
             )
         ],
-        organizations=_thread_channel_organization(rows),
         messages=[
             _orbit_message(
                 row,
@@ -1313,7 +1098,6 @@ def get_orbit_thread(
                 task_results=task_results,
                 connector_types=connector_types,
                 owner_humans=owner_humans,
-                agents_by_id=agents_by_id,
                 current_human_id=user.id,
             )
             for row in rows
@@ -1435,11 +1219,7 @@ def get_orbit_attachment(
     ).all()
     if not any(
         _content_allowed(role_map, message.sender_agent_id, recipient_id)
-        and _message_visible_after_access_grant(
-            message,
-            recipient_agent_id=recipient_id,
-            entries_by_agent=entries_by_agent,
-        )
+        and (message.sender_agent_id in entries_by_agent or recipient_id in entries_by_agent)
         for message, recipient_id in deliveries
     ):
         raise OrbitAttachmentNotFoundError(str(attachment_id))
@@ -1550,7 +1330,6 @@ def build_orbit_dashboard(
         session,
         agent_ids | {agent.id for row in recent_rows for agent in row[2:]},
     )
-    agents_by_id = {entry.agent.id: entry.agent for entry in entries}
     recent_messages = [
         _orbit_message(
             row,
@@ -1558,7 +1337,6 @@ def build_orbit_dashboard(
             task_results=recent_task_results,
             connector_types=connector_types,
             owner_humans=owner_humans,
-            agents_by_id=agents_by_id,
             current_human_id=user.id,
         )
         for row in recent_rows
@@ -1574,8 +1352,6 @@ def build_orbit_dashboard(
                 Delivery.delivery_status == "delivered",
             )
         )
-        if entry.source == "organization":
-            unread_query = unread_query.where(Message.created_at >= entry.granted_at)
         unread_by_agent[entry.agent.id] = int(session.scalar(unread_query) or 0)
 
     pending_by_agent: dict[UUID, int] = {agent_id: 0 for agent_id in agent_ids}
@@ -1609,17 +1385,6 @@ def build_orbit_dashboard(
                 status=entry.agent.status,
                 role=entry.role,
                 is_default=(entry.agent.id == user.default_agent_id),
-                access_source=entry.source,
-                organization=(
-                    OrbitOrganizationReference(
-                        id=entry.organization.id,
-                        slug=entry.organization.slug,
-                        name=entry.organization.name,
-                        membership_role=entry.organization_role,
-                    )
-                    if entry.organization is not None
-                    else None
-                ),
                 capabilities=list(entry.agent.capabilities),
                 last_seen_at=entry.agent.last_seen_at,
                 connection_state=connector_connection_state(
@@ -1655,7 +1420,6 @@ def build_orbit_dashboard(
             failed_task_count=failed_task_count,
             pending_approval_count=pending_human_approval_count(session, user=user),
         ),
-        organizations=list_orbit_organizations(session, user),
         agents=agents,
         recent_messages=recent_messages,
         tasks=tasks[:12],

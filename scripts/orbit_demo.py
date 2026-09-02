@@ -109,7 +109,6 @@ def _seed(settings: Settings) -> None:
             201,
         )
         human_id = registration["user"]["id"]
-        csrf_token = registration["csrf_token"]
         admin_headers = {"Authorization": f"Bearer {ADMIN_TOKEN}"}
 
         personal = _agent(
@@ -206,14 +205,6 @@ def _seed(settings: Settings) -> None:
                 201,
             )
 
-        owner_session = _require(
-            client.post(
-                "/api/v1/auth/login",
-                json={"email": DEMO_EMAIL, "password": DEMO_PASSWORD},
-            ),
-            200,
-        )
-        csrf_token = owner_session["csrf_token"]
         _require(
             client.put(
                 f"/api/v1/admin/humans/{human_id}/agents/{waiting['agent']['id']}",
@@ -222,35 +213,31 @@ def _seed(settings: Settings) -> None:
             ),
             200,
         )
-
-        organization = _require(
+        task = _require(
             client.post(
-                "/api/v1/orbit/organizations",
-                headers={"X-CSRF-Token": csrf_token},
+                "/api/v1/agent/tasks",
+                headers=_agent_headers(personal, "demo-task-create"),
                 json={
-                    "slug": "joint-research",
-                    "name": "联合研究组",
-                    "description": "用于行业资料核对与协作结论整理。",
+                    "title": "完成本周行业研究",
+                    "goal": "核对公开资料并形成 Human 可验收的研究结论",
+                    "expected_output": "三条结论、来源边界和下一步建议",
                 },
             ),
             201,
         )
         _require(
-            client.put(
-                f"/api/v1/admin/organizations/{organization['organization']['id']}/agents/{research['agent']['id']}",
-                headers=admin_headers,
+            client.post(
+                f"/api/v1/agent/tasks/{task['task_id']}/messages",
+                headers=_agent_headers(personal, "demo-task-progress"),
+                json={
+                    "subject": "已开始核对资料",
+                    "content_format": "text",
+                    "body": "正在核对公开报告与机构公告，完成后提交研究结论。",
+                },
             ),
-            200,
+            201,
         )
 
-        owner_session = _require(
-            client.post(
-                "/api/v1/auth/login",
-                json={"email": DEMO_EMAIL, "password": DEMO_PASSWORD},
-            ),
-            200,
-        )
-        csrf_token = owner_session["csrf_token"]
         _require(
             client.post(
                 "/api/v1/messages",
@@ -265,14 +252,6 @@ def _seed(settings: Settings) -> None:
             ),
             201,
         )
-        _require(
-            client.put(
-                f"/api/v1/admin/organizations/{organization['organization']['id']}/agents/{personal['agent']['id']}",
-                headers=admin_headers,
-            ),
-            200,
-        )
-
         pending_task = _require(
             client.post(
                 "/api/v1/messages",
@@ -405,62 +384,19 @@ def _seed(settings: Settings) -> None:
             ),
             201,
         )
-        organization_message = _require(
-            client.post(
-                f"/api/v1/organizations/{organization['organization']['id']}/channel/messages",
-                headers=_agent_headers(personal, "demo-organization-channel-task"),
-                json={
-                    "type": "task",
-                    "subject": "本周研究结论协作",
-                    "content": {
-                        "format": "text",
-                        "body": "请结合已有核对结果，给出本周研究结论和下一步。",
-                    },
-                    "task": {
-                        "instruction": "整理本周研究结论和下一步",
-                        "expected_output": "三条结论与负责人建议",
-                    },
-                    "requested_responder_agent_ids": [research["agent"]["id"]],
-                },
-            ),
-            201,
-        )
-        _require(
-            client.post(
-                f"/api/v1/organizations/{organization['organization']['id']}/channel/messages",
-                headers=_agent_headers(research, "demo-organization-channel-result"),
-                json={
-                    "type": "result",
-                    "subject": "本周研究结论已整理",
-                    "content": {
-                        "format": "json",
-                        "body": {
-                            "summary": "结论、来源边界和下一步均已整理",
-                            "status": "completed",
-                            "next_steps": ["由北辰助理确认发布范围"],
-                        },
-                    },
-                    "result": {
-                        "status": "completed",
-                        "summary": "结论、来源边界和下一步均已整理",
-                    },
-                    "thread_id": organization_message["thread_id"],
-                    "reply_to_event_id": organization_message["event_id"],
-                    "requested_responder_agent_ids": [personal["agent"]["id"]],
-                },
-            ),
-            201,
-        )
         _require(
             client.post(
                 "/api/v1/approval-requests",
                 headers=_agent_headers(personal, "demo-approval"),
                 json={
                     "action_type": "publish.report",
-                    "summary": "允许向组织成员发布研究摘要",
+                    "summary": "允许发布任务研究摘要",
                     "justification": "摘要已完成来源核对，需要 Human 明确授权后继续。",
                     "risk_level": "medium",
-                    "payload": {"report_id": "local-demo-report", "audience": "organization"},
+                    "payload": {
+                        "report_id": "local-demo-report",
+                        "task_id": completed_task["message_id"],
+                    },
                 },
             ),
             201,
@@ -565,8 +501,8 @@ def _settings(data_dir: Path, port: int) -> Settings:
         email_delivery_mode="test",
         rate_limit_enabled=False,
         public_base_url=f"http://127.0.0.1:{port}",
-        connector_release_version="0.1.41",
-        connector_wheel_url="https://agentpost.me/downloads/agentpost-0.1.41-py3-none-any.whl",
+        connector_release_version="0.1.42",
+        connector_wheel_url="https://agentpost.me/downloads/agentpost-0.1.42-py3-none-any.whl",
         connector_wheel_sha256="083a94fc79acc3bb0d8d1b6cd2bae76107c00cf560e46bb10a5bd9b7e96f70bf",
         log_level="WARNING",
     )

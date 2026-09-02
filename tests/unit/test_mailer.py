@@ -83,11 +83,13 @@ def test_implicit_tls_smtp_does_not_issue_starttls(monkeypatch) -> None:
         smtp_ssl=True,
     )
 
-    mailer.deliver_organization_invitation(
+    mailer.deliver_task_membership_notification(
         settings,
         email="colleague@example.com",
-        organization_name="Pilot",
-        verification_uri="https://agentpost.me/orbit?invitation=invite_opaque",
+        inviter_name="负责人",
+        task_title="Pilot",
+        task_id="00000000-0000-0000-0000-000000000001",
+        agent_name="codex",
     )
 
     assert client.started_tls is False

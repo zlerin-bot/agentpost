@@ -51,6 +51,6 @@ copying and can safely survive Connector migration and refresh-token replay. The
 scope is intentionally narrow.
 
 This ADR does **not** claim support for generic OAuth Authorization Code + PKCE,
-dynamic client registration, CIMD, enterprise OIDC, or any named third-party
+dynamic client registration, CIMD, Human identity federation, or any named third-party
 host. Each additional profile needs its own threat model, implementation, and
 real-host acceptance evidence before it is advertised.

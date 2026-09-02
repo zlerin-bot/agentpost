@@ -364,17 +364,6 @@ footer {
   margin-top: 12px;
 }
 
-.oidc-entry {
-  display: grid;
-  gap: 0.65rem;
-  margin-top: 0.8rem;
-}
-
-.oidc-options {
-  display: grid;
-  gap: 0.5rem;
-}
-
 .text-button {
   border: 0;
   background: transparent;
@@ -767,8 +756,7 @@ footer {
 }
 
 .thread-browser-heading span:not(.count-pill),
-.thread-search > span,
-.thread-organization-filter > span {
+.thread-search > span {
   color: var(--muted);
   font-size: 0.61rem;
 }
@@ -777,15 +765,13 @@ footer {
   font-size: 0.88rem;
 }
 
-.thread-search,
-.thread-organization-filter {
+.thread-search {
   display: grid;
   gap: 6px;
   margin-bottom: 10px;
 }
 
-.thread-search input,
-.thread-organization-filter select {
+.thread-search input {
   width: 100%;
   min-height: 38px;
   border: 1px solid var(--line-strong);
@@ -935,11 +921,6 @@ footer {
 .thread-marker.exception {
   border-color: rgba(255, 147, 141, 0.34);
   color: var(--red);
-}
-
-.thread-marker.organization {
-  border-color: rgba(172, 155, 255, 0.32);
-  color: var(--violet);
 }
 
 .agent-mini-avatar,
@@ -1698,7 +1679,6 @@ summary:focus-visible {
 }
 
 .agent-grid,
-.organization-grid,
 .connector-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1706,7 +1686,6 @@ summary:focus-visible {
 }
 
 .agent-card,
-.organization-card,
 .message-card,
 .governance-grid article,
 .empty-state {
@@ -1897,194 +1876,6 @@ summary:focus-visible {
   opacity: 0.78;
 }
 
-.organization-card {
-  display: grid;
-  gap: 16px;
-  padding: 19px;
-  background:
-    radial-gradient(circle at 100% 0, rgba(172, 155, 255, 0.1), transparent 12rem),
-    rgba(5, 14, 28, 0.48);
-}
-
-.organization-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.organization-heading > div {
-  display: grid;
-  min-width: 0;
-  gap: 4px;
-}
-
-.organization-heading strong {
-  overflow-wrap: anywhere;
-}
-
-.organization-card-actions {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.organization-card-actions .quiet-button {
-  min-height: 36px;
-  padding-inline: 12px;
-}
-
-.organization-member-list {
-  gap: 12px;
-}
-
-.organization-member-card {
-  display: grid;
-  gap: 12px;
-  padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.025);
-}
-
-.organization-member-heading,
-.organization-member-agent {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.organization-member-heading > div:first-child,
-.organization-member-agent > div {
-  display: grid;
-  min-width: 0;
-  gap: 4px;
-}
-
-.organization-member-heading span,
-.organization-member-agent span,
-.organization-member-agent-count {
-  color: var(--muted);
-  font-size: 0.66rem;
-  overflow-wrap: anywhere;
-}
-
-.organization-member-agents {
-  display: grid;
-  gap: 8px;
-  padding-top: 10px;
-  border-top: 1px solid var(--line);
-}
-
-.organization-member-agent {
-  padding: 9px 10px;
-  border-radius: 10px;
-  background: rgba(86, 144, 255, 0.07);
-}
-
-.organization-member-agent strong {
-  overflow-wrap: anywhere;
-}
-
-.organization-ungrouped-agents > span {
-  color: var(--muted);
-  font-size: 0.66rem;
-  line-height: 1.5;
-}
-
-.organization-heading span:not(.data-chip) {
-  color: var(--muted);
-  font: 0.64rem ui-monospace, monospace;
-  overflow-wrap: anywhere;
-}
-
-.organization-card > p {
-  min-height: 44px;
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.72rem;
-  line-height: 1.6;
-}
-
-.organization-role-guide {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  margin-bottom: 18px;
-}
-
-.organization-role-guide article,
-.organization-role-summary,
-.organization-role-boundary,
-.organization-invitation-summary article {
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: rgba(103, 216, 212, 0.045);
-}
-
-.organization-role-guide article {
-  display: grid;
-  align-content: start;
-  gap: 6px;
-  padding: 13px;
-}
-
-.organization-role-guide span,
-.organization-invitation-summary span {
-  color: var(--cyan);
-  font-size: 0.62rem;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.organization-role-guide strong {
-  font-size: 0.76rem;
-}
-
-.organization-role-guide p,
-.organization-role-summary p,
-.organization-role-boundary p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.68rem;
-  line-height: 1.55;
-}
-
-.organization-role-summary {
-  display: grid;
-  gap: 5px;
-  padding: 11px 12px;
-}
-
-.organization-role-summary strong,
-.organization-role-boundary strong {
-  color: var(--text);
-  font-size: 0.72rem;
-}
-
-.organization-card dl {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  margin: 0;
-}
-
-.organization-card dl div {
-  border-top: 1px solid var(--line);
-  padding-top: 10px;
-}
-
-.organization-card dt {
-  color: var(--muted);
-  font-size: 0.6rem;
-}
-
-.organization-card dd {
-  margin: 5px 0 0;
-  font-size: 1rem;
-}
-
 .agent-card {
   display: grid;
   gap: 19px;
@@ -2162,13 +1953,6 @@ summary:focus-visible {
   color: var(--gold);
 }
 
-.agent-organization {
-  border-left: 2px solid var(--violet);
-  color: #c1b8ff;
-  padding-left: 9px;
-  font-size: 0.66rem;
-}
-
 .agent-card-top,
 .task-heading,
 .message-heading,
@@ -2225,8 +2009,6 @@ summary:focus-visible {
 .data-chip.operator,
 .data-chip.viewer,
 .data-chip.auditor,
-.data-chip.admin,
-.data-chip.member,
 .data-chip.read {
   border-color: rgba(103, 216, 212, 0.35);
   color: var(--cyan);
@@ -2551,169 +2333,6 @@ summary:focus-visible {
 
 .secret-output[hidden] {
   display: none;
-}
-
-.organization-dialog {
-  width: min(760px, calc(100% - 32px));
-}
-
-.organization-invitation-dialog {
-  width: min(640px, calc(100% - 32px));
-}
-
-.organization-invitation-summary {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.organization-invitation-summary article {
-  display: grid;
-  gap: 5px;
-  padding: 13px;
-}
-
-.organization-invitation-summary small {
-  color: var(--muted);
-  overflow-wrap: anywhere;
-}
-
-.organization-role-boundary {
-  display: grid;
-  gap: 6px;
-  padding: 13px;
-}
-
-.invitation-boundary {
-  border-color: rgba(103, 216, 212, 0.28);
-}
-
-.organization-governance-section {
-  display: grid;
-  gap: 9px;
-  border-top: 1px solid var(--line);
-  padding-top: 4px;
-}
-
-.organization-governance-section[hidden] {
-  display: none;
-}
-
-.organization-disband-section {
-  margin-top: 12px;
-  padding: 12px;
-  border: 1px solid color-mix(in srgb, var(--danger) 38%, var(--line));
-  border-radius: 12px;
-}
-
-.organization-disband-section[hidden] {
-  display: none;
-}
-
-.organization-disband-section > summary {
-  cursor: pointer;
-  color: var(--danger);
-  font-weight: 700;
-}
-
-.organization-disband-fields {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin: 12px 0;
-}
-
-.organization-disband-fields > div {
-  display: grid;
-  gap: 7px;
-}
-
-@media (max-width: 620px) {
-  .organization-disband-fields {
-    grid-template-columns: 1fr;
-  }
-}
-
-.organization-dialog h3 {
-  margin: 12px 0 0;
-  color: var(--gold);
-  font-size: 0.82rem;
-}
-
-.organization-invite-fields {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 130px;
-  gap: 12px;
-}
-
-.organization-invite-fields > div {
-  display: grid;
-  gap: 7px;
-}
-
-.organization-agent-actions {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 7px 10px;
-  align-items: end;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.025);
-}
-
-.organization-agent-actions label:first-child {
-  grid-column: 1;
-}
-
-.organization-agent-actions select {
-  grid-column: 1;
-}
-
-.organization-agent-actions button {
-  grid-column: 2;
-  grid-row: 2;
-  white-space: nowrap;
-}
-
-.organization-agent-remove-confirmation {
-  grid-column: 1 / -1;
-  color: var(--muted);
-  font-size: 0.68rem;
-}
-
-.organization-agent-remove-confirmation summary {
-  cursor: pointer;
-}
-
-.organization-agent-remove-confirmation[open] {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 7px;
-}
-
-.organization-domain-section {
-  display: grid;
-  gap: 9px;
-  border-top: 1px solid var(--line);
-  margin-top: 5px;
-  padding-top: 4px;
-}
-
-.organization-domain-fields {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 9px;
-}
-
-.organization-oidc-fields {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.65rem;
-}
-
-.organization-oidc-fields button {
-  grid-column: 1 / -1;
 }
 
 .domain-proof {
@@ -3660,7 +3279,6 @@ button.thread-participant-chip {
 .entry-form input,
 .access-field input,
 .thread-search input,
-.thread-organization-filter select,
 .approval-dialog textarea,
 .approval-dialog input[type="email"],
 .approval-dialog input[type="text"],
@@ -3782,7 +3400,6 @@ button.thread-participant-chip {
 .profile-summary-grid article,
 .security-actions-grid article,
 .agent-card,
-.organization-card,
 .message-card,
 .governance-grid article,
 .empty-state,
@@ -3804,7 +3421,6 @@ button.thread-participant-chip {
 }
 
 .connector-card,
-.organization-card,
 .approval-card {
   background-image: none;
 }
@@ -3893,14 +3509,10 @@ button.thread-participant-chip {
 .thread-marker,
 .thread-participant-chip {
   background: #fff;
-}
-
-.agent-organization,
+},
 .data-chip.operator,
 .data-chip.viewer,
 .data-chip.auditor,
-.data-chip.admin,
-.data-chip.member,
 .data-chip.read {
   color: #185abc;
 }
@@ -4202,7 +3814,6 @@ footer {
   }
 
   .agent-grid,
-  .organization-grid,
   .connector-grid,
   .security-actions-grid,
   .governance-grid {
@@ -4399,29 +4010,12 @@ footer {
 
   .pairing-fields,
   .pairing-chat-card,
-  .organization-role-guide,
-  .organization-invitation-summary,
-  .organization-agent-actions,
-  .organization-invite-fields,
-  .organization-domain-fields,
-  .organization-oidc-fields,
   .connector-card dl,
   .connector-history-grid {
     grid-template-columns: 1fr;
-  }
-
-  .organization-agent-actions > * {
+  } > * {
     grid-column: 1 !important;
     grid-row: auto !important;
-  }
-
-  .organization-member-heading {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .organization-member-heading .governance-row-actions {
-    justify-content: flex-start;
   }
 
   .split-actions,
@@ -4647,120 +4241,6 @@ footer {
 
 .thread-list {
   gap: 11px;
-}
-
-.organization-thread-group {
-  overflow: hidden;
-  border: 1px solid #c6dafc;
-  border-radius: 16px;
-  background: #f7faff;
-}
-
-.organization-thread-group-summary {
-  display: flex;
-  min-height: 72px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 13px 15px;
-  color: #202124;
-  cursor: pointer;
-  list-style: none;
-}
-
-.organization-thread-group-summary::-webkit-details-marker {
-  display: none;
-}
-
-.organization-thread-group-summary:focus-visible {
-  outline: 3px solid rgba(26, 115, 232, 0.28);
-  outline-offset: -3px;
-}
-
-.organization-thread-group-identity,
-.organization-thread-group-status {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-}
-
-.organization-thread-group-identity {
-  gap: 11px;
-}
-
-.organization-thread-group-identity > span:last-child {
-  display: grid;
-  min-width: 0;
-  gap: 3px;
-}
-
-.organization-thread-group-identity strong,
-.organization-thread-group-identity small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.organization-thread-group-identity strong {
-  font-size: 0.82rem;
-}
-
-.organization-thread-group-identity small {
-  color: #5f6368;
-  font-size: 0.62rem;
-}
-
-.organization-thread-group-icon {
-  display: inline-flex;
-  width: 38px;
-  height: 38px;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  border-radius: 12px;
-  background: #e8f0fe;
-  color: #1967d2;
-  font-size: 0.65rem;
-  font-weight: 700;
-}
-
-.organization-thread-group-status {
-  flex: 0 0 auto;
-  gap: 9px;
-}
-
-.organization-thread-group-unread {
-  display: inline-flex;
-  min-width: 24px;
-  height: 24px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  background: #d93025;
-  color: #fff;
-  font-size: 0.58rem;
-  font-weight: 700;
-}
-
-.organization-thread-group-chevron {
-  color: #1967d2;
-  font-size: 1rem;
-  transition: transform 160ms ease;
-}
-
-.organization-thread-group:not([open]) .organization-thread-group-chevron {
-  transform: rotate(-90deg);
-}
-
-.organization-thread-children {
-  display: grid;
-  gap: 9px;
-  padding: 0 10px 10px 26px;
-}
-
-.thread-list-item.organization-thread-child {
-  min-height: 120px;
-  background: #fff;
 }
 
 .thread-list-item {
@@ -5042,19 +4522,6 @@ footer {
 
   .thread-list-item {
     min-height: 126px;
-  }
-
-  .organization-thread-group-summary {
-    min-height: 66px;
-    padding: 11px 12px;
-  }
-
-  .organization-thread-children {
-    padding: 0 7px 8px 14px;
-  }
-
-  .thread-list-item.organization-thread-child {
-    min-height: 118px;
   }
 
   .thread-detail-route {

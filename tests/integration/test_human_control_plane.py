@@ -196,7 +196,6 @@ def test_orbit_site_is_branded_and_does_not_persist_credentials(
     assert "login-password" in orbit.text
     assert "双重验证验证码（已开启时填写）" in orbit.text
     assert "恢复码每枚只能使用一次" in orbit.text
-    assert "使用单位统一登录（SSO）" in orbit.text
     assert 'id="legacy-entry"' not in orbit.text
     assert 'id="human-access-key"' not in orbit.text
     assert "旧版集成凭证（高级）" in orbit.text
@@ -236,13 +235,9 @@ def test_orbit_site_is_branded_and_does_not_persist_credentials(
     assert "AGENTPOST_API_KEY" not in orbit.text
     assert "agt_" not in orbit.text
     assert "账户安全" in orbit.text
-    assert 'data-section="organizations"' not in primary
-    assert 'requestJson("/api/v1/orbit/organization-invitations")' not in script.text
+    assert "task_id" in script.text
     assert "history.replaceState" in script.text
-    assert "organization-domain-name" in orbit.text
-    assert "/domains/" in script.text
-    assert "organizationDomainProofs.clear()" in script.text
-    assert "单位域名验证" in orbit.text
+    assert "多人协作只发生在明确的任务内" in orbit.text
     assert "Agent 连接" in orbit.text
     assert '<label for="pairing-handle">短名称</label>' in orbit.text
     assert 'id="pairing-handle-help"' in orbit.text
@@ -912,9 +907,8 @@ def test_owner_dashboard_separates_delivery_from_work_and_isolates_other_agents(
 
     assert before_result.status_code == after_result.status_code == 200
     before = before_result.json()
-    assert before["product"] == "星云驿"
-    assert before["surface"] == "星轨"
-    assert before["data_plane"] == "云驿"
+    assert before["product"] == "AgentPost"
+    assert before["collaboration_model"] == "task"
     assert before["metrics"]["agent_count"] == 1
     assert before["agents"][0]["address"] == "alice@agents.local"
     assert before["agents"][0]["role"] == "owner"

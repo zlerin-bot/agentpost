@@ -10,13 +10,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from agentpost.access.models import AccessRule
-from agentpost.control.models import (
-    AgentOwnership,
-    HumanUser,
-    Organization,
-    OrganizationAgent,
-    OrganizationMembership,
-)
+from agentpost.control.models import AgentOwnership, HumanUser
 from agentpost.directory.schemas import (
     DirectoryAgentProfile,
     DirectorySearchResponse,
@@ -80,7 +74,6 @@ class _CandidateContext:
     owner_display_name: str | None = None
     owner_username: str | None = None
     agent_type: str | None = None
-    organization_name: str | None = None
 
 
 def _normalize_text_query(value: str | None) -> str | None:
@@ -192,7 +185,7 @@ def search_directory(
 
 
 def _related_agent_ids(session: Session, caller: Agent) -> set[UUID]:
-    """Return the server-verified contact/organization discovery scope."""
+    """Return the server-verified ownership, contact, and ACL discovery scope."""
 
     related = {caller.id}
     contact_source_ids = {caller.id}
@@ -212,22 +205,6 @@ def _related_agent_ids(session: Session, caller: Agent) -> set[UUID]:
         # another Agent owned by the same Human has already corresponded with.
         # This shares only the server-verified contact edge, never message bodies.
         contact_source_ids.update(owned_agent_ids)
-        organization_ids = list(
-            session.scalars(
-                select(OrganizationMembership.organization_id).where(
-                    OrganizationMembership.human_user_id == caller_owner_id
-                )
-            )
-        )
-        if organization_ids:
-            related.update(
-                session.scalars(
-                    select(OrganizationAgent.agent_id).where(
-                        OrganizationAgent.organization_id.in_(organization_ids)
-                    )
-                )
-            )
-
     related.update(
         session.scalars(
             select(Delivery.recipient_agent_id)
@@ -265,7 +242,6 @@ def _candidate_contexts(session: Session, caller: Agent) -> list[_CandidateConte
             HumanUser.display_name,
             HumanUser.username,
             ConnectorInstance.connector_type,
-            Organization.name,
         )
         .outerjoin(AgentOwnership, AgentOwnership.agent_id == Agent.id)
         .outerjoin(HumanUser, HumanUser.id == AgentOwnership.human_user_id)
@@ -274,8 +250,6 @@ def _candidate_contexts(session: Session, caller: Agent) -> list[_CandidateConte
             ConnectorInstance,
             ConnectorInstance.id == AgentConnectorBinding.connector_instance_id,
         )
-        .outerjoin(OrganizationAgent, OrganizationAgent.agent_id == Agent.id)
-        .outerjoin(Organization, Organization.id == OrganizationAgent.organization_id)
         .where(Agent.id.in_(related_ids), Agent.status == "active")
         .order_by(Agent.address)
     ).all()
@@ -286,9 +260,8 @@ def _candidate_contexts(session: Session, caller: Agent) -> list[_CandidateConte
             owner_display_name=owner_name,
             owner_username=owner_username,
             agent_type=agent_type,
-            organization_name=organization_name,
         )
-        for agent, owner_id, owner_name, owner_username, agent_type, organization_name in rows
+        for agent, owner_id, owner_name, owner_username, agent_type in rows
     ]
 
 
@@ -497,35 +470,37 @@ def _friendly_candidates(
     *,
     match_kind: str,
 ) -> list[RecipientCandidate]:
-    owner_name_counts: dict[str, set[UUID | None]] = {}
     owner_type_counts: dict[tuple[UUID | None, str], int] = {}
     for context in contexts:
-        if context.owner_display_name:
-            owner_name_counts.setdefault(context.owner_display_name.casefold(), set()).add(
-                context.owner_id
-            )
         part = _type_label(context.agent_type) or context.agent.display_name
         owner_type_counts[(context.owner_id, part.casefold())] = (
             owner_type_counts.get((context.owner_id, part.casefold()), 0) + 1
         )
+    base_label_counts: dict[str, int] = {}
+    for context in contexts:
+        agent_part = _type_label(context.agent_type) or context.agent.display_name
+        base_label = (
+            f"{context.owner_display_name}的 {agent_part}"
+            if context.owner_display_name
+            else context.agent.handle or context.agent.display_name
+        )
+        normalized_label = base_label.casefold()
+        base_label_counts[normalized_label] = base_label_counts.get(normalized_label, 0) + 1
 
     candidates: list[RecipientCandidate] = []
     for context in contexts:
         agent_part = _type_label(context.agent_type) or context.agent.display_name
         if context.owner_display_name:
-            owner_part = context.owner_display_name
-            if (
-                len(owner_name_counts[context.owner_display_name.casefold()]) > 1
-                and context.organization_name
-            ):
-                owner_part = f"{owner_part}（{context.organization_name}）"
-            label = f"{owner_part}的 {agent_part}"
+            label = f"{context.owner_display_name}的 {agent_part}"
         elif context.agent.handle:
             label = context.agent.handle
         else:
             label = context.agent.display_name
 
-        if owner_type_counts.get((context.owner_id, agent_part.casefold()), 0) > 1:
+        if (
+            owner_type_counts.get((context.owner_id, agent_part.casefold()), 0) > 1
+            or base_label_counts.get(label.casefold(), 0) > 1
+        ):
             qualifier = context.agent.handle or context.agent.display_name
             if qualifier.casefold() != agent_part.casefold():
                 label = f"{label}（{qualifier}）"
@@ -539,11 +514,11 @@ def _friendly_candidates(
                 owner_display_name=context.owner_display_name,
                 owner_username=context.owner_username,
                 agent_type=context.agent_type,
-                organization_name=context.organization_name,
                 label=label,
                 match_kind=match_kind,
             )
         )
+    candidates.sort(key=lambda candidate: (candidate.label.casefold(), candidate.address))
     return candidates
 
 
@@ -601,7 +576,7 @@ def _context_for_exact_agent(
     agent: Agent,
     scoped_by_id: dict[UUID, _CandidateContext],
 ) -> _CandidateContext:
-    # Owner and organization metadata is disclosed only when the target is already
+    # Owner metadata is disclosed only when the target is already
     # inside the caller's relationship scope.
     return scoped_by_id.get(agent.id, _CandidateContext(agent=agent))
 
@@ -799,7 +774,6 @@ def resolve_recipient(session: Session, *, caller: Agent, query: str) -> Recipie
             context.owner_display_name,
             context.owner_username,
             context.agent_type,
-            context.organization_name,
         ]
         score = 0.0
         for value in values:

@@ -23,11 +23,6 @@ MAX_METADATA_BYTES = 64 * 1024
 MAX_JSON_DEPTH = 16
 RESERVED_METADATA_KEYS = frozenset(
     {
-        "channel_scope",
-        "organization_id",
-        "organization_event_id",
-        "requested_responder_agent_ids",
-        "reply_policy",
         "agentpost_task_bridge",
         "agentpost_task_id",
         "agentpost_task_activity_id",

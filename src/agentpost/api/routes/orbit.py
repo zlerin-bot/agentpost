@@ -19,7 +19,6 @@ from agentpost.control.human_security import (
     human_session_id_from_request,
 )
 from agentpost.control.models import AgentOwnership, HumanSession
-from agentpost.control.organization_service import list_orbit_organizations
 from agentpost.control.schemas import (
     HumanProfile,
     HumanSessionResponse,
@@ -29,7 +28,6 @@ from agentpost.control.schemas import (
     OrbitAgentHandleUpdate,
     OrbitDashboard,
     OrbitMessage,
-    OrbitOrganization,
     OrbitTask,
     OrbitThreadArchiveState,
     OrbitThreadDetail,
@@ -467,14 +465,6 @@ def delete_orbit_agent(
                 "message": "Only the Human owner can delete this Agent",
             },
         ) from exc
-
-
-@router.get("/api/v1/orbit/organizations", response_model=list[OrbitOrganization])
-def orbit_organizations(
-    current_human: CurrentHumanDep,
-    session: SessionDep,
-) -> list[OrbitOrganization]:
-    return list_orbit_organizations(session, current_human)
 
 
 @router.get("/api/v1/orbit/messages", response_model=list[OrbitMessage])

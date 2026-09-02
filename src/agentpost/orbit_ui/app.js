@@ -22,9 +22,6 @@ const state = {
   registerChallengeId: "",
   recoveryChallengeId: "",
   mfaSetupStarted: false,
-  pendingOrganizationInvitation: "",
-  managedOrganization: null,
-  organizationDomainProofs: new Map(),
   pairingTargetResolution: "pending",
   pairingCreateNewAutomatically: false,
   selectedPairingHost: "",
@@ -38,7 +35,6 @@ const state = {
   selectedThreadId: "",
   threadFilter: "all",
   threadQuery: "",
-  threadOrganization: "",
   threadSearchTimer: null,
   threadBrowserExpanded: true,
   selectedAgentId: "",
@@ -76,9 +72,6 @@ const elements = {
   loginEmail: document.querySelector("#login-email"),
   loginPassword: document.querySelector("#login-password"),
   loginMfa: document.querySelector("#login-mfa"),
-  oidcEntry: document.querySelector("#oidc-entry"),
-  discoverOidc: document.querySelector("#discover-oidc"),
-  oidcOptions: document.querySelector("#oidc-options"),
   openRegister: document.querySelector("#open-register"),
   openRecovery: document.querySelector("#open-recovery"),
   accessResult: document.querySelector("#access-result"),
@@ -118,7 +111,6 @@ const elements = {
   threadUnreadCount: document.querySelector("#thread-unread-count"),
   threadCount: document.querySelector("#thread-count"),
   threadSearchInput: document.querySelector("#thread-search-input"),
-  threadOrganizationFilter: document.querySelector("#thread-organization-filter"),
   threadFilters: Array.from(document.querySelectorAll("[data-thread-filter]")),
   threadList: document.querySelector("#thread-list"),
   settingsArchiveList: document.querySelector("#settings-archive-list"),
@@ -263,11 +255,6 @@ const elements = {
   agentSetDefault: document.querySelector("#agent-set-default"),
   agentDisconnect: document.querySelector("#agent-disconnect"),
   agentDelete: document.querySelector("#agent-delete"),
-  organizationCount: document.querySelector("#organization-count"),
-  organizationList: document.querySelector("#organization-list"),
-  organizationPendingSection: document.querySelector("#organization-pending-section"),
-  organizationPendingList: document.querySelector("#organization-pending-list"),
-  openOrganizationCreate: document.querySelector("#open-organization-create"),
   taskList: document.querySelector("#task-list"),
   approvalList: document.querySelector("#approval-list"),
   messageList: document.querySelector("#message-list"),
@@ -282,8 +269,6 @@ const elements = {
   securityStatus: document.querySelector("#security-status"),
   openMfa: document.querySelector("#open-mfa"),
   openKeyRotation: document.querySelector("#open-key-rotation"),
-  ssoSecurityCard: document.querySelector("#sso-security-card"),
-  openSsoLink: document.querySelector("#open-sso-link"),
   openPairing: document.querySelector("#open-pairing"),
   approvalDialog: document.querySelector("#approval-dialog"),
   approvalForm: document.querySelector("#approval-form"),
@@ -400,71 +385,6 @@ const elements = {
   keyLabel: document.querySelector("#key-label"),
   keyOutput: document.querySelector("#key-output"),
   keyResult: document.querySelector("#key-result"),
-  ssoLinkDialog: document.querySelector("#sso-link-dialog"),
-  ssoLinkForm: document.querySelector("#sso-link-form"),
-  ssoLinkClose: document.querySelector("#sso-link-close"),
-  ssoLinkCancel: document.querySelector("#sso-link-cancel"),
-  ssoLinkProvider: document.querySelector("#sso-link-provider"),
-  ssoLinkPassword: document.querySelector("#sso-link-password"),
-  ssoLinkMfa: document.querySelector("#sso-link-mfa"),
-  ssoLinkResult: document.querySelector("#sso-link-result"),
-  organizationCreateDialog: document.querySelector("#organization-create-dialog"),
-  organizationCreateForm: document.querySelector("#organization-create-form"),
-  organizationCreateClose: document.querySelector("#organization-create-close"),
-  organizationCreateCancel: document.querySelector("#organization-create-cancel"),
-  organizationName: document.querySelector("#organization-name"),
-  organizationSlug: document.querySelector("#organization-slug"),
-  organizationDescription: document.querySelector("#organization-description"),
-  organizationCreateResult: document.querySelector("#organization-create-result"),
-  organizationInvitationDialog: document.querySelector("#organization-invitation-dialog"),
-  organizationInvitationForm: document.querySelector("#organization-invitation-form"),
-  organizationInvitationClose: document.querySelector("#organization-invitation-close"),
-  organizationInvitationCancel: document.querySelector("#organization-invitation-cancel"),
-  organizationInvitationSubmit: document.querySelector("#organization-invitation-submit"),
-  organizationInvitationName: document.querySelector("#organization-invitation-name"),
-  organizationInvitationSlug: document.querySelector("#organization-invitation-slug"),
-  organizationInvitationRole: document.querySelector("#organization-invitation-role"),
-  organizationInvitationExpiry: document.querySelector("#organization-invitation-expiry"),
-  organizationInvitationCapability: document.querySelector("#organization-invitation-capability"),
-  organizationInvitationVisibility: document.querySelector("#organization-invitation-visibility"),
-  organizationInvitationActions: document.querySelector("#organization-invitation-actions"),
-  organizationInvitationResult: document.querySelector("#organization-invitation-result"),
-  organizationManageDialog: document.querySelector("#organization-manage-dialog"),
-  organizationManageTitle: document.querySelector("#organization-manage-title"),
-  organizationInviteForm: document.querySelector("#organization-invite-form"),
-  organizationManageClose: document.querySelector("#organization-manage-close"),
-  organizationManageCancel: document.querySelector("#organization-manage-cancel"),
-  organizationManageId: document.querySelector("#organization-manage-id"),
-  organizationManageSummary: document.querySelector("#organization-manage-summary"),
-  organizationAgentSection: document.querySelector("#organization-agent-section"),
-  organizationAgentActions: document.querySelector("#organization-agent-actions"),
-  organizationAgentSelect: document.querySelector("#organization-agent-select"),
-  organizationAgentPassword: document.querySelector("#organization-agent-password"),
-  organizationAgentAdd: document.querySelector("#organization-agent-add"),
-  organizationInviteSection: document.querySelector("#organization-invite-section"),
-  organizationInviteContact: document.querySelector("#organization-invite-contact"),
-  organizationInviteUsername: document.querySelector("#organization-invite-username"),
-  organizationInviteRole: document.querySelector("#organization-invite-role"),
-  organizationManageResult: document.querySelector("#organization-manage-result"),
-  organizationMemberList: document.querySelector("#organization-member-list"),
-  organizationInvitationList: document.querySelector("#organization-invitation-list"),
-  organizationNavInviteCount: document.querySelector("#organization-nav-invite-count"),
-  organizationDomainSection: document.querySelector("#organization-domain-section"),
-  organizationDomainName: document.querySelector("#organization-domain-name"),
-  organizationDomainAdd: document.querySelector("#organization-domain-add"),
-  organizationDomainList: document.querySelector("#organization-domain-list"),
-  organizationOidcSection: document.querySelector("#organization-oidc-section"),
-  organizationOidcName: document.querySelector("#organization-oidc-name"),
-  organizationOidcIssuer: document.querySelector("#organization-oidc-issuer"),
-  organizationOidcClientId: document.querySelector("#organization-oidc-client-id"),
-  organizationOidcClientSecret: document.querySelector("#organization-oidc-client-secret"),
-  organizationOidcAdd: document.querySelector("#organization-oidc-add"),
-  organizationOidcList: document.querySelector("#organization-oidc-list"),
-  organizationDisbandSection: document.querySelector("#organization-disband-section"),
-  organizationDisbandName: document.querySelector("#organization-disband-name"),
-  organizationDisbandPassword: document.querySelector("#organization-disband-password"),
-  organizationDisband: document.querySelector("#organization-disband"),
-  organizationLeave: document.querySelector("#organization-leave"),
 };
 
 const MODULE_DEFINITIONS = Object.freeze({
@@ -1639,7 +1559,6 @@ function applyThreadRouteParameters(parameters) {
     ? parameters.get("filter")
     : "all";
   state.threadQuery = parameters.get("q") || "";
-  state.threadOrganization = parameters.get("organization") || "";
   state.selectedThreadId = parameters.get("thread") || "";
   elements.threadSearchInput.value = state.threadQuery;
   elements.threadFilters.forEach((button) => {
@@ -1676,7 +1595,6 @@ function threadRouteUrl() {
   const values = {
     filter: state.threadFilter === "all" ? "" : state.threadFilter,
     q: state.threadQuery,
-    organization: state.threadOrganization,
     thread: state.selectedThreadId,
   };
   Object.entries(values).forEach(([name, value]) => {
@@ -2033,9 +1951,6 @@ function clearSensitiveInputs() {
     elements.registerPassword,
     elements.recoveryCode,
     elements.recoveryPassword,
-    elements.organizationOidcClientSecret,
-    elements.ssoLinkPassword,
-    elements.ssoLinkMfa,
     elements.recoveryMfa,
     elements.mfaPassword,
     elements.mfaCurrentProof,
@@ -2106,8 +2021,6 @@ function statusLabel(value, type = "status") {
     operator: "操作员",
     viewer: "观察者",
     auditor: "审计者",
-    admin: "组织管理员",
-    member: "组织成员",
     consumed: "已领取",
     denied: "已拒绝",
     revoked: "已撤销",
@@ -2131,995 +2044,6 @@ function chip(value, type = "status") {
   item.className = `data-chip ${type} ${safeText(value, "unknown")}`;
   item.textContent = statusLabel(value, type);
   return item;
-}
-
-const ORGANIZATION_ROLE_EXPERIENCE = Object.freeze({
-  owner: Object.freeze({
-    capability: "你可以管理成员、邀请和组织设置。",
-    visibility: "可查看明确发到组织协作频道的完整内容，并处理组织 Agent 的审批。个人对话保持私密。",
-    actions: "可管理组织、成员和全部角色；不会因此自动拥有、连接或冒充组织 Agent。",
-  }),
-  admin: Object.freeze({
-    capability: "你可以邀请成员并管理日常设置。",
-    visibility: "可查看明确发到组织协作频道的完整内容，并处理组织 Agent 的审批。个人对话保持私密。",
-    actions: "可邀请和管理 Member/Auditor；不能处置 Owner 或其他受保护管理关系。",
-  }),
-  member: Object.freeze({
-    capability: "你可以查看组织协作，并管理自己的 Agent。",
-    visibility: "可查看组织 Agent 和组织协作频道内容；个人对话不会因加入组织而共享。",
-    actions: "可把自己拥有的 Agent 加入或移出组织；不能管理其他成员或其他人的 Agent。",
-  }),
-  auditor: Object.freeze({
-    capability: "你可以查看成员、Agent 和协作记录摘要。",
-    visibility: "只显示 Agent、消息、任务和审批元数据；正文、附件内容、理由和参数保持隐藏。",
-    actions: "不能更改成员、组织设置或 Agent。",
-  }),
-});
-
-function organizationRoleExperience(role) {
-  return ORGANIZATION_ROLE_EXPERIENCE[role] || Object.freeze({
-    capability: "组织角色尚未确认",
-    visibility: "只显示你当前获准查看的内容。",
-    actions: "界面不会根据未知角色开放治理或 Agent 管理操作。",
-  });
-}
-
-function renderOrganizations(organizations) {
-  elements.organizationList.replaceChildren();
-  elements.organizationCount.textContent = `${organizations.length} 个`;
-  if (organizations.length === 0) {
-    elements.organizationList.append(emptyState("尚未加入组织。个人直接授权的 Agent 仍会显示在“我的 Agent”中。"));
-    return;
-  }
-  const fragment = document.createDocumentFragment();
-  organizations.forEach((organization) => {
-    const card = document.createElement("article");
-    card.className = "organization-card";
-
-    const header = document.createElement("div");
-    header.className = "organization-heading";
-    const identity = document.createElement("div");
-    const name = document.createElement("strong");
-    name.textContent = safeText(organization.name, organization.slug);
-    const slug = document.createElement("span");
-    slug.textContent = safeText(organization.slug);
-    identity.append(name, slug);
-    header.append(identity);
-
-    const description = document.createElement("p");
-    description.textContent = safeText(organization.description, "该组织暂未填写说明。");
-
-    const stats = document.createElement("dl");
-    [["成员", organization.member_count], ["Agent", organization.agent_count]].forEach(([label, value]) => {
-      const cell = document.createElement("div");
-      const term = document.createElement("dt");
-      term.textContent = label;
-      const detail = document.createElement("dd");
-      detail.textContent = safeText(value, "0");
-      cell.append(term, detail);
-      stats.append(cell);
-    });
-    card.append(header, description, stats);
-    if (["owner", "admin", "member", "auditor"].includes(organization.membership_role)) {
-      const actions = document.createElement("div");
-      actions.className = "organization-card-actions";
-      const manage = document.createElement("button");
-      manage.type = "button";
-      manage.className = "quiet-button";
-      manage.textContent = "查看组织";
-      manage.addEventListener("click", () => openOrganizationManagement(organization));
-      actions.append(manage);
-      card.append(actions);
-    }
-    fragment.append(card);
-  });
-  elements.organizationList.append(fragment);
-}
-
-function renderPendingOrganizationInvitations(invitations) {
-  elements.organizationPendingList.replaceChildren();
-  elements.organizationPendingSection.hidden = invitations.length === 0;
-  elements.organizationNavInviteCount.textContent = String(invitations.length);
-  elements.organizationNavInviteCount.hidden = invitations.length === 0;
-  invitations.forEach((invitation) => {
-    const card = document.createElement("article");
-    card.className = "organization-card";
-    const name = document.createElement("strong");
-    name.textContent = safeText(invitation.organization_name, invitation.organization_slug);
-    const detail = document.createElement("p");
-    detail.textContent = `${safeText(invitation.invited_by_display_name, invitation.invited_by_username)}（@${safeText(invitation.invited_by_username)}）邀请你加入 · 有效至 ${dateText(invitation.expires_at)}`;
-    const description = document.createElement("p");
-    description.textContent = safeText(invitation.organization_description, "邀请你加入该组织。加入前不会共享你的个人对话。");
-    const actions = document.createElement("div");
-    actions.className = "organization-card-actions";
-    const accept = document.createElement("button");
-    accept.type = "button";
-    accept.className = "primary-action";
-    accept.textContent = "接受并进入组织";
-    accept.addEventListener("click", () => acceptPendingOrganizationInvitation(invitation, accept));
-    actions.append(accept);
-    card.append(name, detail, description, actions);
-    elements.organizationPendingList.append(card);
-  });
-}
-
-async function acceptPendingOrganizationInvitation(invitation, button) {
-  button.disabled = true;
-  try {
-    const accepted = await requestJson(
-      `/api/v1/orbit/organization-invitations/${encodeURIComponent(invitation.invitation_id)}/accept`,
-      { method: "POST", headers: { "X-CSRF-Token": state.csrfToken } },
-    );
-    await loadDashboard();
-    activateRoute("settings", "organizations", { updateHistory: true });
-    const organization = (state.dashboard?.organizations || []).find(
-      (item) => String(item.id) === String(accepted.organization.id),
-    );
-    if (organization) {
-      await openOrganizationManagement(organization);
-      elements.organizationManageResult.textContent = `你已加入“${safeText(organization.name, organization.slug)}”，成员列表已更新；AgentPost 已显示群聊，未手动选择 Agent 时会使用你的默认 Agent。`;
-      elements.organizationManageResult.className = "form-status success";
-    }
-    setConnection(`已加入“${safeText(accepted.organization.name, accepted.organization.slug)}”`, "success");
-  } catch (error) {
-    setConnection(error.message, "error");
-    button.disabled = false;
-  }
-}
-
-function renderOrganizationAgents(organization) {
-  const canManageOwnAgents = ["owner", "admin", "member"].includes(organization.membership_role);
-  elements.organizationAgentActions.hidden = !canManageOwnAgents;
-  elements.organizationAgentSelect.replaceChildren();
-  const owned = (state.dashboard?.agents || []).filter(
-    (agent) => agent.role === "owner" && agent.status === "active",
-  );
-  const eligible = owned.filter((agent) => !agent.organization);
-  const placeholder = document.createElement("option");
-  placeholder.value = "";
-  placeholder.textContent = eligible.length ? "请选择 Agent" : "没有可加入的自有 Agent";
-  elements.organizationAgentSelect.append(placeholder);
-  owned.forEach((agent) => {
-    const option = document.createElement("option");
-    option.value = String(agent.id);
-    const assignedHere = String(agent.organization?.id || "") === String(organization.id);
-    const assignedElsewhere = Boolean(agent.organization) && !assignedHere;
-    option.disabled = assignedHere || assignedElsewhere;
-    const assignment = assignedHere
-      ? " · 已在本组织"
-      : assignedElsewhere
-        ? ` · 已加入“${safeText(agent.organization?.name, agent.organization?.slug)}”，不能重复加入`
-        : "";
-    option.textContent = `${agentDisplayName(agent)} · ${statusLabel(agent.connection_state)}${assignment}`;
-    elements.organizationAgentSelect.append(option);
-  });
-  elements.organizationAgentSelect.disabled = !owned.length;
-  elements.organizationAgentAdd.disabled = !eligible.length;
-}
-
-async function changeOwnedOrganizationAgent(agent, intent) {
-  const organization = state.managedOrganization;
-  const selectedAgent = agent || (state.dashboard?.agents || []).find(
-    (item) => String(item.id) === elements.organizationAgentSelect.value,
-  );
-  if (!organization || !selectedAgent) {
-    elements.organizationManageResult.textContent = "请先选择一个你拥有的 Agent。";
-    elements.organizationManageResult.className = "form-status error";
-    return;
-  }
-  if (intent === "remove" && elements.organizationAgentPassword.value.length < 12) {
-    elements.organizationManageResult.textContent = "请输入当前 AgentPost 密码后再确认。";
-    elements.organizationManageResult.className = "form-status error";
-    const passwordDetails = elements.organizationAgentPassword.closest("details");
-    if (passwordDetails) {
-      passwordDetails.open = true;
-    }
-    elements.organizationAgentPassword.focus();
-    return;
-  }
-  elements.organizationAgentAdd.disabled = true;
-  try {
-    const base = `/api/v1/orbit/organizations/${encodeURIComponent(organization.id)}/agents/${encodeURIComponent(selectedAgent.id)}`;
-    let confirmationToken = "";
-    if (intent === "remove") {
-      const confirmed = await requestJson(`${base}/confirmation`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-CSRF-Token": state.csrfToken },
-        body: JSON.stringify({ intent, password: elements.organizationAgentPassword.value }),
-      });
-      confirmationToken = confirmed.confirmation_token;
-    }
-    await requestJson(base, {
-      method: intent === "assign" ? "PUT" : "DELETE",
-      headers: {
-        "X-CSRF-Token": state.csrfToken,
-        ...(confirmationToken ? { "X-Human-Confirmation": confirmationToken } : {}),
-      },
-    });
-    elements.organizationAgentPassword.value = "";
-    await loadDashboard();
-    state.managedOrganization = (state.dashboard?.organizations || []).find(
-      (item) => String(item.id) === String(organization.id),
-    ) || organization;
-    renderOrganizationAgents(state.managedOrganization);
-    elements.organizationManageResult.textContent = intent === "assign"
-      ? "Agent 已加入组织；只有明确发到“组织协作”的新内容才会共享。"
-      : "Agent 已移出组织；组织派生的查看权限已撤销。";
-    elements.organizationManageResult.className = "form-status success";
-  } catch (error) {
-    const conflicts = {
-      agent_already_assigned_to_organization: "这个 Agent 已属于其他组织，不能自动迁移。",
-      human_reauthentication_failed: "密码不正确，或当前浏览器尚未完成双重验证登录。",
-      organization_agent_not_found: "只能管理你本人拥有且仍处于活动状态的 Agent。",
-      organization_management_forbidden: "你当前是只读审计角色，不能把 Agent 加入或移出组织。请联系组织管理员调整角色。",
-    };
-    elements.organizationManageResult.textContent = conflicts[error.code] || error.message;
-    elements.organizationManageResult.className = "form-status error";
-  } finally {
-    elements.organizationAgentPassword.value = "";
-    renderOrganizationAgents(state.managedOrganization || organization);
-  }
-}
-
-function closeOrganizationCreateDialog() {
-  elements.organizationName.value = "";
-  elements.organizationSlug.value = "";
-  elements.organizationDescription.value = "";
-  elements.organizationCreateResult.textContent = "";
-  if (elements.organizationCreateDialog.open) {
-    elements.organizationCreateDialog.close();
-  }
-}
-
-async function createOrganization(event) {
-  event.preventDefault();
-  const submit = elements.organizationCreateForm.querySelector("button[type='submit']");
-  submit.disabled = true;
-  try {
-    await requestJson("/api/v1/orbit/organizations", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-CSRF-Token": state.csrfToken },
-      body: JSON.stringify({
-        slug: elements.organizationSlug.value.trim().toLowerCase(),
-        name: elements.organizationName.value.trim(),
-        description: elements.organizationDescription.value.trim() || null,
-      }),
-    });
-    closeOrganizationCreateDialog();
-    await loadDashboard();
-    setConnection("组织已创建，你是首位 Owner", "success");
-  } catch (error) {
-    elements.organizationCreateResult.textContent = error.message;
-    elements.organizationCreateResult.className = "form-status error";
-  } finally {
-    submit.disabled = false;
-  }
-}
-
-function closeOrganizationManagement() {
-  elements.organizationAgentPassword.value = "";
-  elements.organizationAgentSelect.replaceChildren();
-  elements.organizationInviteContact.replaceChildren();
-  elements.organizationInviteUsername.value = "";
-  elements.organizationDomainName.value = "";
-  elements.organizationOidcName.value = "";
-  elements.organizationOidcIssuer.value = "";
-  elements.organizationOidcClientId.value = "";
-  elements.organizationOidcClientSecret.value = "";
-  elements.organizationDisbandName.value = "";
-  elements.organizationDisbandPassword.value = "";
-  elements.organizationManageResult.textContent = "";
-  elements.organizationMemberList.replaceChildren();
-  elements.organizationInvitationList.replaceChildren();
-  elements.organizationDomainList.replaceChildren();
-  elements.organizationOidcList.replaceChildren();
-  elements.organizationInviteRole.replaceChildren();
-  elements.organizationLeave.disabled = false;
-  elements.organizationLeave.textContent = "退出组织";
-  state.managedOrganization = null;
-  state.organizationDomainProofs.clear();
-  if (elements.organizationManageDialog.open) {
-    elements.organizationManageDialog.close();
-  }
-}
-
-function configureOrganizationInvitationRoles(actorRole) {
-  elements.organizationInviteRole.replaceChildren();
-  const roles = actorRole === "owner" ? ["member", "auditor", "admin"] : ["member", "auditor"];
-  roles.forEach((role) => {
-    const option = document.createElement("option");
-    option.value = role;
-    option.textContent = statusLabel(role);
-    elements.organizationInviteRole.append(option);
-  });
-}
-
-function renderOrganizationInvitationCandidates(candidates) {
-  elements.organizationInviteContact.replaceChildren();
-  const placeholder = document.createElement("option");
-  placeholder.value = "";
-  placeholder.textContent = candidates.length ? "请选择好友（可选）" : "暂无可邀请的沟通好友";
-  elements.organizationInviteContact.append(placeholder);
-  candidates.forEach((candidate) => {
-    const option = document.createElement("option");
-    option.value = safeText(candidate.username);
-    option.textContent = `${safeText(candidate.display_name, candidate.username)} · @${safeText(candidate.username)}`;
-    elements.organizationInviteContact.append(option);
-  });
-}
-
-function configureOrganizationLeave(members) {
-  const organization = state.managedOrganization;
-  const ownerCount = members.filter((member) => member.role === "owner").length;
-  const isLastOwner = organization?.membership_role === "owner" && ownerCount <= 1;
-  elements.organizationLeave.disabled = isLastOwner;
-  elements.organizationLeave.textContent = isLastOwner ? "请先转交 Owner 角色" : "退出组织";
-  elements.organizationLeave.title = isLastOwner
-    ? "最后一名 Owner 不能直接退出；请先把另一名成员提升为 Owner"
-    : "退出后只撤销组织派生权限，个人和直接授权保持不变";
-}
-
-function governanceRow(primary, secondary) {
-  const row = document.createElement("div");
-  row.className = "governance-row";
-  const identity = document.createElement("div");
-  const title = document.createElement("strong");
-  title.textContent = primary;
-  const detail = document.createElement("span");
-  detail.textContent = secondary;
-  identity.append(title, detail);
-  const actions = document.createElement("div");
-  actions.className = "governance-row-actions";
-  row.append(identity, actions);
-  return { row, actions };
-}
-
-async function changeOrganizationRole(memberId, role) {
-  const organization = state.managedOrganization;
-  if (!organization) {
-    return;
-  }
-  try {
-    await requestJson(
-      `/api/v1/orbit/organizations/${encodeURIComponent(organization.id)}/members/${encodeURIComponent(memberId)}`,
-      {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", "X-CSRF-Token": state.csrfToken },
-        body: JSON.stringify({ role }),
-      },
-    );
-    await loadOrganizationManagement();
-    await loadDashboard();
-  } catch (error) {
-    elements.organizationManageResult.textContent = error.message;
-    elements.organizationManageResult.className = "form-status error";
-  }
-}
-
-async function removeOrganizationMember(memberId) {
-  const organization = state.managedOrganization;
-  if (!organization) {
-    return;
-  }
-  try {
-    await requestJson(
-      `/api/v1/orbit/organizations/${encodeURIComponent(organization.id)}/members/${encodeURIComponent(memberId)}`,
-      { method: "DELETE", headers: { "X-CSRF-Token": state.csrfToken } },
-    );
-    await loadOrganizationManagement();
-    await loadDashboard();
-  } catch (error) {
-    elements.organizationManageResult.textContent = error.message;
-    elements.organizationManageResult.className = "form-status error";
-  }
-}
-
-function renderOrganizationMembers(members) {
-  elements.organizationMemberList.replaceChildren();
-  const organization = state.managedOrganization;
-  const actorRole = organization?.membership_role;
-  const currentUserId = String(state.dashboard?.user?.id || "");
-  if (!members.length) {
-    elements.organizationMemberList.append(emptyState("暂无成员。"));
-    return;
-  }
-  members.forEach((member) => {
-    const card = document.createElement("article");
-    card.className = "organization-member-card";
-    const heading = document.createElement("div");
-    heading.className = "organization-member-heading";
-    const identity = document.createElement("div");
-    const name = document.createElement("strong");
-    name.textContent = safeText(member.human_display_name, member.human_username);
-    const identityDetail = document.createElement("span");
-    identityDetail.textContent = `@${safeText(member.human_username)}`;
-    identity.append(name, identityDetail);
-    const actions = document.createElement("div");
-    actions.className = "governance-row-actions";
-    actions.append(chip(member.role, "role"));
-    heading.append(identity, actions);
-    const isSelf = String(member.human_user_id) === currentUserId;
-    const canManage = actorRole === "owner"
-      || (actorRole === "admin" && ["member", "auditor"].includes(member.role));
-    if (canManage && !isSelf) {
-      const roleSelect = document.createElement("select");
-      const allowedRoles = actorRole === "owner"
-        ? ["owner", "admin", "member", "auditor"]
-        : ["member", "auditor"];
-      allowedRoles.forEach((role) => {
-        const option = document.createElement("option");
-        option.value = role;
-        option.textContent = statusLabel(role);
-        option.selected = role === member.role;
-        roleSelect.append(option);
-      });
-      roleSelect.setAttribute("aria-label", `${member.human_email} 的角色`);
-      const save = document.createElement("button");
-      save.type = "button";
-      save.className = "quiet-button";
-      save.textContent = "保存";
-      save.addEventListener("click", () => changeOrganizationRole(member.human_user_id, roleSelect.value));
-      const remove = document.createElement("button");
-      remove.type = "button";
-      remove.className = "quiet-button danger";
-      remove.textContent = "移除";
-      remove.addEventListener("click", () => removeOrganizationMember(member.human_user_id));
-      actions.append(roleSelect, save, remove);
-    }
-    const agentSection = document.createElement("div");
-    agentSection.className = "organization-member-agents";
-    const memberAgents = Array.isArray(member.agents) ? member.agents : [];
-    const agentCount = document.createElement("span");
-    agentCount.className = "organization-member-agent-count";
-    agentCount.textContent = memberAgents.length ? `${memberAgents.length} 个 Agent` : "尚未设置可参与的 Agent";
-    agentSection.append(agentCount);
-    memberAgents.forEach((memberAgent) => {
-      const item = document.createElement("div");
-      item.className = "organization-member-agent";
-      const agentIdentity = document.createElement("div");
-      const agentName = document.createElement("strong");
-      agentName.textContent = safeText(memberAgent.handle, memberAgent.display_name);
-      const dashboardAgent = (state.dashboard?.agents || []).find(
-        (agent) => String(agent.id) === String(memberAgent.agent_id),
-      );
-      const agentDetail = document.createElement("span");
-      const sourceLabel = memberAgent.participation_source === "default" ? "默认参与" : "已加入组织";
-      agentDetail.textContent = dashboardAgent
-        ? `${sourceLabel} · ${statusLabel(dashboardAgent.connection_state)} · ${safeText(memberAgent.display_name)}`
-        : `${sourceLabel} · ${safeText(memberAgent.display_name)}`;
-      agentIdentity.append(agentName, agentDetail);
-      item.append(agentIdentity);
-      if (
-        isSelf
-        && memberAgent.participation_source !== "default"
-        && dashboardAgent?.role === "owner"
-        && ["owner", "admin", "member"].includes(actorRole)
-      ) {
-        const removeAgent = document.createElement("button");
-        removeAgent.type = "button";
-        removeAgent.className = "quiet-button danger";
-        removeAgent.textContent = "移出组织";
-        removeAgent.addEventListener("click", () => changeOwnedOrganizationAgent(dashboardAgent, "remove"));
-        item.append(removeAgent);
-      }
-      agentSection.append(item);
-    });
-    card.append(heading, agentSection);
-    elements.organizationMemberList.append(card);
-  });
-  const groupedAgentIds = new Set(
-    members.flatMap((member) => (member.agents || []).map((agent) => String(agent.agent_id))),
-  );
-  const ungroupedAgents = (state.dashboard?.agents || []).filter(
-    (agent) => String(agent.organization?.id || "") === String(organization?.id)
-      && !groupedAgentIds.has(String(agent.id)),
-  );
-  if (ungroupedAgents.length) {
-    const ungroupedCard = document.createElement("article");
-    ungroupedCard.className = "organization-member-card organization-ungrouped-agents";
-    const title = document.createElement("strong");
-    title.textContent = "待确认归属的 Agent";
-    const note = document.createElement("span");
-    note.textContent = "这些 Agent 已在组织中，但还没有关联到具体成员。";
-    ungroupedCard.append(title, note);
-    ungroupedAgents.forEach((agent) => {
-      const item = document.createElement("div");
-      item.className = "organization-member-agent";
-      const identity = document.createElement("div");
-      const name = document.createElement("strong");
-      name.textContent = agentDisplayName(agent);
-      const detail = document.createElement("span");
-      detail.textContent = `${statusLabel(agent.connection_state)} · ${safeText(agent.display_name)}`;
-      identity.append(name, detail);
-      item.append(identity);
-      ungroupedCard.append(item);
-    });
-    elements.organizationMemberList.append(ungroupedCard);
-  }
-}
-
-async function revokeOrganizationInvitation(invitationId) {
-  const organization = state.managedOrganization;
-  if (!organization) {
-    return;
-  }
-  try {
-    await requestJson(
-      `/api/v1/orbit/organizations/${encodeURIComponent(organization.id)}/invitations/${encodeURIComponent(invitationId)}`,
-      { method: "DELETE", headers: { "X-CSRF-Token": state.csrfToken } },
-    );
-    await loadOrganizationManagement();
-  } catch (error) {
-    elements.organizationManageResult.textContent = error.message;
-    elements.organizationManageResult.className = "form-status error";
-  }
-}
-
-function renderOrganizationInvitations(invitations) {
-  elements.organizationInvitationList.replaceChildren();
-  if (!invitations.length) {
-    elements.organizationInvitationList.append(emptyState("暂无邀请记录。"));
-    return;
-  }
-  invitations.forEach((invitation) => {
-    const { row, actions } = governanceRow(
-      invitation.username || invitation.email || "目标用户",
-      `${statusLabel(invitation.role)} · ${statusLabel(invitation.status)} · ${dateText(invitation.expires_at)}`,
-    );
-    if (invitation.status === "pending") {
-      const revoke = document.createElement("button");
-      revoke.type = "button";
-      revoke.className = "quiet-button danger";
-      revoke.textContent = "撤销";
-      revoke.addEventListener("click", () => revokeOrganizationInvitation(invitation.invitation_id));
-      actions.append(revoke);
-    }
-    elements.organizationInvitationList.append(row);
-  });
-}
-
-async function verifyOrganizationDomain(domainId) {
-  const organization = state.managedOrganization;
-  if (!organization) {
-    return;
-  }
-  try {
-    await requestJson(
-      `/api/v1/orbit/organizations/${encodeURIComponent(organization.id)}/domains/${encodeURIComponent(domainId)}/verify`,
-      { method: "POST", headers: { "X-CSRF-Token": state.csrfToken } },
-    );
-    state.organizationDomainProofs.delete(String(domainId));
-    elements.organizationManageResult.textContent = "域名 DNS 所有权已验证。";
-    elements.organizationManageResult.className = "form-status success";
-    await loadOrganizationManagement();
-  } catch (error) {
-    elements.organizationManageResult.textContent = `${error.message} 请确认 TXT 记录已生效。`;
-    elements.organizationManageResult.className = "form-status error";
-  }
-}
-
-async function revokeOrganizationDomain(domainId) {
-  const organization = state.managedOrganization;
-  if (!organization) {
-    return;
-  }
-  try {
-    await requestJson(
-      `/api/v1/orbit/organizations/${encodeURIComponent(organization.id)}/domains/${encodeURIComponent(domainId)}`,
-      { method: "DELETE", headers: { "X-CSRF-Token": state.csrfToken } },
-    );
-    state.organizationDomainProofs.delete(String(domainId));
-    elements.organizationManageResult.textContent = "域名认领已撤销。";
-    elements.organizationManageResult.className = "form-status success";
-    await loadOrganizationManagement();
-  } catch (error) {
-    elements.organizationManageResult.textContent = error.message;
-    elements.organizationManageResult.className = "form-status error";
-  }
-}
-
-function renderOrganizationDomains(domains) {
-  elements.organizationDomainList.replaceChildren();
-  const isOwner = state.managedOrganization?.membership_role === "owner";
-  if (!domains.length) {
-    elements.organizationDomainList.append(emptyState("尚未认领企业域名。"));
-    return;
-  }
-  domains.forEach((domain) => {
-    const detail = `${statusLabel(domain.status)} · TXT ${domain.verification_record_name}`;
-    const { row, actions } = governanceRow(domain.domain, detail);
-    const proof = state.organizationDomainProofs.get(String(domain.domain_id));
-    if (proof) {
-      const proofOutput = document.createElement("code");
-      proofOutput.className = "domain-proof";
-      proofOutput.textContent = `${domain.verification_record_name}\n${proof}`;
-      row.firstElementChild.append(proofOutput);
-    }
-    if (isOwner) {
-      if (domain.status === "pending") {
-        const verify = document.createElement("button");
-        verify.type = "button";
-        verify.className = "quiet-button";
-        verify.textContent = "验证 DNS";
-        verify.addEventListener("click", () => verifyOrganizationDomain(domain.domain_id));
-        actions.append(verify);
-      }
-      const revoke = document.createElement("button");
-      revoke.type = "button";
-      revoke.className = "quiet-button danger";
-      revoke.textContent = "撤销";
-      revoke.addEventListener("click", () => revokeOrganizationDomain(domain.domain_id));
-      actions.append(revoke);
-    }
-    elements.organizationDomainList.append(row);
-  });
-}
-
-async function addOrganizationDomain() {
-  const organization = state.managedOrganization;
-  const domain = elements.organizationDomainName.value.trim();
-  if (!organization || organization.membership_role !== "owner" || !domain) {
-    elements.organizationManageResult.textContent = "请输入要认领的企业域名。";
-    elements.organizationManageResult.className = "form-status error";
-    return;
-  }
-  elements.organizationDomainAdd.disabled = true;
-  try {
-    const created = await requestJson(
-      `/api/v1/orbit/organizations/${encodeURIComponent(organization.id)}/domains`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-CSRF-Token": state.csrfToken },
-        body: JSON.stringify({ domain }),
-      },
-    );
-    state.organizationDomainProofs.set(
-      String(created.domain.domain_id),
-      created.verification_value,
-    );
-    elements.organizationDomainName.value = "";
-    elements.organizationManageResult.textContent = "请立即复制下方 TXT 记录；验证值关闭窗口后不再显示。";
-    elements.organizationManageResult.className = "form-status success";
-    await loadOrganizationManagement();
-  } catch (error) {
-    elements.organizationManageResult.textContent = error.message;
-    elements.organizationManageResult.className = "form-status error";
-  } finally {
-    elements.organizationDomainAdd.disabled = false;
-  }
-}
-
-async function disableOrganizationOidc(providerId) {
-  const organization = state.managedOrganization;
-  if (!organization || organization.membership_role !== "owner") {
-    return;
-  }
-  try {
-    await requestJson(
-      `/api/v1/orbit/organizations/${encodeURIComponent(organization.id)}/oidc-providers/${encodeURIComponent(providerId)}`,
-      { method: "DELETE", headers: { "X-CSRF-Token": state.csrfToken } },
-    );
-    elements.organizationManageResult.textContent = "单位统一登录已停用；已有成员账户和操作记录会继续保留。";
-    elements.organizationManageResult.className = "form-status success";
-    await loadOrganizationManagement();
-  } catch (error) {
-    elements.organizationManageResult.textContent = error.message;
-    elements.organizationManageResult.className = "form-status error";
-  }
-}
-
-function renderOrganizationOidcProviders(providers) {
-  elements.organizationOidcList.replaceChildren();
-  if (!providers.length) {
-    elements.organizationOidcList.append(emptyState("尚未开通单位统一登录。"));
-    return;
-  }
-  providers.forEach((provider) => {
-    const { row, actions } = governanceRow(
-      safeText(provider.display_name),
-      `${safeText(provider.issuer)} · ${statusLabel(provider.status)}`,
-    );
-    if (provider.status === "active") {
-      const disable = document.createElement("button");
-      disable.type = "button";
-      disable.className = "quiet-button danger";
-      disable.textContent = "停用";
-      disable.addEventListener("click", () => disableOrganizationOidc(provider.provider_id));
-      actions.append(disable);
-    }
-    elements.organizationOidcList.append(row);
-  });
-}
-
-async function addOrganizationOidcProvider() {
-  const organization = state.managedOrganization;
-  const payload = {
-    display_name: elements.organizationOidcName.value.trim(),
-    issuer: elements.organizationOidcIssuer.value.trim(),
-    client_id: elements.organizationOidcClientId.value.trim(),
-    client_secret: elements.organizationOidcClientSecret.value,
-  };
-  if (
-    !organization ||
-    organization.membership_role !== "owner" ||
-    !payload.display_name ||
-    !payload.issuer ||
-    !payload.client_id ||
-    payload.client_secret.length < 12
-  ) {
-    elements.organizationManageResult.textContent = "请完整填写单位登录配置；客户端密钥至少 12 个字符。";
-    elements.organizationManageResult.className = "form-status error";
-    return;
-  }
-  elements.organizationOidcAdd.disabled = true;
-  try {
-    await requestJson(
-      `/api/v1/orbit/organizations/${encodeURIComponent(organization.id)}/oidc-providers`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-CSRF-Token": state.csrfToken },
-        body: JSON.stringify(payload),
-      },
-    );
-    elements.organizationOidcName.value = "";
-    elements.organizationOidcIssuer.value = "";
-    elements.organizationOidcClientId.value = "";
-    elements.organizationOidcClientSecret.value = "";
-    elements.organizationManageResult.textContent = "单位统一登录已开通；客户端密钥不会再次显示。";
-    elements.organizationManageResult.className = "form-status success";
-    await loadOrganizationManagement();
-  } catch (error) {
-    elements.organizationOidcClientSecret.value = "";
-    elements.organizationManageResult.textContent = error.message;
-    elements.organizationManageResult.className = "form-status error";
-  } finally {
-    elements.organizationOidcAdd.disabled = false;
-  }
-}
-
-async function loadOrganizationManagement() {
-  const organization = state.managedOrganization;
-  if (!organization) {
-    return;
-  }
-  const isManager = ["owner", "admin"].includes(organization.membership_role);
-  renderOrganizationAgents(organization);
-  elements.organizationInviteSection.hidden = !isManager;
-  elements.organizationInviteContact.disabled = !isManager;
-  elements.organizationInviteUsername.disabled = !isManager;
-  elements.organizationInviteRole.disabled = !isManager;
-  configureOrganizationInvitationRoles(organization.membership_role);
-  elements.organizationInvitationList.hidden = !isManager;
-  const isOwner = organization.membership_role === "owner";
-  elements.organizationDisbandSection.hidden = !isOwner;
-  elements.organizationDomainName.disabled = !isOwner;
-  elements.organizationDomainAdd.hidden = !isOwner;
-  elements.organizationOidcSection.hidden = !(
-    isOwner && Boolean(state.authConfig?.enterprise_oidc_enabled)
-  );
-  const members = await requestJson(
-    `/api/v1/orbit/organizations/${encodeURIComponent(organization.id)}/members`,
-  );
-  const memberItems = Array.isArray(members.items) ? members.items : [];
-  renderOrganizationMembers(memberItems);
-  configureOrganizationLeave(memberItems);
-  if (isManager) {
-    const [invitations, candidates] = await Promise.all([
-      requestJson(`/api/v1/orbit/organizations/${encodeURIComponent(organization.id)}/invitations`),
-      requestJson(`/api/v1/orbit/organizations/${encodeURIComponent(organization.id)}/invitation-candidates`),
-    ]);
-    renderOrganizationInvitations(Array.isArray(invitations.items) ? invitations.items : []);
-    renderOrganizationInvitationCandidates(Array.isArray(candidates.items) ? candidates.items : []);
-  } else {
-    elements.organizationInvitationList.replaceChildren();
-    renderOrganizationInvitationCandidates([]);
-  }
-  const domains = await requestJson(
-    `/api/v1/orbit/organizations/${encodeURIComponent(organization.id)}/domains`,
-  );
-  renderOrganizationDomains(Array.isArray(domains.items) ? domains.items : []);
-  if (isOwner && state.authConfig?.enterprise_oidc_enabled) {
-    const providers = await requestJson(
-      `/api/v1/orbit/organizations/${encodeURIComponent(organization.id)}/oidc-providers`,
-    );
-    renderOrganizationOidcProviders(Array.isArray(providers.items) ? providers.items : []);
-  } else {
-    elements.organizationOidcList.replaceChildren();
-  }
-}
-
-async function openOrganizationManagement(organization) {
-  state.managedOrganization = organization;
-  elements.organizationManageId.value = organization.id;
-  elements.organizationManageTitle.textContent = safeText(organization.name, organization.slug);
-  elements.organizationManageSummary.textContent = `${organization.slug} · ${organizationRoleExperience(organization.membership_role).capability}`;
-  elements.organizationManageResult.textContent = "成员管理和组织设置会根据你的权限自动显示。";
-  elements.organizationManageDialog.showModal();
-  try {
-    await loadOrganizationManagement();
-  } catch (error) {
-    elements.organizationManageResult.textContent = error.message;
-    elements.organizationManageResult.className = "form-status error";
-  }
-}
-
-async function inviteOrganizationMember(event) {
-  event.preventDefault();
-  const organization = state.managedOrganization;
-  if (!organization) {
-    return;
-  }
-  const submit = elements.organizationInviteForm.querySelector("button[type='submit']");
-  submit.disabled = true;
-  try {
-    await requestJson(
-      `/api/v1/orbit/organizations/${encodeURIComponent(organization.id)}/invitations`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-CSRF-Token": state.csrfToken },
-        body: JSON.stringify({
-          username: elements.organizationInviteUsername.value.trim().toLowerCase(),
-          role: elements.organizationInviteRole.value,
-        }),
-      },
-    );
-    elements.organizationInviteUsername.value = "";
-    elements.organizationInviteContact.value = "";
-    elements.organizationManageResult.textContent = "站内邀请已发出；对方登录 AgentPost 后即可接受。";
-    elements.organizationManageResult.className = "form-status success";
-    await loadOrganizationManagement();
-  } catch (error) {
-    const messages = {
-      organization_invitee_not_found: "没有找到这个 Human 用户名。请核对对方在 AgentPost 中的用户名后再试。",
-      organization_already_member: "这位 Human 已经是组织成员。",
-      organization_invitation_already_pending: "已经向这位 Human 发出过待接受邀请，无需重复邀请。",
-    };
-    elements.organizationManageResult.textContent = messages[error.code] || error.message;
-    elements.organizationManageResult.className = "form-status error";
-  } finally {
-    submit.disabled = false;
-  }
-}
-
-async function leaveOrganization() {
-  const organization = state.managedOrganization;
-  if (!organization) {
-    return;
-  }
-  elements.organizationLeave.disabled = true;
-  try {
-    await requestJson(
-      `/api/v1/orbit/organizations/${encodeURIComponent(organization.id)}/membership`,
-      { method: "DELETE", headers: { "X-CSRF-Token": state.csrfToken } },
-    );
-    closeOrganizationManagement();
-    await loadDashboard();
-    setConnection("已退出组织", "success");
-  } catch (error) {
-    elements.organizationManageResult.textContent = error.message;
-    elements.organizationManageResult.className = "form-status error";
-  } finally {
-    elements.organizationLeave.disabled = false;
-  }
-}
-
-async function disbandOrganization() {
-  const organization = state.managedOrganization;
-  if (!organization || organization.membership_role !== "owner") {
-    return;
-  }
-  const confirmationName = elements.organizationDisbandName.value.trim();
-  const password = elements.organizationDisbandPassword.value;
-  if (confirmationName !== organization.name) {
-    elements.organizationManageResult.textContent = `请输入完整组织名称“${organization.name}”后再确认。`;
-    elements.organizationManageResult.className = "form-status error";
-    elements.organizationDisbandName.focus();
-    return;
-  }
-  if (!password) {
-    elements.organizationManageResult.textContent = "请输入当前 AgentPost 密码。";
-    elements.organizationManageResult.className = "form-status error";
-    elements.organizationDisbandPassword.focus();
-    return;
-  }
-  elements.organizationDisband.disabled = true;
-  try {
-    await requestJson(
-      `/api/v1/orbit/organizations/${encodeURIComponent(organization.id)}/disband`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-CSRF-Token": state.csrfToken },
-        body: JSON.stringify({ confirmation_name: confirmationName, password }),
-      },
-    );
-    closeOrganizationManagement();
-    await loadDashboard();
-    activateRoute("settings", "organizations", { updateHistory: true });
-    setConnection(`“${safeText(organization.name, organization.slug)}”已解散`, "success");
-  } catch (error) {
-    const messages = {
-      organization_disband_name_mismatch: `组织名称不一致，请完整输入“${organization.name}”。`,
-      human_reauthentication_failed: "密码不正确，或当前登录需要先完成双重验证。",
-    };
-    elements.organizationManageResult.textContent = messages[error.code] || error.message;
-    elements.organizationManageResult.className = "form-status error";
-  } finally {
-    elements.organizationDisband.disabled = false;
-    elements.organizationDisbandPassword.value = "";
-  }
-}
-
-function closeOrganizationInvitationDialog() {
-  state.pendingOrganizationInvitation = "";
-  elements.organizationInvitationName.textContent = "—";
-  elements.organizationInvitationSlug.textContent = "—";
-  elements.organizationInvitationRole.textContent = "—";
-  elements.organizationInvitationExpiry.textContent = "—";
-  elements.organizationInvitationCapability.textContent = "—";
-  elements.organizationInvitationVisibility.textContent = "—";
-  elements.organizationInvitationActions.textContent = "—";
-  elements.organizationInvitationResult.textContent = "";
-  if (elements.organizationInvitationDialog.open) {
-    elements.organizationInvitationDialog.close();
-  }
-}
-
-async function acceptOrganizationInvitation(event) {
-  event.preventDefault();
-  const token = state.pendingOrganizationInvitation;
-  if (!token || !state.csrfToken) {
-    return;
-  }
-  elements.organizationInvitationSubmit.disabled = true;
-  try {
-    await requestJson("/api/v1/orbit/organization-invitations/accept", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-CSRF-Token": state.csrfToken },
-      body: JSON.stringify({ token }),
-    });
-    state.pendingOrganizationInvitation = "";
-    if (elements.organizationInvitationDialog.open) {
-      elements.organizationInvitationDialog.close();
-    }
-    await loadDashboard();
-    activateRoute("settings", "organizations", { updateHistory: true });
-    setConnection("组织邀请已接受", "success");
-  } catch (error) {
-    elements.organizationInvitationResult.textContent = error.message;
-    elements.organizationInvitationResult.className = "form-status error";
-  } finally {
-    elements.organizationInvitationSubmit.disabled = false;
-  }
-}
-
-async function maybePreviewOrganizationInvitation() {
-  const token = state.pendingOrganizationInvitation;
-  if (!token || !state.csrfToken) {
-    return;
-  }
-  try {
-    const preview = await requestJson("/api/v1/orbit/organization-invitations/preview", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token }),
-    });
-    const experience = organizationRoleExperience(preview.role);
-    elements.organizationInvitationName.textContent = safeText(preview.organization_name);
-    elements.organizationInvitationSlug.textContent = safeText(preview.organization_slug);
-    elements.organizationInvitationRole.textContent = statusLabel(preview.role);
-    elements.organizationInvitationExpiry.textContent = `邀请有效至 ${dateText(preview.expires_at)}`;
-    elements.organizationInvitationCapability.textContent = experience.capability;
-    elements.organizationInvitationVisibility.textContent = experience.visibility;
-    elements.organizationInvitationActions.textContent = experience.actions;
-    elements.organizationInvitationResult.textContent = "请确认后再加入；关闭窗口不会接受邀请。";
-    elements.organizationInvitationResult.className = "form-status";
-    elements.organizationInvitationDialog.showModal();
-    elements.organizationInvitationSubmit.focus();
-  } catch (error) {
-    state.pendingOrganizationInvitation = "";
-    setConnection("组织邀请无法预览", "error");
-    setFormStatus(error.message, "error");
-  }
 }
 
 function renderAgents(agents) {
@@ -3158,27 +2082,9 @@ function agentMatchesQuery(agent) {
     agent.display_name,
     agent.address,
     agent.current_connector_type,
-    agent.organization?.name,
     ...(agent.capabilities || []),
   ].map((value) => safeText(value, "").toLocaleLowerCase("zh-CN"));
   return searchable.some((value) => value.includes(state.agentQuery.toLocaleLowerCase("zh-CN")));
-}
-
-function groupedAgents(agents) {
-  const personal = [];
-  const organizations = new Map();
-  agents.forEach((agent) => {
-    if (agent.organization) {
-      const key = String(agent.organization.id);
-      if (!organizations.has(key)) {
-        organizations.set(key, { organization: agent.organization, agents: [] });
-      }
-      organizations.get(key).agents.push(agent);
-    } else {
-      personal.push(agent);
-    }
-  });
-  return { personal, organizations: Array.from(organizations.values()) };
 }
 
 function renderAgentOverview(agents) {
@@ -3203,15 +2109,7 @@ function renderAgentOverview(agents) {
     elements.agentOverviewGroups.append(emptyState("还没有可查看的 Agent。连接新的 Agent 后会在这里出现。"));
     return;
   }
-  const groups = groupedAgents(agents);
-  const values = [["我的 Agent", groups.personal.length, "个人所有权和直接授权不会因加入组织而公开"]];
-  groups.organizations.forEach((group) => {
-    values.push([
-      safeText(group.organization.name),
-      group.agents.length,
-      `你的组织角色：${statusLabel(group.organization.membership_role)}`,
-    ]);
-  });
+  const values = [["我的 AI", agents.length, "任务中的参与范围由任务成员和所选 AI 共同确定"]];
   values.forEach(([name, count, copy]) => {
     const card = document.createElement("article");
     const label = document.createElement("span");
@@ -3259,7 +2157,6 @@ function renderAgentBrowser(agents) {
     ));
     return;
   }
-  const groups = groupedAgents(visible);
   const appendGroup = (title, values) => {
     if (!values.length) return;
     const section = document.createElement("section");
@@ -3270,10 +2167,7 @@ function renderAgentBrowser(agents) {
     values.forEach((agent) => section.append(agentBrowserButton(agent)));
     elements.agentBrowserList.append(section);
   };
-  appendGroup("我的 Agent", groups.personal);
-  groups.organizations.forEach((group) => {
-    appendGroup(safeText(group.organization.name), group.agents);
-  });
+  appendGroup("我的 AI", visible);
 }
 
 function renderAgentOverviewState() {
@@ -3356,13 +2250,6 @@ function renderAgentAccess(agent) {
   elements.agentDetailAccess.replaceChildren();
   elements.agentDetailAccess.append(
     detailFact("当前权限", statusLabel(agent.role), "可执行的操作以你的实际权限为准。"),
-    detailFact("权限来源", agent.access_source === "organization" ? "组织派生" : "直接关系"),
-    detailFact("所属组织", agent.organization?.name || "个人范围"),
-    detailFact(
-      "组织角色",
-      agent.organization?.membership_role ? statusLabel(agent.organization.membership_role) : "不适用",
-      "组织成员关系不会自动变成 Agent 所有权。",
-    ),
   );
 }
 
@@ -3401,7 +2288,7 @@ function renderAgentDetail(agent) {
   elements.agentDetail.hidden = false;
   elements.agentDetailName.textContent = agentDisplayName(agent);
   elements.agentDetailSubtitle.textContent = agent.handle
-    ? `${safeText(agent.display_name)} · ${agent.organization?.name || "个人范围"}`
+    ? safeText(agent.display_name)
     : `${safeText(agent.display_name)} · 尚未设置短名称`;
   elements.agentDetailAvatar.textContent = agentDisplayName(agent).slice(0, 1).toUpperCase();
   elements.agentDetailAvatar.style.setProperty("--agent-hue", String(agentHue(agent)));
@@ -3495,7 +2382,6 @@ function openRelatedThread(threadId) {
   state.selectedThreadId = threadId;
   state.threadQuery = "";
   state.threadFilter = "all";
-  state.threadOrganization = "";
   const url = new URL(window.location.href);
   ["agent", "agentTab", "agentQuery", "returnThread"].forEach((name) => url.searchParams.delete(name));
   url.searchParams.set("module", "orbit");
@@ -3503,7 +2389,6 @@ function openRelatedThread(threadId) {
   url.searchParams.set("thread", threadId);
   url.searchParams.delete("q");
   url.searchParams.delete("filter");
-  url.searchParams.delete("organization");
   history.pushState({ module: "orbit", section: "communications", thread: threadId }, "", `${url.pathname}${url.search}`);
   activateRoute("orbit", "communications", { updateHistory: false, focusContent: true });
   renderThreadList();
@@ -4624,71 +3509,9 @@ function formatFileSize(value) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function renderThreadOrganizationOptions() {
-  const organizations = Array.isArray(state.dashboard?.organizations)
-    ? state.dashboard.organizations
-    : [];
-  elements.threadOrganizationFilter.replaceChildren();
-  const all = document.createElement("option");
-  all.value = "";
-  all.textContent = "全部范围";
-  elements.threadOrganizationFilter.append(all);
-  organizations.forEach((organization) => {
-    const option = document.createElement("option");
-    option.value = safeText(organization.id, "");
-    option.textContent = safeText(organization.name, organization.slug);
-    elements.threadOrganizationFilter.append(option);
-  });
-  elements.threadOrganizationFilter.value = organizations.some(
-    (organization) => String(organization.id) === state.threadOrganization,
-  ) ? state.threadOrganization : "";
-  if (!elements.threadOrganizationFilter.value) {
-    state.threadOrganization = "";
-  }
-}
-
 function visibleThreadSummaries() {
-  const organizationsWithThreads = new Set(
-    state.threads
-      .filter((thread) => thread.channel_scope === "organization")
-      .map((thread) => String(thread.organization_id || (thread.organizations || [])[0]?.id || ""))
-      .filter(Boolean),
-  );
-  const organizationChannels = state.threadFilter === "archived" ? [] : (state.dashboard?.organizations || [])
-    .filter((organization) => !organizationsWithThreads.has(String(organization.id)))
-    .map((organization) => ({
-      thread_id: `organization:${organization.id}`,
-      topic: `${safeText(organization.name, organization.slug)} 群聊`,
-      latest_activity_at: null,
-      human_view_state: "viewed",
-      latest_sender: null,
-      latest_recipient: null,
-      latest_content_redacted: false,
-      latest_message_summary: "群聊已建立。成员未指定 Agent 时，默认 Agent 会自动参与。",
-      message_count: 0,
-      attachment_count: 0,
-      exception_count: 0,
-      conversation_state: "updated",
-      channel_scope: "organization",
-      organization_id: organization.id,
-      organization_name: safeText(organization.name, organization.slug),
-      organizations: [organization],
-      virtual_organization_channel: true,
-    }));
-  return [...organizationChannels, ...state.threads].filter((thread) => {
-    if (thread.virtual_organization_channel && state.threadQuery) {
-      const organization = (thread.organizations || [])[0];
-      const searchable = `${thread.topic} ${organization?.slug || ""}`.toLocaleLowerCase();
-      if (!searchable.includes(state.threadQuery.toLocaleLowerCase())) {
-        return false;
-      }
-    }
+  return state.threads.filter((thread) => {
     if (state.threadFilter === "exception" && Number(thread.exception_count || 0) === 0) {
-      return false;
-    }
-    if (state.threadOrganization && !(thread.organizations || []).some(
-      (organization) => String(organization.id) === state.threadOrganization,
-    )) {
       return false;
     }
     return true;
@@ -4708,9 +3531,7 @@ function conversationStateLabel(value) {
 }
 
 function renderThreadParentSummary() {
-  const total = visibleThreadSummaries().filter(
-    (thread) => !thread.virtual_organization_channel,
-  ).length;
+  const total = visibleThreadSummaries().length;
   const unread = visibleThreadSummaries().filter(
     (thread) => thread.human_view_state === "unread",
   ).length;
@@ -4721,74 +3542,10 @@ function renderThreadParentSummary() {
   elements.threadUnreadCount.hidden = unread === 0;
 }
 
-function threadOrganization(thread) {
-  if (thread.channel_scope !== "organization") {
-    return null;
-  }
-  return (thread.organizations || []).find(
-    (organization) => String(organization.id) === String(thread.organization_id),
-  ) || (thread.organizations || [])[0] || (thread.organization_id ? {
-    id: thread.organization_id,
-    name: thread.organization_name || "组织协作",
-  } : null);
-}
-
-function createOrganizationThreadGroup(organization, threadButtons, threads) {
-  const group = document.createElement("details");
-  group.className = "organization-thread-group";
-  group.open = true;
-  const summary = document.createElement("summary");
-  summary.className = "organization-thread-group-summary";
-  const identity = document.createElement("span");
-  identity.className = "organization-thread-group-identity";
-  const icon = document.createElement("span");
-  icon.className = "organization-thread-group-icon";
-  icon.textContent = "群";
-  icon.setAttribute("aria-hidden", "true");
-  const copy = document.createElement("span");
-  const title = document.createElement("strong");
-  title.textContent = safeText(organization?.name, organization?.slug || "组织群聊");
-  const subtitle = document.createElement("small");
-  subtitle.textContent = threadButtons.length
-    ? `${threadButtons.length} 个对话 · 全部组织 Agent 可读`
-    : "群聊已建立 · 暂无对话";
-  copy.append(title, subtitle);
-  identity.append(icon, copy);
-  const status = document.createElement("span");
-  status.className = "organization-thread-group-status";
-  const unreadCount = threads.filter(
-    (thread) => !thread.virtual_organization_channel && thread.human_view_state === "unread",
-  ).length;
-  if (unreadCount) {
-    const unread = document.createElement("span");
-    unread.className = "organization-thread-group-unread";
-    unread.textContent = String(unreadCount);
-    unread.setAttribute("aria-label", `${unreadCount} 个对话尚未查看`);
-    status.append(unread);
-  }
-  const chevron = document.createElement("span");
-  chevron.className = "organization-thread-group-chevron";
-  chevron.textContent = "⌄";
-  chevron.setAttribute("aria-hidden", "true");
-  status.append(chevron);
-  summary.append(identity, status);
-  const children = document.createElement("div");
-  children.className = "organization-thread-children";
-  if (threadButtons.length) {
-    threadButtons.forEach((button) => children.append(button));
-  } else {
-    children.append(emptyState("群里还没有对话。通过这个组织发送的消息会集中显示在这里。"));
-  }
-  group.append(summary, children);
-  return group;
-}
-
 function renderThreadList() {
   elements.threadList.replaceChildren();
   const threads = visibleThreadSummaries();
-  const realThreadCount = threads.filter((thread) => !thread.virtual_organization_channel).length;
-  const organizationGroups = new Map();
-  elements.threadCount.textContent = `${realThreadCount} 个对话`;
+  elements.threadCount.textContent = `${threads.length} 个对话`;
   renderThreadParentSummary();
   if (!threads.length) {
     const hasAgents = Array.isArray(state.dashboard?.agents) && state.dashboard.agents.length > 0;
@@ -4799,11 +3556,11 @@ function renderThreadList() {
     } else if (state.threadFilter === "exception") {
       elements.threadList.append(emptyState("当前授权范围内没有异常对话。"));
     } else if (hasAgents) {
-      elements.threadList.append(emptyState("Agent 已连接或已授权，但目前还没有产生协作对话。"));
+      elements.threadList.append(emptyState("AI 已连接或已授权，但目前还没有产生协作对话。"));
     } else {
       elements.threadList.append(emptyStateWithAction(
-        "连接 Agent 后，它们之间的协作对话会出现在这里。",
-        "去 AI 中连接 Agent",
+        "连接 AI 后，它们之间的协作对话会出现在这里。",
+        "去 AI 中连接",
         () => activateRoute("relay", "connections", { focusContent: true }),
       ));
     }
@@ -4811,29 +3568,12 @@ function renderThreadList() {
   }
   const fragment = document.createDocumentFragment();
   threads.forEach((thread) => {
-    const organization = threadOrganization(thread);
-    if (organization && !organizationGroups.has(String(organization.id))) {
-      organizationGroups.set(String(organization.id), {
-        organization,
-        buttons: [],
-        threads: [],
-      });
-    }
-    if (organization) {
-      organizationGroups.get(String(organization.id)).threads.push(thread);
-    }
-    if (thread.virtual_organization_channel) {
-      return;
-    }
     const button = document.createElement("button");
     button.type = "button";
     button.className = "thread-list-item";
     button.classList.toggle("active", String(thread.thread_id) === state.selectedThreadId);
-    if (String(thread.thread_id) === state.selectedThreadId) {
-      button.setAttribute("aria-current", "true");
-    }
+    if (String(thread.thread_id) === state.selectedThreadId) button.setAttribute("aria-current", "true");
     button.setAttribute("aria-label", `打开对话：${safeText(thread.topic, "无主题对话")}`);
-
     const top = document.createElement("span");
     top.className = "thread-list-top";
     const topic = document.createElement("strong");
@@ -4843,9 +3583,7 @@ function renderThreadList() {
     recency.className = "thread-list-recency";
     const time = document.createElement("span");
     time.className = "thread-list-time";
-    time.textContent = thread.virtual_organization_channel
-      ? "群聊已建立"
-      : dateText(thread.latest_activity_at);
+    time.textContent = dateText(thread.latest_activity_at);
     recency.append(time);
     if (thread.human_view_state === "unread") {
       const unread = document.createElement("span");
@@ -4855,44 +3593,26 @@ function renderThreadList() {
       recency.append(unread);
     }
     top.append(topic, recency);
-
     const participants = document.createElement("span");
     participants.className = "thread-list-participants";
     const avatars = document.createElement("span");
     avatars.className = "thread-avatar-stack";
-    [thread.latest_sender, thread.latest_recipient].filter(Boolean).forEach(
-      (agent) => avatars.append(agentAvatar(agent)),
-    );
+    [thread.latest_sender, thread.latest_recipient].filter(Boolean).forEach((agent) => avatars.append(agentAvatar(agent)));
     const names = document.createElement("span");
     names.className = "thread-participant-names";
-    const channelOrganization = threadOrganization(thread);
-    names.textContent = thread.virtual_organization_channel && channelOrganization
-      ? `${Number(channelOrganization.member_count || 0)} 位成员 · ${Number(channelOrganization.agent_count || 0)} 个参与 Agent`
-      : thread.channel_scope === "organization" && channelOrganization
-        ? `${agentConversationLabel(thread.latest_sender)} → ${safeText(channelOrganization.name)} · 全体可读`
-        : thread.latest_sender && thread.latest_recipient
-          ? `${agentConversationLabel(thread.latest_sender)} → ${agentConversationLabel(thread.latest_recipient, { currentAsMe: true })}`
-          : "参与者待确认";
+    names.textContent = thread.latest_sender && thread.latest_recipient
+      ? `${agentConversationLabel(thread.latest_sender)} → ${agentConversationLabel(thread.latest_recipient, { currentAsMe: true })}`
+      : "参与者待确认";
     participants.append(avatars, names);
-
     const preview = document.createElement("span");
     preview.className = "thread-list-preview";
-    preview.textContent = thread.latest_content_redacted
-      ? "正文因当前审计角色而隐藏"
-      : compactThreadContent(thread.latest_message_summary);
-
+    preview.textContent = thread.latest_content_redacted ? "正文因当前权限而隐藏" : compactThreadContent(thread.latest_message_summary);
     const markers = document.createElement("span");
     markers.className = "thread-list-markers";
-    const markerValues = [[
-      thread.virtual_organization_channel ? "暂无消息" : `${thread.message_count} 条往来`,
-      "conversation-count",
-    ]];
-    if (!thread.virtual_organization_channel) {
-      markerValues.push([
-        conversationStateLabel(thread.conversation_state),
-        `conversation-state ${safeText(thread.conversation_state, "updated")}`,
-      ]);
-    }
+    const markerValues = [
+      [`${thread.message_count} 条往来`, "conversation-count"],
+      [conversationStateLabel(thread.conversation_state), `conversation-state ${safeText(thread.conversation_state, "updated")}`],
+    ];
     if (thread.attachment_count) markerValues.push([`附件 ${thread.attachment_count}`, ""]);
     if (thread.exception_count) markerValues.push([`异常 ${thread.exception_count}`, "exception"]);
     markerValues.forEach(([label, className]) => {
@@ -4903,19 +3623,9 @@ function renderThreadList() {
     });
     button.append(top, participants, preview, markers);
     button.addEventListener("click", () => selectThread(String(thread.thread_id)));
-    if (organization) {
-      button.classList.add("organization-thread-child");
-      organizationGroups.get(String(organization.id)).buttons.push(button);
-    } else {
-      fragment.append(button);
-    }
+    fragment.append(button);
   });
-  const groupedFragment = document.createDocumentFragment();
-  organizationGroups.forEach(({ organization, buttons, threads: groupThreads }) => {
-    groupedFragment.append(createOrganizationThreadGroup(organization, buttons, groupThreads));
-  });
-  groupedFragment.append(fragment);
-  elements.threadList.append(groupedFragment);
+  elements.threadList.append(fragment);
 }
 
 function syncThreadFilterControls() {
@@ -4961,7 +3671,6 @@ function renderSettingsArchiveList() {
     button.addEventListener("click", async () => {
       state.threadFilter = "archived";
       state.threadQuery = "";
-      state.threadOrganization = "";
       state.selectedThreadId = String(thread.thread_id);
       state.selectedThread = null;
       elements.threadSearchInput.value = "";
@@ -5308,12 +4017,7 @@ function renderTimelineMessage(message, messagesById, repliedMessageIds) {
   identity.append(sender, type, time);
   const route = document.createElement("div");
   route.className = "thread-message-route";
-  const requestedResponderLabels = (message.requested_responders || []).map(
-    (agent) => agentConversationLabel(agent),
-  );
-  route.textContent = message.channel_scope === "organization"
-    ? `发送到：${safeText(message.organization_name, "组织协作")} · 全部组织 Agent 可读${requestedResponderLabels.length ? ` · 请 ${requestedResponderLabels.join("、")} 回复` : " · 无指定回复人"}`
-    : `发送给：${agentConversationLabel(message.recipient, { currentAsMe: true })} · ${agentTypeLabel(message.recipient)}`;
+  route.textContent = `发送给：${agentConversationLabel(message.recipient, { currentAsMe: true })} · ${agentTypeLabel(message.recipient)}`;
   const subject = document.createElement("strong");
   subject.className = "thread-message-subject";
   subject.textContent = safeText(message.subject, "无主题消息");
@@ -5323,14 +4027,9 @@ function renderTimelineMessage(message, messagesById, repliedMessageIds) {
   states.className = "thread-message-states";
   const communication = document.createElement("span");
   communication.className = "thread-state-group";
-  const communicationChip = chip(
-    message.channel_scope === "organization" ? "organization_shared" : message.communication_state,
-  );
-  if (message.channel_scope === "organization") {
-    communicationChip.textContent = `已同步给 ${Number(message.organization_recipient_count || 0)} 个 Agent`;
-  }
+  const communicationChip = chip(message.communication_state);
   communication.append(
-    document.createTextNode(message.channel_scope === "organization" ? "协作范围" : "送达情况"),
+    document.createTextNode("送达情况"),
     communicationChip,
   );
   states.append(communication);
@@ -5403,9 +4102,7 @@ function renderThreadDetail(thread) {
   elements.threadDetailCount.textContent = `完整对话 · ${messages.length} 条往来`;
   const firstMessage = chronologicalMessages[0];
   elements.threadDetailRoute.textContent = firstMessage
-    ? firstMessage.channel_scope === "organization"
-      ? `发送自：${agentConversationLabel(firstMessage.sender)}　　发送到：${safeText(firstMessage.organization_name, "组织协作")}（全部组织 Agent 可读）`
-      : `发送自：${agentConversationLabel(firstMessage.sender)}　　给：${agentConversationLabel(firstMessage.recipient, { currentAsMe: true })}`
+    ? `发送自：${agentConversationLabel(firstMessage.sender)}　　给：${agentConversationLabel(firstMessage.recipient, { currentAsMe: true })}`
     : "发送自：—　　给：—";
   const failed = messages.some((message) => message.work_state === "failed" || message.message_type === "error");
   const completed = messages.some((message) => message.work_state === "completed");
@@ -5462,28 +4159,6 @@ async function markThreadViewed(threadId) {
 }
 
 async function loadThreadDetail(threadId) {
-  if (String(threadId).startsWith("organization:")) {
-    const organizationId = String(threadId).slice("organization:".length);
-    const organization = (state.dashboard?.organizations || []).find(
-      (candidate) => String(candidate.id) === organizationId,
-    );
-    if (state.selectedThreadId !== String(threadId)) {
-      return;
-    }
-    state.selectedThread = null;
-    if (!organization) {
-      setThreadDetailEmpty("无法打开这个组织群聊", "你可能已经离开组织，请刷新后重试。");
-      return;
-    }
-    const participantCopy = Number(organization.agent_count || 0) > 0
-      ? `${organization.agent_count} 个 Agent 已可参与。成员没有手动选择 Agent 时，系统会使用其默认 Agent。`
-      : "群聊已经可见；成员连接并设置默认 Agent 后即可参与协作。";
-    setThreadDetailEmpty(
-      `${safeText(organization.name, organization.slug)} 群聊`,
-      `${organization.member_count} 位成员。${participantCopy} 第一条群消息发送后，完整往来会显示在这里。`,
-    );
-    return;
-  }
   setThreadDetailEmpty("正在读取对话", "只会显示你有权查看的内容，不会改变 Agent 的已读或处理状态。");
   try {
     const thread = await requestJson(`/api/v1/orbit/threads/${encodeURIComponent(threadId)}`);
@@ -5596,7 +4271,6 @@ async function loadArchivedThreadsForSettings() {
 async function loadThreads({ loadSelection = true } = {}) {
   const threads = await requestJson(threadListEndpoint());
   state.threads = Array.isArray(threads) ? threads : [];
-  renderThreadOrganizationOptions();
   renderThreadList();
   if (loadSelection && state.selectedThreadId) {
     await loadThreadDetail(state.selectedThreadId);
@@ -5612,86 +4286,6 @@ function renderSecurity(security) {
   elements.securityStatus.textContent = `${password} · ${mfa} · ${keys}`;
   elements.openMfa.disabled = !security.password_configured;
   elements.openKeyRotation.disabled = !security.password_configured;
-  elements.ssoSecurityCard.hidden = !Boolean(state.authConfig?.enterprise_oidc_enabled);
-  elements.openSsoLink.disabled = !security.password_configured;
-}
-
-function closeSsoLinkDialog() {
-  elements.ssoLinkPassword.value = "";
-  elements.ssoLinkMfa.value = "";
-  elements.ssoLinkProvider.replaceChildren();
-  elements.ssoLinkResult.textContent = "";
-  if (elements.ssoLinkDialog.open) {
-    elements.ssoLinkDialog.close();
-  }
-}
-
-async function openSsoLinkDialog() {
-  elements.ssoLinkProvider.replaceChildren();
-  elements.ssoLinkResult.textContent = "正在查找当前邮箱可用的企业 SSO…";
-  elements.ssoLinkDialog.showModal();
-  try {
-    const email = state.dashboard?.user?.email || "";
-    const discovered = await requestJson("/api/v1/auth/oidc/providers", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
-    });
-    const providers = Array.isArray(discovered.items) ? discovered.items : [];
-    providers.forEach((provider) => {
-      const option = document.createElement("option");
-      option.value = String(provider.provider_id);
-      option.dataset.organizationId = String(provider.organization_id);
-      option.textContent = `${safeText(provider.display_name)} · ${safeText(provider.issuer)}`;
-      elements.ssoLinkProvider.append(option);
-    });
-    elements.ssoLinkResult.textContent = providers.length
-      ? "请选择身份提供方并重新验证当前账户。"
-      : "当前邮箱域名尚未配置企业 SSO。";
-    elements.ssoLinkResult.className = `form-status ${providers.length ? "" : "error"}`.trim();
-  } catch (error) {
-    elements.ssoLinkResult.textContent = error.message;
-    elements.ssoLinkResult.className = "form-status error";
-  }
-}
-
-async function linkEnterpriseOidc(event) {
-  event.preventDefault();
-  const option = elements.ssoLinkProvider.selectedOptions[0];
-  if (!option) {
-    elements.ssoLinkResult.textContent = "没有可绑定的企业身份提供方。";
-    elements.ssoLinkResult.className = "form-status error";
-    return;
-  }
-  const proof = mfaProof(elements.ssoLinkMfa.value);
-  const submit = elements.ssoLinkForm.querySelector("button[type='submit']");
-  submit.disabled = true;
-  try {
-    const started = await requestJson(
-      `/api/v1/orbit/organizations/${encodeURIComponent(option.dataset.organizationId)}/oidc-providers/${encodeURIComponent(option.value)}/link`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-CSRF-Token": state.csrfToken },
-        body: JSON.stringify({
-          password: elements.ssoLinkPassword.value,
-          ...proof,
-        }),
-      },
-    );
-    elements.ssoLinkPassword.value = "";
-    elements.ssoLinkMfa.value = "";
-    const authorizationUrl = new URL(started.authorization_url);
-    if (!["https:", "http:"].includes(authorizationUrl.protocol)) {
-      throw new Error("企业 SSO 返回了不安全的授权地址。" );
-    }
-    window.location.assign(authorizationUrl.href);
-  } catch (error) {
-    elements.ssoLinkPassword.value = "";
-    elements.ssoLinkMfa.value = "";
-    elements.ssoLinkResult.textContent = error.message;
-    elements.ssoLinkResult.className = "form-status error";
-    submit.disabled = false;
-  }
 }
 
 function renderDashboard(dashboard) {
@@ -5770,7 +4364,6 @@ async function loadDashboard() {
     renderDashboard(dashboard);
     renderConnectors(state.connectors);
     renderSecurity(security);
-    renderThreadOrganizationOptions();
     renderThreadList();
     renderSettingsArchiveList();
     if (state.selectedThreadId) {
@@ -5788,7 +4381,6 @@ async function loadDashboard() {
       `${connectedAgentCount} 个 Agent`,
     );
     await maybeOpenRequestedPairing();
-    await maybePreviewOrganizationInvitation();
   } catch (error) {
     setConnection("数据同步失败", "error", "同步失败");
     throw error;
@@ -5814,62 +4406,8 @@ async function loadAuthConfig() {
   elements.loginForm.hidden = !selfService;
   elements.openRecovery.hidden = !selfService;
   elements.openRegister.hidden = !Boolean(state.authConfig.open_registration_enabled);
-  elements.oidcEntry.hidden = !Boolean(state.authConfig.enterprise_oidc_enabled);
   if (!selfService) {
     setFormStatus("当前环境尚未开通邮箱登录，请联系管理员。", "error");
-  }
-}
-
-async function discoverEnterpriseOidc() {
-  const email = elements.loginEmail.value.trim();
-  elements.oidcOptions.replaceChildren();
-  if (!email || !email.includes("@")) {
-    setFormStatus("请先填写单位邮箱，再选择单位统一登录。", "error");
-    elements.loginEmail.focus();
-    return;
-  }
-  elements.discoverOidc.disabled = true;
-  setFormStatus("正在查找已验证的企业身份提供方…");
-  try {
-    const discovered = await requestJson("/api/v1/auth/oidc/providers", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
-    });
-    const providers = Array.isArray(discovered.items) ? discovered.items : [];
-    if (providers.length === 0) {
-      setFormStatus("这个邮箱所在单位尚未开通统一登录。", "error");
-      return;
-    }
-    providers.forEach((provider) => {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "quiet-button";
-      button.textContent = `使用 ${safeText(provider.display_name, "单位工作账号")} 登录`;
-      button.addEventListener("click", async () => {
-        button.disabled = true;
-        try {
-          const started = await requestJson(
-            `/api/v1/auth/oidc/${encodeURIComponent(provider.provider_id)}/start`,
-            { method: "POST" },
-          );
-          const authorizationUrl = new URL(started.authorization_url);
-          if (!['https:', 'http:'].includes(authorizationUrl.protocol)) {
-            throw new Error("企业 SSO 返回了不安全的授权地址。");
-          }
-          window.location.assign(authorizationUrl.href);
-        } catch (error) {
-          button.disabled = false;
-          setFormStatus(error.message, "error");
-        }
-      });
-      elements.oidcOptions.append(button);
-    });
-    setFormStatus("请选择你的单位登录入口继续。", "success");
-  } catch (error) {
-    setFormStatus(error.message, "error");
-  } finally {
-    elements.discoverOidc.disabled = false;
   }
 }
 
@@ -6165,8 +4703,6 @@ async function signOut() {
     closeAttachmentPreview();
     closeProjectCreateDialog();
     closeProjectInviteDialog();
-    closeOrganizationCreateDialog();
-    closeOrganizationManagement();
     state.dashboard = null;
     state.projects = [];
     state.selectedProject = null;
@@ -6282,7 +4818,6 @@ elements.attachmentPreviewDialog.addEventListener("close", () => {
   elements.attachmentPreviewDownload.removeAttribute("href");
   elements.attachmentPreviewMeta.textContent = "";
 });
-elements.discoverOidc.addEventListener("click", discoverEnterpriseOidc);
 elements.openRegister.addEventListener("click", () => {
   elements.registerResult.textContent = "邮箱验证码有效期有限，请在收到后及时完成注册。";
   elements.registerDialog.showModal();
@@ -6339,23 +4874,6 @@ elements.threadSearchInput.addEventListener("input", () => {
       elements.threadList.replaceChildren(emptyState("搜索暂时不可用，请稍后重试。"));
     }
   }, 260);
-});
-elements.threadOrganizationFilter.addEventListener("change", () => {
-  state.threadOrganization = elements.threadOrganizationFilter.value;
-  if (!visibleThreadSummaries().some(
-    (thread) => String(thread.thread_id) === state.selectedThreadId,
-  )) {
-    state.selectedThreadId = "";
-    state.selectedThread = null;
-    setThreadDetailEmpty("选择一条协作对话", "当前列表已按组织范围筛选。");
-  }
-  updateThreadWorkspaceMode();
-  renderThreadList();
-  history.replaceState(
-    { module: "orbit", section: "communications", thread: state.selectedThreadId || null },
-    "",
-    threadRouteUrl(),
-  );
 });
 elements.threadFilters.forEach((button) => {
   button.addEventListener("click", async () => {
@@ -6544,46 +5062,6 @@ elements.deleteAgentForm.addEventListener("submit", deleteAgent);
 elements.deleteAgentClose.addEventListener("click", closeDeleteAgentDialog);
 elements.deleteAgentCancel.addEventListener("click", closeDeleteAgentDialog);
 elements.deleteAgentDialog.addEventListener("close", closeDeleteAgentDialog);
-elements.openOrganizationCreate.addEventListener("click", () => {
-  elements.organizationCreateResult.textContent = "创建后你将成为首位 Owner。";
-  elements.organizationCreateDialog.showModal();
-  elements.organizationName.focus();
-});
-elements.organizationCreateForm.addEventListener("submit", createOrganization);
-elements.organizationCreateClose.addEventListener("click", closeOrganizationCreateDialog);
-elements.organizationCreateCancel.addEventListener("click", closeOrganizationCreateDialog);
-elements.organizationCreateDialog.addEventListener("close", closeOrganizationCreateDialog);
-elements.organizationInvitationForm.addEventListener("submit", acceptOrganizationInvitation);
-elements.organizationInvitationClose.addEventListener("click", closeOrganizationInvitationDialog);
-elements.organizationInvitationCancel.addEventListener("click", closeOrganizationInvitationDialog);
-elements.organizationInvitationDialog.addEventListener("close", closeOrganizationInvitationDialog);
-elements.organizationInviteForm.addEventListener("submit", inviteOrganizationMember);
-elements.organizationInviteContact.addEventListener("change", () => {
-  if (elements.organizationInviteContact.value) {
-    elements.organizationInviteUsername.value = elements.organizationInviteContact.value;
-  }
-});
-elements.organizationInviteUsername.addEventListener("input", () => {
-  if (elements.organizationInviteUsername.value !== elements.organizationInviteContact.value) {
-    elements.organizationInviteContact.value = "";
-  }
-});
-elements.organizationAgentAdd.addEventListener("click", () => changeOwnedOrganizationAgent(null, "assign"));
-elements.organizationManageClose.addEventListener("click", closeOrganizationManagement);
-elements.organizationManageCancel.addEventListener("click", closeOrganizationManagement);
-elements.organizationManageDialog.addEventListener("close", closeOrganizationManagement);
-elements.organizationLeave.addEventListener("click", leaveOrganization);
-elements.organizationDisband.addEventListener("click", disbandOrganization);
-[elements.organizationDisbandName, elements.organizationDisbandPassword].forEach((input) => {
-  input.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      disbandOrganization();
-    }
-  });
-});
-elements.organizationDomainAdd.addEventListener("click", addOrganizationDomain);
-elements.organizationOidcAdd.addEventListener("click", addOrganizationOidcProvider);
 elements.openMfa.addEventListener("click", () => {
   elements.mfaResult.textContent = "重新验证后生成只在当前窗口显示的认证器密钥。";
   elements.mfaDialog.showModal();
@@ -6603,17 +5081,11 @@ elements.keyForm.addEventListener("submit", rotateHumanKey);
 elements.keyClose.addEventListener("click", closeKeyDialog);
 elements.keyCancel.addEventListener("click", closeKeyDialog);
 elements.keyDialog.addEventListener("close", closeKeyDialog);
-elements.openSsoLink.addEventListener("click", openSsoLinkDialog);
-elements.ssoLinkForm.addEventListener("submit", linkEnterpriseOidc);
-elements.ssoLinkClose.addEventListener("click", closeSsoLinkDialog);
-elements.ssoLinkCancel.addEventListener("click", closeSsoLinkDialog);
-elements.ssoLinkDialog.addEventListener("close", closeSsoLinkDialog);
 
 window.addEventListener("popstate", () => {
   const parameters = new URLSearchParams(window.location.search);
   const previousQuery = state.threadQuery;
   const previousFilter = state.threadFilter;
-  const previousOrganization = state.threadOrganization;
   applyThreadRouteParameters(parameters);
   applyAgentRouteParameters(parameters);
   activateRoute(parameters.get("module") || "orbit", parameters.get("view") || "", {
@@ -6624,7 +5096,6 @@ window.addEventListener("popstate", () => {
     if (
       previousQuery !== state.threadQuery
       || previousFilter !== state.threadFilter
-      || previousOrganization !== state.threadOrganization
     ) {
       void loadThreads();
     } else if (state.selectedThreadId) {
@@ -6640,15 +5111,11 @@ window.addEventListener("popstate", () => {
 window.addEventListener("pagehide", () => {
   clearSensitiveInputs();
   state.csrfToken = "";
-  state.pendingOrganizationInvitation = "";
-  state.organizationDomainProofs.clear();
 });
 
 async function initializeOrbit() {
   initializeWorkspaceNavigation();
   initializeCollaborationModules();
-  const hashParameters = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-  state.pendingOrganizationInvitation = hashParameters.get("organization-invitation") || "";
   history.replaceState(
     { module: state.activeModule, section: state.activeSection },
     "",

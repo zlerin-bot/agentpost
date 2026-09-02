@@ -53,6 +53,9 @@ def test_public_agent_integration_contract_preserves_machine_and_human_semantics
         "result_requires_human_acceptance": True,
         "task_id_is_global_stable_identifier": True,
         "active_task_agents_receive_durable_runs": True,
+        "collaboration_scope": "task_only",
+        "participant_authority": "task_membership",
+        "one_thread_per_task": True,
     }
     assert payload["heartbeat"]["recommended_interval_seconds"] == 30
     assert payload["heartbeat"]["offline_after_seconds"] == 90
@@ -83,10 +86,10 @@ def test_public_agent_integration_contract_preserves_machine_and_human_semantics
         "ack",
         "task_result",
     ]
-    organization = payload["organization_collaboration"]
-    assert organization["attachment_field"] == "attachments"
-    assert organization["attachment_object_shared_across_delivery_copies"] is True
-    assert organization["attachments_visible_to_all_assigned_agents"] is True
+    task = payload["task_execution"]
+    assert task["collaboration_scope"] == "task_only"
+    assert task["participant_authority"] == "task_membership"
+    assert task["one_thread_per_task"] is True
 
 
 def test_agent_integration_contract_is_in_openapi(client: TestClient) -> None:
@@ -94,3 +97,7 @@ def test_agent_integration_contract_is_in_openapi(client: TestClient) -> None:
 
     assert response.status_code == 200
     assert "/api/v1/protocol/contract" in response.json()["paths"]
+    assert all(
+        "organizations" not in path and "organization-channel" not in path
+        for path in response.json()["paths"]
+    )

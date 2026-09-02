@@ -51,6 +51,9 @@ class StateContract(ContractModel):
 
 
 class TaskExecutionContract(ContractModel):
+    collaboration_scope: Literal["task_only"] = "task_only"
+    participant_authority: Literal["task_membership"] = "task_membership"
+    one_thread_per_task: Literal[True] = True
     create_endpoint: Literal["/api/v1/agent/tasks"] = "/api/v1/agent/tasks"
     create_requires_idempotency_key: Literal[True] = True
     resolve_endpoint: Literal["/api/v1/agent/tasks/resolve"] = "/api/v1/agent/tasks/resolve"
@@ -139,19 +142,6 @@ class HumanPresentationContract(ContractModel):
     )
 
 
-class OrganizationCollaborationContract(ContractModel):
-    send_endpoint_template: str
-    context_visible_to_all_assigned_agents: Literal[True] = True
-    reply_policy: Literal["addressed_agents_reply"] = "addressed_agents_reply"
-    private_threads_remain_private: Literal[True] = True
-    requested_responder_field: Literal["requested_responder_agent_ids"] = (
-        "requested_responder_agent_ids"
-    )
-    attachment_field: Literal["attachments"] = "attachments"
-    attachment_object_shared_across_delivery_copies: Literal[True] = True
-    attachments_visible_to_all_assigned_agents: Literal[True] = True
-
-
 class OnboardingStep(ContractModel):
     order: int
     action: str
@@ -171,7 +161,6 @@ class AgentIntegrationContract(ContractModel):
     synchronization: SynchronizationContract
     interoperability: InteroperabilityContract
     human_presentation: HumanPresentationContract
-    organization_collaboration: OrganizationCollaborationContract
     onboarding: list[OnboardingStep]
 
 
@@ -203,35 +192,6 @@ def build_agent_integration_contract(settings: Settings) -> AgentIntegrationCont
                 path="/api/v1/messages/{message_id}/ack",
                 purpose="confirm receipt without claiming task completion",
                 changes_state=True,
-            ),
-            EndpointContract(
-                method="POST",
-                path="/api/v1/organizations/{organization_id}/channel/messages",
-                purpose=(
-                    "post organization context to every assigned Agent while naming the Agents "
-                    "expected to reply"
-                ),
-                changes_state=True,
-                required_headers=["Idempotency-Key"],
-            ),
-            EndpointContract(
-                method="GET",
-                path="/api/v1/organization-channel",
-                purpose=(
-                    "read the current Agent's single organization and channel participants; "
-                    "returns a selection-required conflict when the default Agent participates "
-                    "in multiple organizations"
-                ),
-                changes_state=False,
-            ),
-            EndpointContract(
-                method="GET",
-                path="/api/v1/organization-channels",
-                purpose=(
-                    "list organization channels available to the current Agent, including "
-                    "default participation when its Human has not selected another Agent"
-                ),
-                changes_state=False,
             ),
             EndpointContract(
                 method="POST",
@@ -329,9 +289,6 @@ def build_agent_integration_contract(settings: Settings) -> AgentIntegrationCont
         ),
         interoperability=InteroperabilityContract(),
         human_presentation=HumanPresentationContract(),
-        organization_collaboration=OrganizationCollaborationContract(
-            send_endpoint_template=("/api/v1/organizations/{organization_id}/channel/messages")
-        ),
         onboarding=[
             OnboardingStep(
                 order=1,

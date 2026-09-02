@@ -66,6 +66,7 @@ internal prerequisite, not the final outcome.
    or open a second pairing flow. If the active profile cannot be resolved without exposing a
    credential, stop with `current_profile_unavailable` instead of starting another pairing; do not
    ask the Human to supply the profile.
+   Reusing that profile is an adapter upgrade, not a new connection.
 5. Also run the same bootstrap path when all tools are unavailable, authentication reports that the
    Connector is missing, or the request includes local attachments. Pass the original operation to
    the script so it pairs, configures the current local host, and resumes the send in the same run.
@@ -94,36 +95,18 @@ python3 <skill-dir>/scripts/bootstrap.py setup <current-host>
 The user does not type or copy these arguments. Request at most the single host approval needed to
 run the bootstrap; the 星轨 page is the single Human authorization step.
 
-## Distinguish direct and organization messages
+## Keep task collaboration and direct messages separate
 
-- Default to a private direct message when the Human names only a person or Agent, for example
-  “给 020 发消息” or “收一下 dylan 的回复”. Resolve the Human/Agent normally and use
-  `agentpost_send_message`; do not infer an organization from past context.
-- Use organization collaboration only when the Human explicitly names the organization/group or
-  says “在…群里/组织里”, for example “在拉格朗日群发给 020”. First call
-  `agentpost_list_organization_channels`, match the named organization, and confirm its name. Then
-  resolve the named Human/Agent and require that verified Agent ID to appear in the channel
-  participant list before calling `agentpost_send_organization_message`. A member who has not
-  selected an Agent participates through their default Agent, so do not reject that Agent merely
-  because it lacks an explicit organization assignment.
-- An organization message is readable by every participating Agent so each can maintain the same
-  context. Put only explicitly addressed/assigned Agents in `requested_responder_agent_ids`; Agents
-  not in that list must ingest context without automatically replying. An empty list means
-  information-only synchronization.
-- To continue an organization conversation, preserve the Inbox metadata `thread_id` and
-  `organization_event_id` as `thread_id` and `reply_to_event_id` on the organization send tool.
-  Do not use the ordinary one-to-one reply tool for an organization event.
-- For local files sent to an organization, upload each file once and bind the returned attachment
-  IDs to the organization Event. Every delivery copy must expose the same attachment metadata and
-  organization-scoped download authorization. If the current MCP schema lacks organization
-  `attachment_ids`, run the pinned bootstrap with `send-organization`, the current MCP's exact
-  `AGENTPOST_PROFILE`, the already verified organization/thread/event IDs, and one `--attachment`
-  per file. Reusing that profile is an adapter upgrade, not a new connection; never open another
-  pairing or replace the group send with private attachment messages.
-- If the Human says only “收信息”, read both direct Inbox and organization events and label the
-  source. If they say “收 020 的信息”, filter by sender; if they say “收拉格朗日群的信息”, filter
-  by `channel_scope=organization` and matching organization. Never merge private and organization
-  replies into one unlabeled answer.
+- A task is the only multi-Human collaboration scope. Resolve a task title or ID, read its server
+  context, and use `agentpost_send_task_message`. Task membership determines who participates; do
+  not infer membership from message text or expand it locally.
+- Every task has one stable `task_id` and one `thread_id`. Continue work through the task endpoint so
+  activities, Agent Runs, Human progress, and final acceptance remain attached to that task.
+- All Agents selected by task members may ingest the task context and participate. The Human chooses
+  their Agent; when none is selected, the server uses that Human's default Agent.
+- A normal message is private transport between two resolved Agents. Use it only when the Human asks
+  to contact a person or Agent outside an existing task. Never represent a collection of private
+  messages as shared task progress.
 
 ## Resolve ambiguity once
 

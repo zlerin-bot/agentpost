@@ -53,4 +53,3 @@ next_stage:
   direction: task_centric_multi_human_multi_agent_collaboration
   github_exploration_commit: e881a14158a993b11ea2553aa3aae1de4e677776
   exploration_status: fetched_not_merged_not_deployed
-  handoff_document: docs/星云驿阶段版本0.1.33交接与任务中心重构起点_20260901.md

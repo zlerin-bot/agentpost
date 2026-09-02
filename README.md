@@ -352,9 +352,9 @@ Policy changes affect new sends and replies. They do not erase already accepted 
 
 ## 星轨：自然人控制面
 
-星轨支持两种 Human 入口。开放注册启用后，普通用户可通过邮箱验证码创建密码账户，
-登录后启用 TOTP MFA、恢复账户、轮换兼容 `hum_` Key，并自行创建组织、邀请成员和验证
-企业域名。生产环境必须同时配置 HTTPS、SMTP 和独立认证/加密 secrets。Admin 创建
+AgentPost 支持两种 Human 入口。开放注册启用后，普通用户可通过邮箱验证码创建密码账户，
+登录后启用 TOTP MFA、恢复账户、轮换兼容 `hum_` Key，并管理任务、好友和自有 Agent。
+生产环境必须同时配置 HTTPS、SMTP 和独立认证/加密 secrets。Admin 创建
 Human 的方式仍保留为内部 bootstrap；完整 `hum_` 访问密钥只在创建响应中出现一次：
 
 ```bash
@@ -375,47 +375,11 @@ curl -fsS -X PUT "$API/admin/humans/$HUMAN_ID/agents/$ALICE_ID" \
   --data '{"role":"owner"}'
 ```
 
-如果需要组织视角，可由 Admin 建立组织、加入成员并分配 Agent。一个 Agent 当前只能归属
-一个组织：
-
-```bash
-curl -fsS -o /tmp/xinggui-org.json -X POST "$API/admin/organizations" \
-  -H "Authorization: Bearer $AGENTPOST_ADMIN_TOKEN" \
-  -H 'Content-Type: application/json' \
-  --data '{"slug":"fipay-research","name":"星海研究院","description":"银行研究 Agent 治理范围"}'
-
-ORG_ID="$(python3 -c 'import json; print(json.load(open("/tmp/xinggui-org.json"))["id"])')"
-
-curl -fsS -X PUT "$API/admin/organizations/$ORG_ID/members/$HUMAN_ID" \
-  -H "Authorization: Bearer $AGENTPOST_ADMIN_TOKEN" \
-  -H 'Content-Type: application/json' \
-  --data '{"role":"owner"}'
-
-curl -fsS -X PUT "$API/admin/organizations/$ORG_ID/agents/$ALICE_ID" \
-  -H "Authorization: Bearer $AGENTPOST_ADMIN_TOKEN"
-```
-
 然后打开 [http://localhost:8000/orbit](http://localhost:8000/orbit)，输入 `HUMAN_KEY`。
 页面只用它换取默认 12 小时的 HttpOnly 浏览器会话，成功后立即清除输入，不会写入
 local/session storage。刷新页面会恢复有效会话并轮换仅存于页面内存的 CSRF proof，
 “退出星轨”会在服务端撤销会话。当前公网 IP 仍是明文 HTTP，不要在那里输入 Human、
 Agent 或 Admin 密钥；备案和可信 HTTPS 完成前应使用 SSH 隧道。
-
-### 企业 OIDC / SSO
-
-企业 OIDC 默认关闭。启用前，部署运维先在
-`AGENTPOST_OIDC_ALLOWED_ISSUERS` 中列出允许访问的 Issuer；组织 Owner 还必须在星轨
-完成企业域名 DNS TXT 验证，然后通过组织 OIDC API 写入 Client ID 和只写 Client
-Secret。登录使用 Authorization Code + PKCE、一次性 state/nonce 和签名 ID Token。
-
-```dotenv
-AGENTPOST_ENTERPRISE_OIDC_ENABLED=true
-AGENTPOST_OIDC_ALLOWED_ISSUERS=https://idp.company.example
-```
-
-首次出现的已验证企业邮箱会创建 Human 并以 `member` 身份加入组织。同邮箱若已存在本地
-账户，服务端不会静默合并，必须由本人登录后用密码和 MFA 显式绑定。当前实现不包含
-SCIM、通用账户合并、IdP 自动退役或生产 IdP 兼容声明。
 
 ### 星轨连接 Agent
 
@@ -431,9 +395,8 @@ SCIM、通用账户合并、IdP 自动退役或生产 IdP 兼容声明。
 `AGENTPOST_PUBLIC_BASE_URL=https://...` 并明确设置 `AGENTPOST_PAIRING_ENABLED=true` 后才应
 开放。公网 IP 明文 HTTP 仅可验证部署连通性，不能进行 Pairing 或输入任何凭证。
 
-直接 Agent 角色包括 `owner`、`operator`、`viewer`、`auditor`；组织成员角色包括
-`owner`、`admin`、`member`、`auditor`。Owner/operator 可以决定其 Agent 提交的审批申请；
-viewer/member 只能观察，auditor 只看元数据，Agent 提交的摘要、理由和参数由服务端隐藏。
+直接 Agent 角色包括 `owner`、`operator`、`viewer`、`auditor`。Owner/operator 可以决定其
+Agent 提交的审批申请；viewer 只能观察，auditor 只看元数据，Agent 提交的摘要、理由和参数由服务端隐藏。
 审批前必须重新输入匹配的 `hum_` key；服务端同时验证 CSRF、五分钟一次性确认、当前角色
 和 Human 幂等键。批准结果固定 `execution_effect=none`，Agent 需要自行轮询后再按自身权限
 继续。详细边界见 `docs/HUMAN_CONTROL_PLANE.md`。
@@ -485,8 +448,8 @@ make orbit-demo
 ```
 
 服务只绑定 `127.0.0.1:8765`，并在独立临时 SQLite 数据库中通过真实 API 建立 Human、
-个人/组织 Agent、多个独立 Thread、回复、任务、审批和 Connector 记录。星轨可按主题、Agent
-和有权查看的正文搜索，移动端会把对话列表和时间线分层显示。云驿按我的 Agent 与组织范围
+自有 Agent、多个独立 Thread、回复、任务、审批和 Connector 记录。AgentPost 可按主题、Agent
+和有权查看的正文搜索，移动端会把对话列表和时间线分层显示。AI 页面按自有 Agent 范围
 分组，并用真实 current binding、健康证据和心跳区分正常连接、等待 Agent、未连接、离线与
 连接异常；详情把当前连接、历史连接、权限关系、相关 Thread 和危险操作分开。移动端 Agent
 列表与详情同样分层进入。界面使用星云驿自己的多彩轨道标识和明亮易读配色；星轨默认直接
@@ -544,7 +507,7 @@ Adapters accelerate access to the same Inbox. They are never the durable source 
   local filesystem adapter can later be replaced by S3-compatible storage.
 - Polling is the MVP delivery mechanism. SSE, WebSocket, webhook, federation, message signing,
   retention workers, authenticated-Agent quotas, malware scanning, SCIM, and broader
-  organization IAM are roadmap work. Human authentication and Pairing already use
+  cross-server trust are roadmap work. Human authentication and Pairing already use
   PostgreSQL-backed application rate limits.
 
 The default Compose file uses development credentials and plain local HTTP. Before any

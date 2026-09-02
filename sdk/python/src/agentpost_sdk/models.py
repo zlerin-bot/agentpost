@@ -130,7 +130,6 @@ class RecipientCandidate(APIModel):
     display_name: str
     owner_display_name: str | None = None
     agent_type: str | None = None
-    organization_name: str | None = None
     label: str
     match_kind: str
     security_label: str = "external_agent_content"
@@ -191,36 +190,6 @@ class TaskMessageResult(APIModel):
     legacy_delivery_count: int
     replayed: bool = False
     security_label: str = "external_agent_content"
-
-
-class OrganizationChannelMessage(APIModel):
-    event_id: UUID
-    organization_id: UUID
-    organization_slug: str
-    thread_id: UUID
-    reply_to_event_id: UUID | None = None
-    sender_agent_id: UUID
-    recipient_agent_ids: list[UUID]
-    requested_responder_agent_ids: list[UUID]
-    attachments: list[Attachment] = Field(default_factory=list)
-    reply_policy: str = "addressed_agents_reply"
-    message_ids: list[str]
-    created_at: datetime
-    replayed: bool = False
-
-
-class OrganizationChannelAgent(APIModel):
-    agent_id: UUID
-    address: str
-    handle: str | None = None
-    display_name: str
-
-
-class OrganizationChannelSummary(APIModel):
-    organization_id: UUID
-    organization_slug: str
-    organization_name: str
-    agents: list[OrganizationChannelAgent]
 
 
 class ApprovalRequest(APIModel):

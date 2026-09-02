@@ -79,13 +79,10 @@ relationships and do not accept an arbitrary owner or Agent scope from the brows
 Owners, operators, and viewers may inspect content involving an authorized Agent;
 auditors receive metadata with message bodies redacted.
 
-Organizations add a second explicit relationship chain:
-`Human -> organization_membership -> organization_agent -> Agent`. One Agent can
-belong to at most one organization. Organization owners/admins receive read-only
-operator visibility, members receive viewer visibility, and auditors remain
-body-redacted. Direct grants and organization access are evaluated independently;
-membership removal cannot delete a direct grant. All organization mutations are
-Admin-only bootstrap operations in this release.
+Tasks are the only shared multi-Human authorization boundary. A Human can read a
+Task only through an active `TaskMembership`; participating Agents are selected
+through that member or fall back to the Human's default Agent. Task access never
+projects into Agent ownership, private messages, or another Task.
 
 The 星轨 browser sends the `hum_` key once to create a random 256-bit `hss_`
 session. PostgreSQL stores only its HMAC digest. The cookie is HttpOnly,
@@ -104,43 +101,17 @@ default, is consumed atomically once, and cannot grant Agent identity. Human
 actions use a separate append-oriented audit table rather than accepting actor
 fields from the browser.
 
-The approval queue is the only Human business write in this slice. Owners and
-operators may record approve/reject decisions for requests created by an Agent;
-organization owner/admin membership projects to operator authority. Viewer/member
-roles cannot decide, and auditors see metadata without Agent-supplied summary,
+Owners and operators may record approve/reject decisions for requests created by
+an Agent. Viewers cannot decide, and auditors see metadata without Agent-supplied summary,
 justification, payload, or decision note. No Human route can retrieve an Agent key
 or call send/read/ACK/reply as that Agent. Every approval response fixes
 `execution_effect=none`: approval does not publish, transfer, invoke tools, or
 perform the requested action.
 
 Email registration/login, Human key rotation, TOTP MFA with one-use recovery
-codes, email recovery, delegated organization administration, invitations,
-self-exit, and DNS domain verification are implemented behind explicit feature
-flags. Expired/revoked browser-session, expired approval, and unused confirmation
-cleanup is not automated yet.
-
-### Enterprise OIDC
-
-Enterprise OIDC is disabled by default. Enabling it requires Human self-service,
-HTTPS in production, an operator-controlled `AGENTPOST_OIDC_ALLOWED_ISSUERS`
-allowlist, and at least one verified DNS domain on the target organization. A DNS
-claim alone cannot configure SSO, and an organization Owner cannot make the server
-fetch an arbitrary issuer.
-
-The provider client secret and per-login PKCE verifier are encrypted with the
-Human MFA encryption key. Raw state and nonce are never stored: only keyed digests
-are persisted. State is short-lived and atomically consumed once. Discovery must
-return the exact configured issuer; authorization, token, and JWKS endpoints must
-remain on its scheme/host/port. Tokens are accepted only with a supported
-asymmetric algorithm, matching `kid`, valid signature, issuer, audience, expiry,
-nonce, non-empty subject, and `email_verified=true`.
-
-Auto-provisioning is limited to an email whose exact domain is currently verified
-for the provider's organization. A pre-existing local email causes a safe
-`oidc_account_link_required` conflict. Linking must be initiated by that logged-in
-Human under CSRF plus password and, when enabled, MFA. Provider disable prevents
-new login starts; SCIM deprovisioning, IdP event handling, generic account merge,
-and production IdP interoperability remain unimplemented.
+codes, email recovery, friendships, Task membership, and Task invitations are
+implemented. Expired/revoked browser-session, expired approval, and unused
+confirmation cleanup is not automated yet.
 
 ### Registration control
 
@@ -173,12 +144,11 @@ Authorization is enforced by the service, not by clients or adapters.
 | Read/change ACL | Owning Agent only; cross-Agent and missing objects use `404`. |
 | Admin data API | Dedicated Admin bearer token; missing, wrong, disabled, and overlong tokens receive the same `404` shape. |
 | Create Human / grant Agent access | Dedicated Admin bearer token; Human access key is returned once. |
-| Create organization / set membership / assign Agent | Dedicated Admin bearer token. An Agent may belong to only one organization. |
-| Configure/disable organization OIDC | Organization Owner, current browser CSRF, verified organization domain, and operator-allowlisted issuer. Client secret is write-only. |
-| Start/complete enterprise OIDC login | Active provider; one-time state; Authorization Code + PKCE; signed ID token; verified exact organization email domain. Existing email requires explicit link. |
-| 星轨 dashboard/organizations/messages/tasks | Authenticated active Human plus direct Agent access or active organization membership. Auditor bodies are redacted. |
+| Create/read/update a Task | Authenticated active Human with active Task membership; creation requires at least one owned active Agent. |
+| Add Task members | Task owner through a confirmed Friendship; membership becomes active immediately and email notification is attempted. |
+| Task Agent context and messages | Participating Agent derived from active Task membership; inaccessible IDs return non-enumerating `404`. |
 | Create/list/get/cancel approval request | Authenticated Agent; requester is derived from the Agent key and scope is self-only. Creation is Agent-idempotent. |
-| Observe approval queue | Authenticated active Human with direct or organization access to the requesting Agent. Auditor Agent content is redacted. |
+| Observe approval queue | Authenticated active Human with direct ownership or grant access to the requesting Agent. Auditor Agent content is redacted. |
 | Decide approval | Current owner/operator authority, session-bound `X-CSRF-Token`, matching Human-key reauthentication to create a target/intent-bound confirmation, unconsumed `X-Human-Confirmation`, and Human idempotency. |
 
 An already accepted message remains readable to its participants after an ACL
@@ -507,7 +477,7 @@ Before exposing AgentPost outside a controlled local environment:
   to be deployed.
 - Perform an independent threat model and security review before public Internet
   exposure. The current audit log is not tamper-evident, and the service has not
-  implemented organization IAM, federation trust, signed messages, reputation,
+  implemented Task authorization, federation trust, signed messages, reputation,
   DLP, billing abuse controls, or a formal SLA.
 
 ## 13. Reporting a vulnerability

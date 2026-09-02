@@ -23,9 +23,6 @@ from agentpost.control.models import (
     HumanAgentGrant,
     HumanSession,
     HumanUser,
-    Organization,
-    OrganizationAgent,
-    OrganizationMembership,
 )
 from agentpost.db import Base, Database
 from agentpost.identity.models import Agent, AgentApiKey
@@ -37,9 +34,7 @@ from agentpost.onboarding.models import (
     AgentPairingSession,
     ConnectorInstance,
 )
-from agentpost.organizations.models import OrganizationDomain, OrganizationInvitation
 from agentpost.security.models import RateLimitBucket
-from agentpost.sso.models import OidcLoginState, OrganizationOidcIdentity, OrganizationOidcProvider
 from agentpost.tasks.models import (
     AgentRun,
     Friendship,
@@ -65,9 +60,6 @@ _MODELS = (
     HumanSession,
     HumanActionConfirmation,
     HumanActionAudit,
-    Organization,
-    OrganizationMembership,
-    OrganizationAgent,
     ApprovalRequest,
     ApprovalDecision,
     ConnectorInstance,
@@ -76,8 +68,6 @@ _MODELS = (
     HumanPasswordCredential,
     HumanEmailChallenge,
     HumanTotpCredential,
-    OrganizationInvitation,
-    OrganizationDomain,
     Friendship,
     Task,
     TaskMembership,
@@ -87,9 +77,6 @@ _MODELS = (
     TaskActivity,
     OAuthAccessToken,
     OAuthRefreshToken,
-    OrganizationOidcProvider,
-    OrganizationOidcIdentity,
-    OidcLoginState,
     RateLimitBucket,
 )
 

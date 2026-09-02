@@ -17,9 +17,6 @@ DIST_CLIENT_PATH = PLUGIN_ROOT / "dist" / "client.js"
 EXPECTED_TOOLS = {
     "agentpost_send",
     "agentpost_inbox",
-    "agentpost_get_organization_channel",
-    "agentpost_list_organization_channels",
-    "agentpost_send_organization_message",
     "agentpost_read",
     "agentpost_reply",
     "agentpost_ack",
@@ -76,8 +73,8 @@ def test_plugin_is_a_native_tool_plugin_with_exact_nine_tools() -> None:
     assert _tool_names(source) == EXPECTED_TOOLS
 
     registrations = re.findall(r"\btool\s*\(\s*\{", source)
-    assert len(registrations) == 9
-    assert len(re.findall(r"optional\s*:\s*true", source)) == 4
+    assert len(registrations) == 6
+    assert len(re.findall(r"optional\s*:\s*true", source)) == 3
     manifest = _json(MANIFEST_PATH)
     optional_tools = {
         name
@@ -86,7 +83,6 @@ def test_plugin_is_a_native_tool_plugin_with_exact_nine_tools() -> None:
     }
     assert optional_tools == {
         "agentpost_send",
-        "agentpost_send_organization_message",
         "agentpost_reply",
         "agentpost_ack",
     }
@@ -107,21 +103,18 @@ def test_model_tool_schemas_cannot_choose_transport_or_credentials() -> None:
     # Admin-only configuration may appear in the plugin factory, so inspect the
     # schema declarations rather than banning these strings from the whole file.
     tool_regions = re.findall(r"\btool\s*\(\s*\{(.*?)(?=\n\s*\}\),)", source, flags=re.DOTALL)
-    assert len(tool_regions) == 9
+    assert len(tool_regions) == 6
     for region in tool_regions:
         schema = region.partition("async execute")[0]
         assert "parameters:" in schema
         assert not any(name in schema for name in forbidden_schema_names)
 
 
-def test_nine_tools_map_to_protocol_routes_without_read_side_effects() -> None:
+def test_six_tools_map_to_protocol_routes_without_read_side_effects() -> None:
     source = _source(INDEX_PATH) + "\n" + _source(CLIENT_PATH)
     compact = re.sub(r"\s+", "", source)
     assert 'method:"POST",path:"/messages"' in compact
     assert 'path:"/inbox"' in compact
-    assert 'path:"/organization-channel"' in compact
-    assert 'path:"/organization-channels"' in compact
-    assert "/channel/messages" in source
     assert "path:`/messages/${" in compact
     assert 'path:"/directory/search"' in compact
     read_region = source.partition('name: "agentpost_read"')[2].partition("tool({")[0]
@@ -142,11 +135,6 @@ def test_message_type_and_directory_semantics_match_the_server_contract() -> Non
     assert "params.q === undefined && params.capability === undefined" in directory_region
     assert 'code: "INVALID_ARGUMENT"' in directory_region
     assert "directory search filter required" not in directory_region.casefold()
-    organization_region = source.partition('name: "agentpost_send_organization_message"')[
-        2
-    ].partition('name: "agentpost_read"')[0]
-    assert "attachment_ids: attachmentIds" in organization_region
-    assert "attachments: params.attachment_ids ?? []" in organization_region
 
 
 def test_client_preserves_abort_idempotency_and_sanitizes_errors() -> None:

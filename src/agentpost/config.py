@@ -41,7 +41,6 @@ class Settings(BaseSettings):
     remote_mcp_oauth_enabled: bool = False
     doubao_work_remote_mcp_enabled: bool = False
     manus_remote_mcp_enabled: bool = False
-    enterprise_oidc_enabled: bool = False
     codex_setup_platforms: str = ""
     workbuddy_setup_platforms: str = ""
     doubao_work_setup_platforms: str = ""
@@ -52,7 +51,6 @@ class Settings(BaseSettings):
     connector_wheel_url: str = "https://agentpost.me/downloads/agentpost-0.1.0-py3-none-any.whl"
     connector_wheel_sha256: str = "1fc3f42e8c1141ce65481778587544fc9bf441438c852c0332594ab24a75fdf7"
     rate_limit_enabled: bool = True
-    oidc_allowed_issuers: str = ""
     email_delivery_mode: str = "test"
     smtp_host: str | None = None
     smtp_port: int = Field(default=587, ge=1, le=65535)
@@ -78,7 +76,6 @@ class Settings(BaseSettings):
     pairing_create_ip_limit: int = Field(default=30, ge=1, le=5000)
     pairing_poll_ip_limit: int = Field(default=1200, ge=1, le=10000)
     pairing_rate_window_seconds: int = Field(default=60 * 60, ge=60, le=24 * 60 * 60)
-    domain_verification_timeout_seconds: float = Field(default=5.0, gt=0, le=30)
     connector_heartbeat_interval_seconds: int = Field(default=30, ge=10, le=5 * 60)
     connector_inbox_poll_interval_seconds: int = Field(default=30, ge=5, le=5 * 60)
     oauth_access_token_ttl_seconds: int = Field(default=60 * 60, ge=5 * 60, le=24 * 60 * 60)
@@ -91,8 +88,6 @@ class Settings(BaseSettings):
         ge=24 * 60 * 60,
         le=3650 * 24 * 60 * 60,
     )
-    oidc_state_ttl_seconds: int = Field(default=10 * 60, ge=5 * 60, le=15 * 60)
-    oidc_http_timeout_seconds: float = Field(default=10.0, gt=0, le=30)
     max_attachment_bytes: int = Field(default=10 * 1024 * 1024, ge=1)
     human_session_ttl_seconds: int = Field(default=12 * 60 * 60, ge=300, le=7 * 24 * 60 * 60)
     human_confirmation_ttl_seconds: int = Field(default=5 * 60, ge=60, le=15 * 60)
@@ -238,31 +233,6 @@ class Settings(BaseSettings):
             )
         return cleaned
 
-    @field_validator("oidc_allowed_issuers")
-    @classmethod
-    def oidc_issuers_are_origins_or_paths(cls, value: str) -> str:
-        canonical: list[str] = []
-        for raw in value.split(","):
-            cleaned = raw.strip().rstrip("/")
-            if not cleaned:
-                continue
-            parsed = urlsplit(cleaned)
-            if (
-                parsed.scheme not in {"http", "https"}
-                or not parsed.hostname
-                or parsed.username is not None
-                or parsed.password is not None
-                or parsed.query
-                or parsed.fragment
-            ):
-                raise ValueError("AGENTPOST_OIDC_ALLOWED_ISSUERS contains an invalid issuer")
-            canonical.append(cleaned)
-        return ",".join(dict.fromkeys(canonical))
-
-    @property
-    def allowed_oidc_issuers(self) -> frozenset[str]:
-        return frozenset(item for item in self.oidc_allowed_issuers.split(",") if item)
-
     @property
     def enabled_codex_setup_platforms(self) -> tuple[str, ...]:
         return tuple(item for item in self.codex_setup_platforms.split(",") if item)
@@ -374,16 +344,6 @@ class Settings(BaseSettings):
             raise ValueError(
                 "AGENTPOST_REMOTE_MCP_OAUTH_ENABLED must be true when Manus Remote MCP is enabled"
             )
-        if self.enterprise_oidc_enabled:
-            if not self.human_self_service_enabled:
-                raise ValueError(
-                    "AGENTPOST_HUMAN_SELF_SERVICE_ENABLED must be true when "
-                    "enterprise OIDC is enabled"
-                )
-            if not self.allowed_oidc_issuers:
-                raise ValueError(
-                    "AGENTPOST_OIDC_ALLOWED_ISSUERS is required when enterprise OIDC is enabled"
-                )
         if not self.is_production:
             return self
         unsafe = {
@@ -445,9 +405,6 @@ class Settings(BaseSettings):
                 self.remote_mcp_resource_url.startswith("https://")
             ):
                 raise ValueError("AGENTPOST_REMOTE_MCP_RESOURCE_URL must use HTTPS in production")
-        if self.enterprise_oidc_enabled:
-            if any(not issuer.startswith("https://") for issuer in self.allowed_oidc_issuers):
-                raise ValueError("OIDC issuers must use HTTPS in production")
         return self
 
 

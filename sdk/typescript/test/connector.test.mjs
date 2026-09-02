@@ -298,7 +298,7 @@ test("heartbeat reports the packaged runtime version and exposes upgrade directi
 
   const result = await client.heartbeat();
 
-  assert.equal(heartbeatBody.client_version, "agentpost-connect/0.1.41");
+  assert.equal(heartbeatBody.client_version, "agentpost-connect/0.1.42");
   assert.deepEqual(heartbeatBody.capabilities, [
     "task_context_read",
     "task_message_send",

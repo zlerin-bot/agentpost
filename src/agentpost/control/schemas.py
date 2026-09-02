@@ -82,93 +82,6 @@ class HumanSessionResponse(ControlModel):
     authentication: Literal["browser_session"] = "browser_session"
 
 
-class OrganizationCreate(ControlModel):
-    slug: str = Field(min_length=2, max_length=63, pattern=r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$")
-    name: str = Field(min_length=1, max_length=200)
-    description: str | None = Field(default=None, max_length=1000)
-
-    @field_validator("slug", mode="before")
-    @classmethod
-    def canonical_slug(cls, value: object) -> object:
-        return value.strip().lower() if isinstance(value, str) else value
-
-    @field_validator("name")
-    @classmethod
-    def clean_name(cls, value: str) -> str:
-        cleaned = value.strip()
-        if not cleaned:
-            raise ValueError("name must not be blank")
-        return cleaned
-
-    @field_validator("description")
-    @classmethod
-    def clean_description(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        cleaned = value.strip()
-        return cleaned or None
-
-
-class OrganizationResponse(ControlModel):
-    id: UUID
-    slug: str
-    name: str
-    description: str | None
-    status: Literal["active", "archived"]
-    member_count: int
-    agent_count: int
-    created_at: datetime
-    updated_at: datetime
-
-
-class OrganizationMembershipCreate(ControlModel):
-    role: Literal["owner", "admin", "member", "auditor"]
-
-
-class OrganizationMemberAgentResponse(ControlModel):
-    agent_id: UUID
-    address: str
-    handle: str | None
-    display_name: str
-    participation_source: Literal["assigned", "default"] = "assigned"
-
-
-class OrganizationMembershipResponse(ControlModel):
-    organization_id: UUID
-    human_user_id: UUID
-    human_email: str
-    human_username: str
-    human_display_name: str
-    role: Literal["owner", "admin", "member", "auditor"]
-    agents: list[OrganizationMemberAgentResponse] = Field(default_factory=list)
-    created_at: datetime
-    updated_at: datetime
-
-
-class OrganizationAgentResponse(ControlModel):
-    organization_id: UUID
-    agent_id: UUID
-    agent_address: str
-    assigned_at: datetime
-
-
-class OrbitOrganization(ControlModel):
-    id: UUID
-    slug: str
-    name: str
-    description: str | None
-    membership_role: Literal["owner", "admin", "member", "auditor"]
-    member_count: int
-    agent_count: int
-
-
-class OrbitOrganizationReference(ControlModel):
-    id: UUID
-    slug: str
-    name: str
-    membership_role: Literal["owner", "admin", "member", "auditor"] | None
-
-
 class AgentAccessCreate(ControlModel):
     role: Literal["owner", "operator", "viewer", "auditor"]
 
@@ -190,8 +103,6 @@ class OrbitAgent(ControlModel):
     status: str
     role: Literal["owner", "operator", "viewer", "auditor"]
     is_default: bool = False
-    access_source: Literal["direct", "organization"] = "direct"
-    organization: OrbitOrganizationReference | None = None
     capabilities: list[str]
     last_seen_at: datetime | None
     connection_state: Literal[
@@ -267,12 +178,6 @@ class OrbitMessage(ControlModel):
     attachments: list[OrbitMessageAttachment] = Field(default_factory=list)
     communication_state: str
     work_state: str | None
-    channel_scope: Literal["direct", "organization"] = "direct"
-    organization_id: UUID | None = None
-    organization_name: str | None = None
-    requested_responder_addresses: list[str] = Field(default_factory=list)
-    requested_responders: list[OrbitMessageAgent] = Field(default_factory=list)
-    organization_recipient_count: int = 0
     created_at: datetime
 
 
@@ -280,10 +185,6 @@ class OrbitThreadSummary(ControlModel):
     thread_id: UUID
     topic: str
     participants: list[OrbitMessageAgent]
-    organizations: list[OrbitOrganizationReference] = Field(default_factory=list)
-    channel_scope: Literal["direct", "organization"] = "direct"
-    organization_id: UUID | None = None
-    organization_name: str | None = None
     latest_message_id: str
     latest_message_type: str
     latest_message_summary: JsonValue | None
@@ -313,7 +214,6 @@ class OrbitThreadDetail(ControlModel):
     thread_id: UUID
     topic: str
     participants: list[OrbitMessageAgent]
-    organizations: list[OrbitOrganizationReference] = Field(default_factory=list)
     messages: list[OrbitMessage]
     human_view_state: Literal["unread", "viewed"]
     human_viewed_at: datetime | None = None
@@ -362,15 +262,13 @@ class OrbitMetrics(ControlModel):
 class OrbitDashboard(ControlModel):
     user: HumanProfile
     metrics: OrbitMetrics
-    organizations: list[OrbitOrganization]
     agents: list[OrbitAgent]
     recent_messages: list[OrbitMessage]
     tasks: list[OrbitTask]
     approvals: list[OrbitApprovalRequest]
     plane: Literal["human_control_plane"] = "human_control_plane"
-    product: Literal["星云驿"] = "星云驿"
-    surface: Literal["星轨"] = "星轨"
-    data_plane: Literal["云驿"] = "云驿"
+    product: Literal["AgentPost"] = "AgentPost"
+    collaboration_model: Literal["task"] = "task"
     capabilities: dict[str, Any] = Field(
         default_factory=lambda: {
             "observation": True,

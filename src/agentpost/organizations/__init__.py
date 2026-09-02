@@ -1,1 +1,0 @@
-"""Human-managed organization governance."""

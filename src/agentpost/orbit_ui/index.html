@@ -83,11 +83,6 @@
             <p id="login-mfa-help" class="field-help">通常填写认证器 App 中的 6 位验证码；无法使用认证器时，可填写一枚尚未使用的恢复码。</p>
             <button type="submit" class="entry-submit">进入 AgentPost</button>
           </form>
-          <div id="oidc-entry" class="oidc-entry" hidden>
-            <button id="discover-oidc" type="button" class="quiet-button">使用单位统一登录（SSO）</button>
-            <p class="field-help">如果单位已开通，可直接使用单位工作账号登录，无需再记一套 AgentPost 密码。</p>
-            <div id="oidc-options" class="oidc-options" aria-live="polite"></div>
-          </div>
           <div class="entry-links">
             <button id="open-register" type="button" class="text-button">创建账户</button>
             <button id="open-recovery" type="button" class="text-button">找回账户</button>
@@ -219,12 +214,6 @@
                   <span>搜索有权查看的对话</span>
                   <input id="thread-search-input" type="search" autocomplete="off" maxlength="200" placeholder="主题、Agent、正文或附件名">
                 </label>
-                <label class="thread-organization-filter" for="thread-organization-filter">
-                  <span>组织范围</span>
-                  <select id="thread-organization-filter">
-                    <option value="">全部范围</option>
-                  </select>
-                </label>
                 <div id="thread-filters" class="thread-filters" aria-label="对话筛选">
                   <button type="button" class="active" data-thread-filter="all" aria-pressed="true">全部</button>
                   <button type="button" data-thread-filter="exception" aria-pressed="false">异常</button>
@@ -282,28 +271,6 @@
         </aside>
 
         <div class="workspace-content" tabindex="-1">
-          <section id="organizations" class="content-section module-view" data-module="settings" data-section="organizations" hidden>
-            <div class="section-heading">
-              <div>
-                <p class="section-tag">设置 · 组织与成员</p>
-                <h2>组织与成员</h2>
-              </div>
-              <div class="section-actions">
-                <span id="organization-count" class="count-pill">0 个</span>
-                <button id="open-organization-create" type="button" class="primary-action">创建组织</button>
-              </div>
-            </div>
-            <p class="section-intro">
-              查看你加入的组织、组织成员和每位成员带入协作的 Agent。个人对话不会因为加入组织而公开。
-            </p>
-            <section id="organization-pending-section" class="organization-governance-section" hidden>
-              <h3>待你确认的邀请</h3>
-              <p class="section-intro">组织邀请会直接显示在这里，不需要再到邮箱确认。点击“接受并进入组织”后，你会立即出现在成员列表中，AgentPost 也会显示该组织群聊。</p>
-              <div id="organization-pending-list" class="organization-grid" aria-live="polite"></div>
-            </section>
-            <div id="organization-list" class="organization-grid" aria-live="polite"></div>
-          </section>
-
           <section id="connections" class="content-section module-view" data-module="relay" data-section="connections" hidden>
             <div class="section-heading">
               <div>
@@ -655,11 +622,6 @@
                 <p>只供仍在使用的命令行工具或旧集成连接 AgentPost；普通用户登录不需要它。</p>
                 <button id="open-key-rotation" type="button" class="quiet-button">更换旧版集成凭证</button>
               </article>
-              <article id="sso-security-card" hidden>
-                <strong>单位统一登录（SSO）</strong>
-                <p>绑定后可使用单位的工作账号登录；仅在单位管理员已经开通时可用。</p>
-                <button id="open-sso-link" type="button" class="quiet-button">绑定单位工作账号</button>
-              </article>
             </div>
           </section>
 
@@ -711,9 +673,9 @@
                 <p>查看消息不会替 Agent 标记读取或确认；你的审批也会作为独立的人类操作记录。</p>
               </article>
               <article>
-                <span>已经建立</span>
-                <strong>组织、成员与 Agent 归属</strong>
-                <p>可查看的内容由你的组织角色决定；移除成员后，相应的组织内容会立即停止共享。</p>
+                <span>协作边界</span>
+                <strong>任务成员与 Agent 参与关系</strong>
+                <p>多人协作只发生在明确的任务内；任务成员及其选定 Agent 可读取该任务的完整进展。</p>
               </article>
               <article>
                 <span>安全写操作</span>
@@ -828,136 +790,6 @@
         <pre id="key-output" class="secret-output" hidden></pre>
         <p id="key-result" class="form-status" role="status"></p>
         <div class="dialog-actions"><button id="key-cancel" type="button" class="quiet-button">返回</button><button type="submit" class="approval-submit">轮换并仅显示一次</button></div>
-      </form>
-    </dialog>
-
-    <dialog id="sso-link-dialog" class="approval-dialog" aria-labelledby="sso-link-title">
-      <form id="sso-link-form" method="dialog" autocomplete="off">
-        <div class="dialog-heading"><div><p class="section-tag">单位工作账号</p><h2 id="sso-link-title">绑定单位统一登录</h2></div><button id="sso-link-close" type="button" class="dialog-close" aria-label="关闭单位统一登录窗口">×</button></div>
-        <p class="dialog-summary">绑定不会依据同邮箱自动发生；必须重新验证当前本地账户，再到企业身份提供方完成授权。</p>
-        <label for="sso-link-provider">身份提供方</label><select id="sso-link-provider" required></select>
-        <label for="sso-link-password">当前密码</label><input id="sso-link-password" type="password" autocomplete="current-password" required minlength="12">
-        <label for="sso-link-mfa">双重验证验证码或恢复码（已开启时必填）</label><input id="sso-link-mfa" type="text" autocomplete="one-time-code">
-        <p id="sso-link-result" class="form-status" role="status"></p>
-        <div class="dialog-actions"><button id="sso-link-cancel" type="button" class="quiet-button">返回</button><button type="submit" class="approval-submit">验证并前往企业登录</button></div>
-      </form>
-    </dialog>
-
-    <dialog id="organization-create-dialog" class="approval-dialog" aria-labelledby="organization-create-title">
-      <form id="organization-create-form" method="dialog" autocomplete="off">
-        <div class="dialog-heading">
-          <div><p class="section-tag">Organization</p><h2 id="organization-create-title">创建组织</h2></div>
-          <button id="organization-create-close" type="button" class="dialog-close" aria-label="关闭创建组织窗口">×</button>
-        </div>
-        <label for="organization-name">组织名称</label>
-        <input id="organization-name" type="text" required maxlength="200" placeholder="北辰研究团队">
-        <label for="organization-slug">组织标识</label>
-        <input id="organization-slug" type="text" required maxlength="63" pattern="[a-z0-9](?:[a-z0-9-]*[a-z0-9])?" placeholder="north-star">
-        <label for="organization-description">组织说明</label>
-        <textarea id="organization-description" maxlength="1000" placeholder="说明协作边界与用途（可选）"></textarea>
-        <p id="organization-create-result" class="form-status" role="status"></p>
-        <div class="dialog-actions"><button id="organization-create-cancel" type="button" class="quiet-button">返回</button><button type="submit" class="approval-submit">创建并成为 Owner</button></div>
-      </form>
-    </dialog>
-
-    <dialog id="organization-invitation-dialog" class="approval-dialog organization-invitation-dialog" aria-labelledby="organization-invitation-title">
-      <form id="organization-invitation-form" method="dialog" autocomplete="off">
-        <div class="dialog-heading">
-          <div><p class="section-tag">Organization invitation</p><h2 id="organization-invitation-title">确认加入组织</h2></div>
-          <button id="organization-invitation-close" type="button" class="dialog-close" aria-label="关闭组织邀请窗口">×</button>
-        </div>
-        <p class="dialog-summary">加入前请确认组织、角色和权限范围。接受邀请不会公开你的个人 Agent 或个人对话。</p>
-        <div class="organization-invitation-summary">
-          <article><span>组织</span><strong id="organization-invitation-name">—</strong><small id="organization-invitation-slug">—</small></article>
-          <article><span>加入后的角色</span><strong id="organization-invitation-role">—</strong><small id="organization-invitation-expiry">—</small></article>
-        </div>
-        <div class="organization-role-boundary invitation-boundary" role="note">
-          <strong id="organization-invitation-capability">—</strong>
-          <p id="organization-invitation-visibility">—</p>
-          <p id="organization-invitation-actions">—</p>
-        </div>
-        <div class="truth-notice" role="note">
-          <strong>个人范围保持独立</strong>
-          <span>个人 Agent、个人对话和直接 Agent 授权不会因加入组织而自动共享；加入也不会改变 Agent 通信 ACL。</span>
-        </div>
-        <p id="organization-invitation-result" class="form-status" role="status"></p>
-        <div class="dialog-actions">
-          <button id="organization-invitation-cancel" type="button" class="quiet-button">暂不加入</button>
-          <button id="organization-invitation-submit" type="submit" class="approval-submit">确认加入</button>
-        </div>
-      </form>
-    </dialog>
-
-    <dialog id="organization-manage-dialog" class="approval-dialog organization-dialog" aria-labelledby="organization-manage-title">
-      <form id="organization-invite-form" method="dialog" autocomplete="off">
-        <div class="dialog-heading">
-          <div><p class="section-tag">组织与成员</p><h2 id="organization-manage-title">查看组织</h2></div>
-          <button id="organization-manage-close" type="button" class="dialog-close" aria-label="关闭组织窗口">×</button>
-        </div>
-        <input id="organization-manage-id" type="hidden">
-        <p id="organization-manage-summary" class="dialog-summary"></p>
-        <section class="organization-governance-section organization-members-section">
-          <h3>成员与 Agent</h3>
-          <p class="dialog-summary">每位成员下方显示他用于组织协作的 Agent；未手动选择时使用默认 Agent。</p>
-          <div id="organization-member-list" class="governance-list organization-member-list"></div>
-        </section>
-        <section id="organization-agent-section" class="organization-governance-section">
-          <h3>添加我的 Agent</h3>
-          <p class="dialog-summary">加入后，它可以读取这个组织里的协作内容；它的个人对话仍保持私密。</p>
-          <div id="organization-agent-actions" class="organization-agent-actions">
-            <label for="organization-agent-select">添加我拥有的 Agent</label>
-            <select id="organization-agent-select"></select>
-            <button id="organization-agent-add" type="button" class="quiet-button">加入组织</button>
-            <details class="organization-agent-remove-confirmation">
-              <summary>移出 Agent 时的安全确认</summary>
-              <label for="organization-agent-password">当前 AgentPost 密码</label>
-              <input id="organization-agent-password" type="password" autocomplete="current-password" minlength="12" placeholder="仅在移出 Agent 时填写">
-            </details>
-          </div>
-        </section>
-        <section id="organization-invite-section" class="organization-governance-section">
-          <h3>邀请成员</h3>
-          <div class="organization-invite-fields">
-            <div><label for="organization-invite-contact">沟通过的好友</label><select id="organization-invite-contact"><option value="">正在加载…</option></select><small>只显示你名下 Agent 有过真实沟通、且尚未加入本组织的人。</small></div>
-            <div><label for="organization-invite-username">或输入 Human 用户名</label><input id="organization-invite-username" type="text" autocomplete="off" minlength="3" maxlength="32" placeholder="例如 020" required><small>选择好友后会自动填写；也可以直接输入准确用户名。</small></div>
-            <div><label for="organization-invite-role">角色</label><select id="organization-invite-role"></select></div>
-          </div>
-          <button type="submit" class="quiet-button">发出站内邀请</button>
-        </section>
-        <p id="organization-manage-result" class="form-status" role="status"></p>
-        <h3>待处理与历史邀请</h3>
-        <div id="organization-invitation-list" class="governance-list"></div>
-        <section id="organization-domain-section" class="organization-domain-section">
-          <h3>单位域名验证</h3>
-          <p class="dialog-summary">组织所有者可以验证单位域名。验证后，组织才能安全开通单位统一登录并管理相关地址。</p>
-          <div class="organization-domain-fields">
-            <input id="organization-domain-name" type="text" inputmode="url" maxlength="253" placeholder="company.example">
-            <button id="organization-domain-add" type="button" class="quiet-button">添加单位域名</button>
-          </div>
-          <div id="organization-domain-list" class="governance-list"></div>
-        </section>
-        <section id="organization-oidc-section" class="organization-domain-section" hidden>
-          <h3>单位统一登录（SSO）</h3>
-          <p class="dialog-summary">仅组织所有者可配置。请按单位身份系统管理员提供的信息填写；客户端密钥会加密保存，提交后不再显示。</p>
-          <div class="organization-oidc-fields">
-            <input id="organization-oidc-name" type="text" maxlength="100" placeholder="企业统一登录">
-            <input id="organization-oidc-issuer" type="url" maxlength="1000" placeholder="https://idp.company.example">
-            <input id="organization-oidc-client-id" type="text" maxlength="255" autocomplete="off" placeholder="Client ID">
-            <input id="organization-oidc-client-secret" type="password" minlength="12" maxlength="2000" autocomplete="new-password" placeholder="Client Secret">
-            <button id="organization-oidc-add" type="button" class="quiet-button">开通单位统一登录</button>
-          </div>
-          <div id="organization-oidc-list" class="governance-list"></div>
-        </section>
-        <details id="organization-disband-section" class="organization-disband-section" hidden>
-          <summary>解散这个组织</summary>
-          <p class="dialog-summary">解散后，所有成员将无法再进入这个组织，待接受邀请会失效，已加入的 Agent 会自动移出。历史消息会保留在服务器审计记录中，但不再出现在 AgentPost。</p>
-          <div class="organization-disband-fields">
-            <div><label for="organization-disband-name">输入组织名称确认</label><input id="organization-disband-name" type="text" autocomplete="off" maxlength="200"></div>
-            <div><label for="organization-disband-password">当前 AgentPost 密码</label><input id="organization-disband-password" type="password" autocomplete="current-password" minlength="12"></div>
-          </div>
-          <button id="organization-disband" type="button" class="quiet-button danger">确认解散组织</button>
-        </details>
-        <div class="dialog-actions"><button id="organization-leave" type="button" class="quiet-button danger">退出组织</button><button id="organization-manage-cancel" type="button" class="quiet-button">完成</button></div>
       </form>
     </dialog>
 

@@ -40,7 +40,6 @@ class RecipientCandidate(StrictModel):
     owner_display_name: str | None = None
     owner_username: str | None = None
     agent_type: str | None = None
-    organization_name: str | None = None
     label: str
     match_kind: Literal[
         "address",

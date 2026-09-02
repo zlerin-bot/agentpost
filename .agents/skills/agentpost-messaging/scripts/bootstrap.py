@@ -241,11 +241,7 @@ def execute(
                 pass
             else:
                 setup_valid = True
-    if (
-        not argv
-        or (argv[0] == "setup" and not setup_valid)
-        or argv[0] not in {"send", "send-organization", "setup"}
-    ):
+    if not argv or (argv[0] == "setup" and not setup_valid) or argv[0] not in {"send", "setup"}:
         raise BootstrapError("unsupported_resume_operation")
     host_name = requested_host(argv)
     platform_name = current_platform()

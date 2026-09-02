@@ -222,7 +222,7 @@ test("Orbit conversations are Thread-based, searchable, and deep-linkable", () =
   assert.match(script, /\/api\/v1\/orbit\/threads\?/);
   assert.match(script, /\/api\/v1\/orbit\/threads\/\$\{encodeURIComponent\(threadId\)\}/);
   assert.match(script, /thread: state\.selectedThreadId/);
-  assert.match(script, /state\.threadOrganization/);
+  assert.doesNotMatch(script, /threadOrganization/);
 });
 
 test("conversation parent expands complete loops and shows Human unread dots", () => {
@@ -257,7 +257,7 @@ test("Thread timeline keeps communication, work, replies, and system events dist
   assert.match(script, /new Date\(right\.created_at\)\.getTime\(\) - new Date\(left\.created_at\)\.getTime\(\)/);
   assert.match(script, /最新内容排在最上面/);
   assert.match(script, /messageList\.firstElementChild\?\.scrollIntoView\(\{ behavior: "smooth", block: "start" \}\)/);
-  assert.match(script, /message\.channel_scope === "organization" \? "协作范围" : "送达情况"/);
+  assert.match(script, /document\.createTextNode\("送达情况"\)/);
   assert.match(script, /document\.createTextNode\("任务进度"\)/);
   assert.match(script, /replied: "已回复"/);
   assert.match(script, /thread-reply-reference/);
@@ -441,39 +441,8 @@ test("profile username is editable while unavailable settings stay explanatory",
   }
 });
 
-test("organizations no longer appear in the primary product navigation", () => {
-  const settingsNavigation = html.slice(
-    html.indexOf('data-context-module="settings"'),
-    html.indexOf("</div>", html.indexOf('data-context-module="settings"')),
-  );
-  assert.doesNotMatch(settingsNavigation, /organizations|组织与成员/);
-  assert.doesNotMatch(script, /renderPendingOrganizationInvitations\(Array\.isArray\(invitations\.items\)/);
-  assert.match(script, /sections: Object\.freeze\(\[[\s\S]*?"profile"[\s\S]*?"security"/);
-});
-
-test("organization role controls mirror the server authorization boundary", () => {
-  assert.match(script, /owner: Object\.freeze\(\{/);
-  assert.match(script, /admin: Object\.freeze\(\{/);
-  assert.match(script, /member: Object\.freeze\(\{/);
-  assert.match(script, /auditor: Object\.freeze\(\{/);
-  assert.match(script, /actorRole === "owner" \? \["member", "auditor", "admin"\] : \["member", "auditor"\]/);
-  assert.match(script, /organizationInviteSection\.hidden = !isManager/);
-  assert.match(script, /\["owner", "admin", "member"\]\.includes\(organization\.membership_role\)/);
-  assert.match(script, /organization\?\.membership_role === "owner" && ownerCount <= 1/);
-  assert.match(html, /id="organization-disband-section"/);
-  assert.match(script, /\/disband`/);
-  assert.match(script, /最后一名 Owner 不能直接退出/);
-  assert.match(script, /退出后只撤销组织派生权限，个人和直接授权保持不变/);
-});
-
-test("organization collaboration separates shared context from requested replies", () => {
-  assert.match(html, /加入后，它可以读取这个组织里的协作内容/);
-  assert.match(script, /thread\.channel_scope === "organization"/);
-  assert.match(script, /全部组织 Agent 可读/);
-  assert.match(script, /message\.requested_responders/);
-  assert.match(script, /agent\?\.owner_username/);
-  assert.match(script, /createOrganizationThreadGroup/);
-  assert.match(script, /organization-thread-child/);
-  assert.match(stylesheet, /\.organization-thread-group-summary/);
-  assert.match(script, /无指定回复人/);
+test("task is the only multi-Human collaboration scope", () => {
+  const combined = `${html}\n${script}\n${stylesheet}`;
+  assert.match(html, /多人协作只发生在明确的任务内/);
+  assert.doesNotMatch(combined, /organization|组织|群聊|oidc|SSO/i);
 });

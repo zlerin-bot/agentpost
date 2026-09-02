@@ -439,59 +439,6 @@ def test_agent_scope_cancel_and_expiration_are_terminal_without_execution(
         assert session.scalar(select(func.count()).select_from(Message)) == 0
 
 
-def test_agent_cannot_spoof_requester_and_organization_owner_can_decide(
-    settings: Settings,
-    database: Database,
-) -> None:
-    with _client(settings, database) as client:
-        agent = _create_agent(client, "org-approval@agents.local")
-        human = _create_human(client, "org-owner@example.com")
-        forged = _request_approval(
-            client,
-            agent,
-            key="forged-requester",
-            payload=_approval_payload(requested_by_agent_id=human["user"]["id"]),
-        )
-        with database.session_factory() as session:
-            assert session.scalar(select(func.count()).select_from(ApprovalRequest)) == 0
-        organization = client.post(
-            "/api/v1/admin/organizations",
-            headers=_admin_headers(),
-            json={"slug": "approval-org", "name": "审批组织"},
-        )
-        assert organization.status_code == 201
-        membership = client.put(
-            f"/api/v1/admin/organizations/{organization.json()['id']}/members/{human['user']['id']}",
-            headers=_admin_headers(),
-            json={"role": "owner"},
-        )
-        assignment = client.put(
-            f"/api/v1/admin/organizations/{organization.json()['id']}/agents/{agent['agent']['id']}",
-            headers=_admin_headers(),
-        )
-        assert membership.status_code == assignment.status_code == 200
-        approval = _request_approval(client, agent, key="org-owner-request")
-        approval_id = approval.json()["approval_id"]
-        csrf_token = _login(client, human)
-        queue = client.get("/api/v1/orbit/approval-requests")
-        confirmation = _confirmation(client, human, approval_id, csrf_token, intent="reject")
-        rejected = _decide(
-            client,
-            approval_id,
-            csrf_token,
-            confirmation.json()["confirmation_token"],
-            decision="rejected",
-            note="范围过宽，请缩小后重新申请。",
-        )
-
-    assert forged.status_code == 422
-    assert queue.json()["items"][0]["access_role"] == "operator"
-    assert queue.json()["items"][0]["can_decide"] is True
-    assert confirmation.status_code == 200
-    assert rejected.status_code == 200
-    assert rejected.json()["status"] == "rejected"
-
-
 def test_approval_schema_limits_fail_before_persistence(
     settings: Settings,
     database: Database,

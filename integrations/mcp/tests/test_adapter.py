@@ -37,22 +37,6 @@ class FakeClient:
         self.calls.append(("send", (args, kwargs)))
         return {"message_id": "msg_sent", "content": {"body": "external"}}
 
-    def send_organization_message(self, *args: object, **kwargs: object) -> dict[str, object]:
-        self.calls.append(("send_organization", (args, kwargs)))
-        return {"event_id": "11111111-1111-1111-1111-111111111111"}
-
-    def get_organization_channel(self) -> dict[str, object]:
-        self.calls.append(("get_organization_channel", None))
-        return {
-            "organization_id": "22222222-2222-2222-2222-222222222222",
-            "organization_name": "Research",
-            "agents": [],
-        }
-
-    def list_organization_channels(self) -> list[dict[str, object]]:
-        self.calls.append(("list_organization_channels", None))
-        return [self.get_organization_channel()]
-
     def resolve_recipient(self, query: str) -> dict[str, object]:
         self.calls.append(("resolve", query))
         return {
@@ -135,9 +119,6 @@ async def test_v2_tool_contract_and_calls(adapter: tuple[object, list[tuple[str,
             "agentpost_get_task",
             "agentpost_send_task_message",
             "agentpost_send_message",
-            "agentpost_get_organization_channel",
-            "agentpost_list_organization_channels",
-            "agentpost_send_organization_message",
             "agentpost_list_inbox",
             "agentpost_read_message",
             "agentpost_reply",
@@ -183,21 +164,6 @@ async def test_v2_tool_contract_and_calls(adapter: tuple[object, list[tuple[str,
         assert sent.structured_content["security_label"] == "external_agent_content"
         assert json.loads(sent.content[0].text)["ok"] is True  # type: ignore[union-attr]
 
-        channel = await client.call_tool("agentpost_get_organization_channel", {})
-        assert channel.is_error is False
-
-        organization_sent = await client.call_tool(
-            "agentpost_send_organization_message",
-            {
-                "organization_id": "22222222-2222-2222-2222-222222222222",
-                "subject": "group update",
-                "body": "shared context",
-                "attachment_ids": ["44444444-4444-4444-8444-444444444444"],
-                "requested_responder_agent_ids": ["33333333-3333-3333-3333-333333333333"],
-            },
-        )
-        assert organization_sent.is_error is False
-
         page = await client.call_tool("agentpost_list_inbox", {"cursor": "opaque+/="})
         assert page.structured_content["data"]["next_cursor"] == "opaque+/="
         await client.call_tool("agentpost_read_message", {"message_id": "msg_1"})
@@ -225,12 +191,10 @@ async def test_v2_tool_contract_and_calls(adapter: tuple[object, list[tuple[str,
             },
         )
 
-    assert [call[0] for call in calls].count("close") == 15
+    assert [call[0] for call in calls].count("close") == 13
     assert ("resolve", "send this to Bob's Codex") in calls
     assert ("resolve_task", "小孔成像") in calls
     assert ("get", "msg_1") in calls
-    organization_call = next(value for name, value in calls if name == "send_organization")
-    assert organization_call[1]["attachments"] == [UUID("44444444-4444-4444-8444-444444444444")]
 
 
 def test_api_key_is_excluded_from_settings_repr() -> None:

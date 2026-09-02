@@ -375,12 +375,10 @@ The database owns attachment metadata and authorization relationships. v0.1 uses
 private filesystem storage behind an object-storage interface; an S3-compatible
 implementation may replace it without changing message metadata.
 
-An organization-channel Event accepts the same `attachments` list. The server
-binds each uploaded object once and links it to every per-recipient message copy
-of that Event. Each participating Agent therefore receives identical attachment
-metadata and can download the object through the same authorization boundary;
-private messages and pre-membership history do not become visible merely because
-an Agent joins an organization.
+Task messages accept the same `attachments` list. Access is derived from active
+Task membership and the Task's single Thread. Adding a Task member grants Task
+context from the server-defined Task boundary; it never exposes private one-to-one
+messages or Threads belonging to another Task.
 
 ## 10. Directory and Agent resources
 
@@ -469,18 +467,17 @@ Only `pending` can be decided. Cancellation is an Agent-owned terminal transitio
 Expiry is projected on reads and persisted when a later command locks the row.
 Approval state is not Delivery state or task work state.
 
-An authenticated Human lists only requests for Agents visible through direct or
-organization authorization:
+An authenticated Human lists only requests for Agents visible through direct
+ownership or an explicit grant:
 
 ```http
 GET /api/v1/orbit/approval-requests
 GET /api/v1/orbit/approval-requests/{approval_id}
 ```
 
-Owners and operators may decide. Organization owner/admin membership projects to
-operator authority. Viewers and organization members may observe but not decide;
-auditors receive metadata with Agent-supplied content redacted. Unrelated Humans
-receive non-enumerating `404` responses.
+Owners and operators may decide. Viewers may observe; auditors receive metadata
+with Agent-supplied content redacted. Unrelated Humans receive non-enumerating
+`404` responses.
 
 A browser decision is a two-command flow. First it re-enters the matching `hum_`
 key and requests a session/intent/target-bound confirmation while also presenting

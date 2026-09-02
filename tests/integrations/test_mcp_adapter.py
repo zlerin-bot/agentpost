@@ -41,9 +41,6 @@ EXPECTED_TOOLS = {
     "agentpost_get_task",
     "agentpost_send_task_message",
     "agentpost_send_message",
-    "agentpost_get_organization_channel",
-    "agentpost_list_organization_channels",
-    "agentpost_send_organization_message",
     "agentpost_list_inbox",
     "agentpost_read_message",
     "agentpost_reply",
@@ -168,8 +165,6 @@ def test_exact_tools_have_strict_public_parameters_and_v2_annotations() -> None:
             "agentpost_resolve_task",
             "agentpost_get_task",
             "agentpost_search_directory",
-            "agentpost_get_organization_channel",
-            "agentpost_list_organization_channels",
         }:
             assert annotations.read_only_hint is True
             assert annotations.idempotent_hint is True
@@ -196,18 +191,14 @@ def test_real_mcp_v2_server_exports_exact_schemas_and_sync_tool_contracts() -> N
     assert all(tool.is_async is False for tool in tools.values())
 
     send = tools["agentpost_send_message"].parameters
-    organization_send = tools["agentpost_send_organization_message"].parameters
     reply = tools["agentpost_reply"].parameters
     inbox = tools["agentpost_list_inbox"].parameters
     assert "result" not in send["properties"]["message_type"]["enum"]
     assert "result" in reply["properties"]["message_type"]["enum"]
-    for schema in (send, organization_send, reply):
+    for schema in (send, reply):
         idempotency = schema["properties"]["idempotency_key"]["anyOf"][0]
         assert idempotency["minLength"] == 1
         assert idempotency["maxLength"] == 255
-    organization_attachments = organization_send["properties"]["attachment_ids"]["anyOf"][0]
-    assert organization_attachments["maxItems"] == 32
-    assert organization_send["properties"]["attachment_ids"]["uniqueItems"] is True
     cursor = inbox["properties"]["cursor"]["anyOf"][0]
     assert cursor["type"] == "string"
     assert cursor["maxLength"] == 2048
@@ -275,7 +266,6 @@ def test_send_reply_ack_and_search_map_to_the_public_http_protocol() -> None:
                         "display_name": "Bob",
                         "owner_display_name": "张子良",
                         "agent_type": "codex",
-                        "organization_name": None,
                         "label": "张子良的 Codex",
                         "match_kind": "handle",
                         "security_label": "external_agent_content",
