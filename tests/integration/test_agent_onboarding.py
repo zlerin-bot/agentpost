@@ -358,8 +358,8 @@ def test_new_codex_and_workbuddy_pairings_stay_active_as_independent_agents(
 ) -> None:
     runtime = _runtime_settings(
         settings,
-        connector_release_version="0.1.36",
-        connector_wheel_url="https://agentpost.me/downloads/agentpost-0.1.36-py3-none-any.whl",
+        connector_release_version="0.1.37",
+        connector_wheel_url="https://agentpost.me/downloads/agentpost-0.1.37-py3-none-any.whl",
     )
     with TestClient(create_app(settings=runtime, database=database)) as client:
         human = _create_human(client, "mars@example.com", "Mars")
@@ -442,7 +442,7 @@ def test_new_codex_and_workbuddy_pairings_stay_active_as_independent_agents(
         assert {item["client_version"] for item in awaiting_connectors} == {"1.0.0"}
         for token, client_version in (
             (codex_token, "agentpost-connect/0.1.33"),
-            (workbuddy_token, "agentpost-connect/0.1.36"),
+            (workbuddy_token, "agentpost-connect/0.1.37"),
         ):
             heartbeat = client.post(
                 "/api/v1/connect/heartbeat",
@@ -463,7 +463,7 @@ def test_new_codex_and_workbuddy_pairings_stay_active_as_independent_agents(
     assert versions["codex"]["runtime_version"] == "agentpost-connect/0.1.33"
     assert versions["codex"]["version_status"] == "update_required"
     assert versions["codex"]["upgrade_prompt"] is not None
-    assert versions["workbuddy"]["runtime_version"] == "agentpost-connect/0.1.36"
+    assert versions["workbuddy"]["runtime_version"] == "agentpost-connect/0.1.37"
     assert versions["workbuddy"]["version_status"] == "current"
     assert versions["workbuddy"]["upgrade_prompt"] is None
     with database.session_factory() as session:
