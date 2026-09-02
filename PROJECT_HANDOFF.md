@@ -2,11 +2,11 @@
 
 ## 当前接续摘要
 
-- 交接阶段：`v0.1.45-backlog-cleanup-and-multi-agent-local-candidate`
+- 交接阶段：`v0.1.45-backlog-cleanup-and-multi-agent-deployed`
 - 本地版本：`0.1.45 / 0035_cancel_legacy_task_backlog`
-- 当前生产：`6609837 / 0.1.44 / 0034_task_run_routing / deployed_https_verified`
+- 当前生产：`0c9d844 / 0.1.45 / 0035_cancel_legacy_task_backlog / deployed_https_verified`
 - 生产接受状态：不是 `production_accepted`
-- 本切片：清理 0.1.44 前无效自动 Run 积压、Human 进展时间/配色、多自有 AI 参与选择；本地完成，尚未部署
+- 本切片：清理 0.1.44 前无效自动 Run 积压、Human 进展时间/配色、多自有 AI 参与选择；已部署并完成 HTTPS 后检
 
 ## 当前产品模型
 
@@ -58,6 +58,8 @@ AgentPost 的多人协作只发生在 Task 内。每个 Task 有一个稳定 `ta
 - `.venv/bin/pytest -m "not postgres"`：454 passed、1 expected skip、5 deselected。
 - Alembic 迁移图只有一个 head：`0035_cancel_legacy_task_backlog`。
 - 认证桌面隔离环境已通过：两个 AI 勾选、主 AI切换、保存后成员显示、添加 AI 跳转、进展时间与 Human 配色，且无横向溢出。
+- 生产 390px 任务列表/详情已通过：多 AI 选择、主要 AI、添加 AI、进展时间与 Human 配色可见，页面无横向溢出且控制台无 error/warning。
+- PostgreSQL 0034 → 0035 → 0034 → 0035 演练和正式迁移通过；清理 43 个旧 Assignment、49 个关联历史 Run，目标范围剩余非终态积压为 0。
 - 旧目录/频道关键字扫描：运行时 `src`、SDK、MCP、OpenClaw、插件和 Skill 无旧能力残留；迁移与反向门禁测试中保留必要名称。
 - 隔离演示种子已改为 Task API，不再依赖旧多人容器；认证后的桌面端与 390px 任务列表/详情均通过，页面无横向溢出，控制台无 warning/error。
 - 认证后的桌面和 390px 任务列表/详情无横向溢出、无 console error；Run 路由/唤醒标签与任务 ID 复制入口可见。真实任务附件卡因隔离种子没有物理附件，API/DOM 已覆盖但认证视觉验收仍为 `待确认`。
@@ -65,11 +67,17 @@ AgentPost 的多人协作只发生在 Task 内。每个 Task 有一个稳定 `ta
 
 ## 待完成
 
-1. 在受保护 PostgreSQL 副本演练 0035，先核对拟取消行数，再验证迁移和回退结构；本地没有把 SQLite 结果冒充 PostgreSQL 证据。
-2. 完成 390px 下多 AI 选择器和 Human 进展配色的视觉验收。
-3. 完成真实任务附件卡和连接详情的认证视觉验收。
-4. 本切片尚未部署；生产仍是 0.1.44。部署后仍需真实用户跨设备验收，此前不得标记为 `production_accepted`。
-5. 不要纳入两个无关的未跟踪管理汇报文件。
+1. 完成真实任务附件卡和连接详情的认证视觉验收。
+2. 完成真实用户跨设备验收；此前不得标记为 `production_accepted`。
+3. 不要纳入两个无关的未跟踪管理汇报文件。
+
+## 0.1.45 生产发布证据
+
+- 从提交 `0c9d844` 生成单一上传包；staging 的外层和内部六个文件哈希全部通过。
+- 受保护切换完成 PostgreSQL 0034 → 0035 → 0034 → 0035 演练、完整备份、正式迁移、原子 current 切换和本机健康检查，返回 `deploy_status=ok`。
+- 独立后检返回 `postflight_status=ok`；AgentPost、Nginx、PostgreSQL 均正常，关键数据量未下降，备份哈希和即时回退脚本通过。
+- 公网 health/ready 为 0.1.45，协议合同为 0.3，公开 wheel SHA-256 为 `047f5fbd661858663b3a13fc803c33ab685b6de9d0bf1c18e51706c378c1d47f`，未知 wheel 返回 404。
+- 登录态生产任务页的桌面与 390px smoke 均通过；这仍是 `deployed_https_verified`，不是跨设备真实用户 `production_accepted`。
 
 ## 0.1.44 生产发布证据
 

@@ -2,7 +2,7 @@
 
 Last updated: 2026-09-03
 
-Current handoff stage: `v0.1.45-backlog-cleanup-and-multi-agent-local-candidate`
+Current handoff stage: `v0.1.45-backlog-cleanup-and-multi-agent-deployed`
 
 ## Current local candidate
 
@@ -41,22 +41,20 @@ configuration, and test paths.
 - Fresh SQLite Alembic chain: blocked at the pre-existing 0019 constraint-alter limitation before reaching 0035.
 - PostgreSQL 0030 → 0034 → 0030 → 0034 rehearsal and production upgrade: passed in the protected release switch.
 - Authenticated desktop and 390px Task list/detail: passed with zero horizontal overflow and no console errors; Run routing/wake labels and copyable Task ID were visible. A real task attachment card has API/DOM coverage but authenticated visual acceptance remains `待确认` because the isolated seed has no physical attachment.
-- Authenticated desktop 0.1.45 candidate: passed for two-Agent selection, primary-Agent switching, save/reload, add-Agent navigation, Human colors, timestamps, and zero horizontal overflow. The changed 390px layout and PostgreSQL 0035 data migration remain `待确认` before release.
+- Authenticated desktop and 390px production 0.1.45: passed for multi-Agent selection, primary-Agent controls, add-Agent navigation, Human colors, timestamps, mobile list/detail navigation, zero horizontal overflow, and zero console errors.
+- PostgreSQL 0034 → 0035 → 0034 → 0035 rehearsal and production upgrade: passed. The migration cancelled 43 obsolete Assignments and 49 associated historical Runs; zero targeted pre-0.1.44 nonterminal Assignments remain.
 
 ## Production
 
-- Current production commit: `6609837`
-- Current production version/schema: `0.1.44 / 0034_task_run_routing`
+- Current production commit: `0c9d844`
+- Current production version/schema: `0.1.45 / 0035_cancel_legacy_task_backlog`
 - State: `deployed_https_verified`, not `production_accepted`.
-- Protected switch reported `deploy_status=ok`; corrected full postflight reported `postflight_status=ok`.
-- Public health/ready report 0.1.44, protocol contract reports 0.3, the public wheel SHA-256 matches the release manifest, and an unknown wheel URL returns 404.
-- The authenticated production Task page loaded the four primary entries and existing Task data successfully.
-- The original postflight package expected the obsolete protocol contract 0.1. The assertion is corrected to 0.3 with a regression test; rerunning the otherwise unchanged postflight pipeline passed all gates.
+- Protected switch reported `deploy_status=ok`; independent full postflight reported `postflight_status=ok`.
+- Public health/ready report 0.1.45, protocol contract reports 0.3, the public wheel SHA-256 is `047f5fbd661858663b3a13fc803c33ab685b6de9d0bf1c18e51706c378c1d47f`, and an unknown wheel URL returns 404.
+- The authenticated production Task page loaded the four primary entries and existing Task data successfully; desktop and 390px changed flows passed.
 
 ## Next release gates
 
 1. Complete authenticated visual acceptance of a real Task attachment card and Connector runtime details.
-2. Rehearse the 0035 cleanup migration against a protected PostgreSQL copy and verify cancelled-row counts before release.
-3. Complete 390px acceptance for the multi-Agent selector and progress colors.
-4. Complete real-user cross-device acceptance before changing the state to `production_accepted`.
-5. Keep the two unrelated untracked management-report files untouched.
+2. Complete real-user cross-device acceptance before changing the state to `production_accepted`.
+3. Keep the two unrelated untracked management-report files untouched.
