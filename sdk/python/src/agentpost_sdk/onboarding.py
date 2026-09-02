@@ -47,6 +47,7 @@ class ConnectorState(BaseModel):
     client_version: str | None = None
     runtime_version: str | None = None
     runtime_version_reported_at: datetime | None = None
+    runtime_capabilities: list[str] = Field(default_factory=list)
     last_heartbeat_at: datetime | None = None
     last_error_code: str | None = None
     credential_rotated_at: datetime | None = None

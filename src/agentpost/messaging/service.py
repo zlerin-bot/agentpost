@@ -387,6 +387,10 @@ def reply_to_message(
     session.add_all([message, delivery])
     try:
         session.flush()
+        if parent.message_metadata.get("agentpost_task_bridge"):
+            from agentpost.tasks.service import record_legacy_task_reply
+
+            record_legacy_task_reply(session, agent=sender, parent=parent, reply=message)
         bind_attachments(
             session,
             sender=sender,

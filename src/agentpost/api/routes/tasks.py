@@ -14,6 +14,8 @@ from agentpost.tasks.schemas import (
     AgentRunResult,
     AgentRunUpdate,
     AgentTaskCreate,
+    AgentTaskMessageCreate,
+    AgentTaskMessageResponse,
     AgentTaskResolution,
     AgentTaskResolveRequest,
     FriendRequestCreate,
@@ -35,6 +37,7 @@ from agentpost.tasks.service import (
     FriendshipConflictError,
     FriendshipNotFoundError,
     TaskAgentSelectionError,
+    TaskMessageIdempotencyConflictError,
     TaskNotFoundError,
     TaskOwnerRequiredError,
     TaskStateConflictError,
@@ -47,6 +50,7 @@ from agentpost.tasks.service import (
     decide_task_acceptance,
     decide_task_invitation,
     get_task,
+    get_task_for_agent,
     invite_task_members,
     list_friend_suggestions,
     list_friends,
@@ -56,6 +60,7 @@ from agentpost.tasks.service import (
     request_friendship,
     resolve_task_for_agent,
     select_task_agents,
+    send_task_message_by_agent,
     submit_task,
     update_agent_run,
     update_task_status,
@@ -221,6 +226,42 @@ def resolve_agent_task(
     session: SessionDep,
 ) -> AgentTaskResolution:
     return resolve_task_for_agent(session, agent=current_agent, query=payload.query)
+
+
+@router.get("/agent/tasks/{task_id}", response_model=TaskDetail)
+def get_agent_task(
+    task_id: UUID, current_agent: CurrentAgentDep, session: SessionDep
+) -> TaskDetail:
+    try:
+        return get_task_for_agent(session, agent=current_agent, task_id=task_id)
+    except TaskNotFoundError as exc:
+        raise _not_found() from exc
+
+
+@router.post(
+    "/agent/tasks/{task_id}/messages",
+    response_model=AgentTaskMessageResponse,
+    status_code=201,
+)
+def send_agent_task_message(
+    task_id: UUID,
+    payload: AgentTaskMessageCreate,
+    current_agent: CurrentAgentDep,
+    session: SessionDep,
+    idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=255)],
+) -> AgentTaskMessageResponse:
+    try:
+        return send_task_message_by_agent(
+            session,
+            agent=current_agent,
+            task_id=task_id,
+            payload=payload,
+            idempotency_key=idempotency_key,
+        )
+    except TaskNotFoundError as exc:
+        raise _not_found() from exc
+    except TaskMessageIdempotencyConflictError as exc:
+        raise _conflict("idempotency_conflict") from exc
 
 
 @router.get("/tasks/{task_id}", response_model=TaskDetail)

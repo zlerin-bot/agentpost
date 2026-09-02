@@ -54,6 +54,21 @@ class TaskExecutionContract(ContractModel):
     create_endpoint: Literal["/api/v1/agent/tasks"] = "/api/v1/agent/tasks"
     create_requires_idempotency_key: Literal[True] = True
     resolve_endpoint: Literal["/api/v1/agent/tasks/resolve"] = "/api/v1/agent/tasks/resolve"
+    context_endpoint_template: Literal["/api/v1/agent/tasks/{task_id}"] = (
+        "/api/v1/agent/tasks/{task_id}"
+    )
+    message_endpoint_template: Literal["/api/v1/agent/tasks/{task_id}/messages"] = (
+        "/api/v1/agent/tasks/{task_id}/messages"
+    )
+    message_requires_idempotency_key: Literal[True] = True
+    legacy_connector_inbox_fallback: Literal[True] = True
+    connector_capabilities: list[str] = Field(
+        default_factory=lambda: [
+            "task_context_read",
+            "task_message_send",
+            "durable_task_run",
+        ]
+    )
     unique_exact_title_resolves_automatically: Literal[True] = True
     ambiguous_or_partial_title_requires_confirmation: Literal[True] = True
     resolver_scope: Literal["authenticated_agent_active_task_participation"] = (
@@ -245,6 +260,22 @@ def build_agent_integration_contract(settings: Settings) -> AgentIntegrationCont
                     "Human confirmation"
                 ),
                 changes_state=False,
+            ),
+            EndpointContract(
+                method="GET",
+                path="/api/v1/agent/tasks/{task_id}",
+                purpose="read task context and participants for an active task Agent",
+                changes_state=False,
+            ),
+            EndpointContract(
+                method="POST",
+                path="/api/v1/agent/tasks/{task_id}/messages",
+                purpose=(
+                    "append task collaboration context and fan it out through a durable Run or "
+                    "the compatible Inbox path for an older Connector"
+                ),
+                changes_state=True,
+                required_headers=["Idempotency-Key"],
             ),
             EndpointContract(
                 method="POST",

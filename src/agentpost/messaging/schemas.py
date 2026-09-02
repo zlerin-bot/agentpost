@@ -28,6 +28,10 @@ RESERVED_METADATA_KEYS = frozenset(
         "organization_event_id",
         "requested_responder_agent_ids",
         "reply_policy",
+        "agentpost_task_bridge",
+        "agentpost_task_id",
+        "agentpost_task_activity_id",
+        "agentpost_task_title",
     }
 )
 
@@ -93,7 +97,7 @@ def _validate_json_limits(value: JsonValue, *, max_bytes: int, label: str) -> Js
 def validate_message_metadata(value: dict[str, JsonValue]) -> dict[str, JsonValue]:
     _validate_json_limits(value, max_bytes=MAX_METADATA_BYTES, label="metadata")
     if RESERVED_METADATA_KEYS.intersection(value):
-        raise ValueError("metadata contains server-reserved organization channel fields")
+        raise ValueError("metadata contains server-reserved fields")
     return value
 
 

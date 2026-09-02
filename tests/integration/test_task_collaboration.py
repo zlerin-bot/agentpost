@@ -10,7 +10,8 @@ from agentpost.config import Settings
 from agentpost.db import Database
 from agentpost.identity.models import utc_now
 from agentpost.main import create_app
-from agentpost.tasks.models import AgentRun
+from agentpost.onboarding.models import AgentConnectorBinding, ConnectorInstance
+from agentpost.tasks.models import AgentRun, TaskActivity, TaskAssignment
 
 PASSWORD = "correct horse battery staple"
 ADMIN_KEY = "admin-secret-admin-secret-admin-secret"
@@ -324,6 +325,194 @@ def test_confirmed_friends_task_agent_selection_run_and_human_acceptance(
         )
         assert completed.status_code == 200, completed.text
         assert completed.json()["status"] == "completed"
+
+
+def test_task_messages_use_legacy_inbox_and_native_run_without_breaking_old_connectors(
+    settings: Settings, database: Database
+) -> None:
+    with TestClient(create_app(settings=_runtime(settings), database=database)) as client:
+        owner = _register(client, "message-owner")
+        member = _register(client, "message-member")
+        outsider = _register(client, "message-outsider")
+        owner_agent = _create_owned_agent(
+            client, human_id=str(owner["user"]["id"]), handle="message-owner"
+        )
+        member_agent = _create_owned_agent(
+            client, human_id=str(member["user"]["id"]), handle="message-member"
+        )
+        outsider_agent = _create_owned_agent(
+            client, human_id=str(outsider["user"]["id"]), handle="message-outsider"
+        )
+
+        owner_csrf = _login(client, "message-owner")
+        friendship = client.post(
+            "/api/v1/friend-requests",
+            headers={"X-CSRF-Token": owner_csrf},
+            json={"username": "message-member"},
+        ).json()
+        member_csrf = _login(client, "message-member")
+        accepted = client.post(
+            f"/api/v1/friend-requests/{friendship['friendship_id']}/decision",
+            headers={"X-CSRF-Token": member_csrf},
+            json={"decision": "accept"},
+        )
+        assert accepted.status_code == 200, accepted.text
+
+        created = client.post(
+            "/api/v1/agent/tasks",
+            headers={
+                "Authorization": f"Bearer {owner_agent['api_key']}",
+                "Idempotency-Key": "message-task-create",
+            },
+            json={
+                "title": "测试任务",
+                "goal": "验证新旧连接兼容",
+                "expected_output": "任务消息进入同一任务",
+            },
+        )
+        assert created.status_code == 201, created.text
+        task = created.json()
+        task_id = task["task_id"]
+        owner_csrf = _login(client, "message-owner")
+        invited = client.post(
+            f"/api/v1/tasks/{task_id}/members",
+            headers={"X-CSRF-Token": owner_csrf},
+            json={"human_user_ids": [member["user"]["id"]]},
+        )
+        assert invited.status_code == 200, invited.text
+
+        context = client.get(
+            f"/api/v1/agent/tasks/{task_id}",
+            headers={"Authorization": f"Bearer {member_agent['api_key']}"},
+        )
+        assert context.status_code == 200, context.text
+        assert context.json()["title"] == "测试任务"
+        hidden = client.get(
+            f"/api/v1/agent/tasks/{task_id}",
+            headers={"Authorization": f"Bearer {outsider_agent['api_key']}"},
+        )
+        assert hidden.status_code == 404
+
+        legacy = client.post(
+            f"/api/v1/agent/tasks/{task_id}/messages",
+            headers={
+                "Authorization": f"Bearer {owner_agent['api_key']}",
+                "Idempotency-Key": "legacy-task-message",
+            },
+            json={"subject": "兼容测试", "content_format": "text", "body": "请确认收到"},
+        )
+        assert legacy.status_code == 201, legacy.text
+        assert legacy.json()["legacy_delivery_count"] == 1
+        assert legacy.json()["queued_run_count"] == 0
+        replay = client.post(
+            f"/api/v1/agent/tasks/{task_id}/messages",
+            headers={
+                "Authorization": f"Bearer {owner_agent['api_key']}",
+                "Idempotency-Key": "legacy-task-message",
+            },
+            json={"subject": "兼容测试", "content_format": "text", "body": "请确认收到"},
+        )
+        assert replay.status_code == 201, replay.text
+        assert replay.json()["replayed"] is True
+        conflict = client.post(
+            f"/api/v1/agent/tasks/{task_id}/messages",
+            headers={
+                "Authorization": f"Bearer {owner_agent['api_key']}",
+                "Idempotency-Key": "legacy-task-message",
+            },
+            json={"subject": "兼容测试", "content_format": "text", "body": "不同正文"},
+        )
+        assert conflict.status_code == 409
+
+        inbox = client.get(
+            "/api/v1/inbox",
+            headers={"Authorization": f"Bearer {member_agent['api_key']}"},
+        )
+        bridge = next(
+            item for item in inbox.json()["items"] if item["metadata"].get("agentpost_task_bridge")
+        )
+        assert bridge["thread_id"] == task["thread_id"]
+        assert bridge["metadata"]["agentpost_task_id"] == task_id
+        reply = client.post(
+            f"/api/v1/messages/{bridge['message_id']}/reply",
+            headers={
+                "Authorization": f"Bearer {member_agent['api_key']}",
+                "Idempotency-Key": "legacy-task-reply",
+            },
+            json={
+                "type": "message",
+                "subject": "已收到",
+                "content": {"format": "text", "body": "旧连接已收到并回复"},
+            },
+        )
+        assert reply.status_code == 201, reply.text
+
+        member_agent_id = UUID(member_agent["agent"]["id"])
+        with database.session_factory() as session:
+            session.add(
+                ConnectorInstance(
+                    connector_id="message-member-current",
+                    agent_id=member_agent_id,
+                    human_user_id=UUID(member["user"]["id"]),
+                    connector_type="codex",
+                    display_name="message-member-current",
+                    client_version="agentpost-connect/0.1.20",
+                    runtime_version="agentpost-connect/0.1.40",
+                    status="active",
+                    health_status="healthy",
+                )
+            )
+            session.flush()
+            connector = session.scalar(
+                select(ConnectorInstance).where(
+                    ConnectorInstance.connector_id == "message-member-current"
+                )
+            )
+            assert connector is not None
+            session.add(
+                AgentConnectorBinding(
+                    agent_id=member_agent_id,
+                    connector_instance_id=connector.id,
+                )
+            )
+            session.commit()
+
+        native = client.post(
+            f"/api/v1/agent/tasks/{task_id}/messages",
+            headers={
+                "Authorization": f"Bearer {owner_agent['api_key']}",
+                "Idempotency-Key": "native-task-message",
+            },
+            json={"content_format": "markdown", "body": "请继续协同"},
+        )
+        assert native.status_code == 201, native.text
+        assert native.json()["queued_run_count"] == 1
+        assert native.json()["legacy_delivery_count"] == 0
+
+        with database.session_factory() as session:
+            message_activities = list(
+                session.scalars(
+                    select(TaskActivity).where(
+                        TaskActivity.task_id == UUID(task_id),
+                        TaskActivity.activity_type == "task_message",
+                    )
+                )
+            )
+            assert {item.activity_metadata.get("body") for item in message_activities} == {
+                "请确认收到",
+                "旧连接已收到并回复",
+                "请继续协同",
+            }
+            native_assignments = list(
+                session.scalars(
+                    select(TaskAssignment).where(
+                        TaskAssignment.task_id == UUID(task_id),
+                        TaskAssignment.assignment_kind == "task_message",
+                    )
+                )
+            )
+            assert len(native_assignments) == 1
+            assert native_assignments[0].assignee_agent_id == member_agent_id
 
 
 def test_agent_resolves_only_its_participating_tasks_by_exact_title(

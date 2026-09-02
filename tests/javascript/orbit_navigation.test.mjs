@@ -106,6 +106,8 @@ test("task detail exposes its stable ID, automatic Agent participation, and Huma
   assert.match(script, /等待 Agent 上线/);
   assert.match(script, /邮件通知已安排发送/);
   assert.match(script, /invited_member_count/);
+  assert.match(script, /task_message: actor \+ "发布了任务协作消息"/);
+  assert.match(script, /activity\.metadata\?\.body/);
 });
 
 test("module and selected view survive navigation and browser history", () => {

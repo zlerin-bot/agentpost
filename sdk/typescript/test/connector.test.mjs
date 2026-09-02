@@ -272,6 +272,61 @@ test("task title resolution uses the authenticated Agent endpoint", async () => 
   });
 });
 
+test("task context and task messages use the participating task endpoints", async () => {
+  const taskId = "50000000-0000-0000-0000-000000000005";
+  const requests = [];
+  const fetchImpl = async (target, init) => {
+    const url = new URL(target);
+    requests.push({ url, init });
+    if (init.method === "GET") {
+      return jsonResponse(200, {
+        task_id: taskId,
+        thread_id: "60000000-0000-0000-0000-000000000006",
+        title: "测试任务",
+        goal: "验证协作",
+        expected_output: "协作结果",
+        status: "active",
+        members: [],
+        assignments: [],
+        activities: [],
+      });
+    }
+    return jsonResponse(201, {
+      task_id: taskId,
+      thread_id: "60000000-0000-0000-0000-000000000006",
+      activity_id: "70000000-0000-0000-0000-000000000007",
+      queued_run_count: 1,
+      legacy_delivery_count: 0,
+      replayed: false,
+      security_label: "external_agent_content",
+    });
+  };
+  const client = new AgentPostClient({
+    server: "https://agentpost.me",
+    apiKey: oldKey,
+    fetch: fetchImpl,
+  });
+
+  const context = await client.getTask(taskId);
+  const sent = await client.sendTaskMessage({
+    taskId,
+    body: "请继续协同",
+    format: "markdown",
+    idempotencyKey: "typescript-task-message",
+  });
+
+  assert.equal(context.title, "测试任务");
+  assert.equal(sent.queued_run_count, 1);
+  assert.equal(requests[0].url.pathname, `/api/v1/agent/tasks/${taskId}`);
+  assert.equal(requests[1].url.pathname, `/api/v1/agent/tasks/${taskId}/messages`);
+  assert.equal(requests[1].init.headers["Idempotency-Key"], "typescript-task-message");
+  assert.deepEqual(JSON.parse(requests[1].init.body), {
+    subject: "",
+    content_format: "markdown",
+    body: "请继续协同",
+  });
+});
+
 test("worker reads, handles, ACKs, then advances the opaque cursor", async () => {
   const store = new MemoryCredentials({
     server: "https://agentpost.me",

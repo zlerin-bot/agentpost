@@ -71,9 +71,19 @@ def _oauth_path_allowed(request: Request, scopes: set[str]) -> bool:
             return True
         if method == "POST" and path.rsplit("/", 1)[-1] in {"read", "ack", "reply"}:
             return True
+    if path.startswith("/api/v1/agent/tasks/"):
+        if method == "GET" and path.count("/") == 5:
+            return True
+        if method == "POST" and path.endswith("/messages"):
+            return True
     if method != "POST":
         return False
-    if path in {"/api/v1/messages", "/api/v1/directory/resolve", "/api/v1/task-runs/claim"}:
+    if path in {
+        "/api/v1/messages",
+        "/api/v1/directory/resolve",
+        "/api/v1/agent/tasks/resolve",
+        "/api/v1/task-runs/claim",
+    }:
         return True
     if path.startswith("/api/v1/task-runs/") and path.rsplit("/", 1)[-1] in {
         "heartbeat",

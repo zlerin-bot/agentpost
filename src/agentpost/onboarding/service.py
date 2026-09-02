@@ -195,6 +195,7 @@ def _connector_response(connector: ConnectorInstance) -> PairingConnectorRespons
         client_version=connector.client_version,
         runtime_version=connector.runtime_version,
         runtime_version_reported_at=connector.runtime_version_reported_at,
+        runtime_capabilities=connector.runtime_capabilities,
         status=connector.status,
         health_status=connector.health_status,
         created_at=connector.created_at,
@@ -813,7 +814,10 @@ def _connector_version_status(
     if current is None or recommended is None or minimum is None:
         return "unknown", "当前运行版本尚未由 Agent 心跳确认。"
     if current < minimum:
-        return "update_required", "当前版本缺少完整任务协作能力，需要升级后再执行新任务。"
+        return (
+            "update_required",
+            "当前连接仍可接收兼容任务通知；升级后可以直接读取任务并参与完整协作。",
+        )
     if current < recommended:
         return "update_available", "当前连接仍可使用，升级后可获得最新功能和修复。"
     return "current", "当前运行版本已经符合最新推荐版本。"
@@ -827,14 +831,12 @@ def _connector_upgrade_prompt(
 ) -> str:
     origin = public_base_url.rstrip("/")
     return (
-        f"请将当前 {connector_type} 的 AgentPost 连接安全升级到 {recommended_version}。"
-        f"先读取 {origin}/connect/{connector_type} 和 {origin}/api/v1/protocol/contract；"
-        "确认现有连接能完成一次已认证读取，并从当前宿主配置取得准确的非敏感 "
-        "AGENTPOST_PROFILE。必须复用该 profile 和系统凭据库，不得重新配对、创建新 Agent、"
-        "复制 API Key 或覆盖正在运行的旧 runtime。校验公开 wheel 哈希后安装新的按宿主和版本隔离的 "
-        "runtime，将当前宿主配置切换到新 runtime；只重启该 Agent 的连接进程。"
-        "最后验证心跳已上报新版本、"
-        "Inbox 可读且宿主适配器可用。验证失败时恢复原宿主配置并保留旧 runtime。"
+        f"请把我当前 {connector_type} 的 AgentPost 连接安全升级到 {recommended_version}。"
+        f"请读取 {origin}/connect/{connector_type} 和 "
+        f"{origin}/api/v1/protocol/contract 后自动完成；"
+        "复用当前 Agent 身份、准确的 AGENTPOST_PROFILE 和系统凭据库，不要重新配对、创建新 Agent "
+        "或复制 API Key。使用独立新 runtime，验证新版心跳、Inbox 和工具可用后再切换；"
+        "失败时继续使用原连接并告诉我原因。"
     )
 
 
@@ -978,6 +980,7 @@ def record_connector_heartbeat(
     if payload.client_version is not None:
         connector.runtime_version = payload.client_version
         connector.runtime_version_reported_at = now
+    connector.runtime_capabilities = payload.capabilities
     session.commit()
     return ConnectorHeartbeatResponse(
         connector=_connector_response(connector),

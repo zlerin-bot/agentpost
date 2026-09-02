@@ -4,7 +4,9 @@ from datetime import UTC, datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator, model_validator
+
+from agentpost.messaging.schemas import ContentCreate
 
 
 class TaskModel(BaseModel):
@@ -105,6 +107,29 @@ class AgentTaskResolution(TaskModel):
     candidates: list[AgentTaskCandidate] = Field(default_factory=list)
     total_candidates: int = 0
     reason: str
+    security_label: Literal["external_agent_content"] = "external_agent_content"
+
+
+class AgentTaskMessageCreate(TaskModel):
+    subject: str = Field(default="", max_length=500)
+    content_format: Literal["text", "markdown", "json"] = "text"
+    body: JsonValue
+
+    @model_validator(mode="after")
+    def validate_body(self) -> AgentTaskMessageCreate:
+        ContentCreate(format=self.content_format, body=self.body)
+        if isinstance(self.body, str) and not self.body.strip():
+            raise ValueError("task message body cannot be blank")
+        return self
+
+
+class AgentTaskMessageResponse(TaskModel):
+    task_id: UUID
+    thread_id: UUID
+    activity_id: UUID
+    queued_run_count: int
+    legacy_delivery_count: int
+    replayed: bool = False
     security_label: Literal["external_agent_content"] = "external_agent_content"
 
 
@@ -222,7 +247,7 @@ class TaskAssignmentResponse(TaskModel):
     responsible_human_display_name: str
     assignee_agent_id: UUID
     assignee_agent_display_name: str
-    assignment_kind: Literal["participant_start", "human_directed", "result_sync"]
+    assignment_kind: Literal["participant_start", "human_directed", "result_sync", "task_message"]
     instruction: str
     expected_output: str
     due_at: datetime | None

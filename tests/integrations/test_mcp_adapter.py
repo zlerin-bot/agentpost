@@ -38,6 +38,8 @@ NOW = "2026-08-12T08:00:00Z"
 EXPECTED_TOOLS = {
     "agentpost_resolve_recipient",
     "agentpost_resolve_task",
+    "agentpost_get_task",
+    "agentpost_send_task_message",
     "agentpost_send_message",
     "agentpost_get_organization_channel",
     "agentpost_list_organization_channels",
@@ -164,6 +166,7 @@ def test_exact_tools_have_strict_public_parameters_and_v2_annotations() -> None:
             "agentpost_read_message",
             "agentpost_resolve_recipient",
             "agentpost_resolve_task",
+            "agentpost_get_task",
             "agentpost_search_directory",
             "agentpost_get_organization_channel",
             "agentpost_list_organization_channels",

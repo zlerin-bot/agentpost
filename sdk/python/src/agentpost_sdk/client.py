@@ -36,6 +36,8 @@ from agentpost_sdk.models import (
     OrganizationChannelMessage,
     OrganizationChannelSummary,
     RecipientResolution,
+    TaskContext,
+    TaskMessageResult,
     TaskResolution,
 )
 
@@ -44,6 +46,7 @@ if TYPE_CHECKING:
     from agentpost_sdk.onboarding import PairingInstructions, PairingSession
 
 _BODY_FORMATS = {"text", "markdown", "json"}
+_RUNTIME_CAPABILITIES = ["task_context_read", "task_message_send", "durable_task_run"]
 
 
 def _runtime_client_version() -> str | None:
@@ -319,6 +322,7 @@ class _ConnectorResource:
                 "health_status": health_status,
                 "last_error_code": last_error_code,
                 "client_version": _runtime_client_version(),
+                "capabilities": _RUNTIME_CAPABILITIES,
             },
         )
         try:
@@ -737,6 +741,39 @@ class AgentPost:
             return TaskResolution.model_validate(data)
         except PydanticValidationError as exc:
             raise self._protocol_error("Malformed task resolution response", exc) from exc
+
+    def get_task(self, task_id: UUID | str) -> TaskContext:
+        """Read one task only when this Agent is an active participant."""
+        data = self._request("GET", f"/agent/tasks/{task_id}")
+        try:
+            return TaskContext.model_validate(data)
+        except PydanticValidationError as exc:
+            raise self._protocol_error("Malformed task context response", exc) from exc
+
+    def send_task_message(
+        self,
+        task_id: UUID | str,
+        body: Any,
+        *,
+        subject: str = "",
+        format: str = "text",
+        idempotency_key: str | None = None,
+    ) -> TaskMessageResult:
+        """Append collaboration context to an existing participating task."""
+        if format not in _BODY_FORMATS:
+            raise ConfigurationError("format must be text, markdown, or json")
+        data, replayed = self._idempotent_request(
+            "POST",
+            f"/agent/tasks/{task_id}/messages",
+            json={"subject": subject, "content_format": format, "body": body},
+            idempotency_key=idempotency_key or _idempotency_key(),
+        )
+        try:
+            result = TaskMessageResult.model_validate(data)
+        except PydanticValidationError as exc:
+            raise self._protocol_error("Malformed task message response", exc) from exc
+        result.replayed = result.replayed or replayed
+        return result
 
     def _message(self, data: Any, *, idempotency_replayed: bool = False) -> Message:
         try:

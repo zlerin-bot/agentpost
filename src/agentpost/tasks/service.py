@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import re
 import secrets
 import unicodedata
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from agentpost.accounts.mailer import EmailDeliveryError, deliver_task_membership_notification
@@ -15,6 +18,7 @@ from agentpost.control.human_security import add_human_action_audit
 from agentpost.control.models import AgentOwnership, HumanUser
 from agentpost.identity.models import Agent, utc_now
 from agentpost.messaging.models import Delivery, Message
+from agentpost.onboarding.models import AgentConnectorBinding, ConnectorInstance
 from agentpost.tasks.models import (
     AgentRun,
     Friendship,
@@ -33,6 +37,8 @@ from agentpost.tasks.schemas import (
     AgentSummary,
     AgentTaskCandidate,
     AgentTaskCreate,
+    AgentTaskMessageCreate,
+    AgentTaskMessageResponse,
     AgentTaskResolution,
     FriendResponse,
     TaskAcceptanceDecision,
@@ -78,6 +84,10 @@ class AgentRunNotFoundError(Exception):
 
 
 class AgentRunLeaseError(Exception):
+    pass
+
+
+class TaskMessageIdempotencyConflictError(Exception):
     pass
 
 
@@ -441,6 +451,8 @@ def _add_activity(
     target_human_id: UUID | None = None,
     metadata: dict[str, object] | None = None,
     external: bool = False,
+    idempotency_key: str | None = None,
+    request_hash: str | None = None,
 ) -> TaskActivity:
     activity = TaskActivity(
         task_id=task_id,
@@ -451,6 +463,8 @@ def _add_activity(
         target_human_user_id=target_human_id,
         activity_metadata=metadata or {},
         security_label="external_agent_content" if external else "platform_event",
+        idempotency_key=idempotency_key,
+        request_hash=request_hash,
     )
     session.add(activity)
     return activity
@@ -486,14 +500,15 @@ def _queue_collaboration_assignment(
     session.add(assignment)
     session.flush()
     session.add(AgentRun(assignment_id=assignment.id, agent_id=agent_id))
-    _add_activity(
-        session,
-        task_id=task.id,
-        kind="agent_joined_collaboration",
-        actor_type="platform",
-        target_human_id=human_id,
-        metadata={"assignment_id": str(assignment.id), "agent_id": str(agent_id)},
-    )
+    if assignment_kind == "participant_start":
+        _add_activity(
+            session,
+            task_id=task.id,
+            kind="agent_joined_collaboration",
+            actor_type="platform",
+            target_human_id=human_id,
+            metadata={"assignment_id": str(assignment.id), "agent_id": str(agent_id)},
+        )
     return assignment
 
 
@@ -921,6 +936,303 @@ def resolve_task_for_agent(
         query=query,
         reason="no_participating_task_match",
     )
+
+
+def _task_participation_for_agent(
+    session: Session, *, agent: Agent, task_id: UUID
+) -> tuple[Task, TaskAgentParticipant, TaskMembership]:
+    row = session.execute(
+        select(Task, TaskAgentParticipant, TaskMembership)
+        .join(TaskAgentParticipant, TaskAgentParticipant.task_id == Task.id)
+        .join(
+            TaskMembership,
+            (TaskMembership.task_id == Task.id)
+            & (TaskMembership.human_user_id == TaskAgentParticipant.human_user_id),
+        )
+        .where(
+            Task.id == task_id,
+            TaskAgentParticipant.agent_id == agent.id,
+            TaskAgentParticipant.active.is_(True),
+            TaskMembership.status == "active",
+        )
+    ).one_or_none()
+    if row is None:
+        raise TaskNotFoundError
+    return row
+
+
+def get_task_for_agent(session: Session, *, agent: Agent, task_id: UUID) -> TaskDetail:
+    task, _, membership = _task_participation_for_agent(session, agent=agent, task_id=task_id)
+    return _task_detail(session, task=task, viewer_membership=membership)
+
+
+def _connector_version_tuple(value: str | None) -> tuple[int, int, int] | None:
+    if value is None:
+        return None
+    matched = re.fullmatch(r"(?:agentpost-connect/)?([0-9]+)\.([0-9]+)\.([0-9]+)", value.strip())
+    if matched is None:
+        return None
+    return tuple(int(part) for part in matched.groups())  # type: ignore[return-value]
+
+
+def _supports_native_task_messages(session: Session, *, agent_id: UUID) -> bool:
+    connector = session.execute(
+        select(ConnectorInstance.runtime_version, ConnectorInstance.runtime_capabilities)
+        .join(
+            AgentConnectorBinding,
+            AgentConnectorBinding.connector_instance_id == ConnectorInstance.id,
+        )
+        .where(
+            AgentConnectorBinding.agent_id == agent_id,
+            ConnectorInstance.status == "active",
+        )
+    ).one_or_none()
+    if connector is None:
+        return False
+    runtime_version, capabilities = connector
+    parsed = _connector_version_tuple(runtime_version)
+    return "task_message_send" in capabilities or (parsed is not None and parsed >= (0, 1, 40))
+
+
+def _legacy_task_delivery(
+    session: Session,
+    *,
+    task: Task,
+    activity: TaskActivity,
+    sender_agent_id: UUID,
+    recipient_agent_id: UUID,
+    subject: str,
+    content_format: str,
+    body: object,
+) -> Message:
+    now = utc_now()
+    message = Message(
+        id=f"msg_{secrets.token_hex(16)}",
+        sender_agent_id=sender_agent_id,
+        subject=subject or f"任务更新：{task.title}",
+        content_format=content_format,
+        content_body=body,
+        message_type="notification",
+        priority="normal",
+        thread_id=task.thread_id,
+        reply_to_message_id=None,
+        requires_ack=True,
+        task_payload=None,
+        result_payload=None,
+        message_metadata={
+            "agentpost_task_bridge": True,
+            "agentpost_task_id": str(task.id),
+            "agentpost_task_activity_id": str(activity.id),
+            "agentpost_task_title": task.title,
+        },
+        accepted_at=now,
+        created_at=now,
+        expires_at=None,
+    )
+    session.add(message)
+    session.add(
+        Delivery(
+            message=message,
+            recipient_agent_id=recipient_agent_id,
+            delivery_status="delivered",
+            delivery_attempts=1,
+            last_attempt_at=now,
+            delivered_at=now,
+            created_at=now,
+        )
+    )
+    return message
+
+
+def _fanout_task_message(
+    session: Session,
+    *,
+    task: Task,
+    activity: TaskActivity,
+    sender_agent_id: UUID,
+    subject: str,
+    content_format: str,
+    body: object,
+    already_delivered_agent_ids: set[UUID] | None = None,
+) -> tuple[int, int]:
+    queued_runs = 0
+    legacy_deliveries = 0
+    already_delivered_agent_ids = already_delivered_agent_ids or set()
+    participants = list(
+        session.scalars(
+            select(TaskAgentParticipant).where(
+                TaskAgentParticipant.task_id == task.id,
+                TaskAgentParticipant.active.is_(True),
+                TaskAgentParticipant.agent_id != sender_agent_id,
+            )
+        )
+    )
+    for participant in participants:
+        if _supports_native_task_messages(session, agent_id=participant.agent_id):
+            _queue_collaboration_assignment(
+                session,
+                task=task,
+                human_id=participant.human_user_id,
+                agent_id=participant.agent_id,
+                created_by_human_id=task.owner_human_user_id,
+                assignment_kind="task_message",
+                trigger_activity_id=activity.id,
+                instruction=(
+                    "任务中出现一条新的协作消息。请读取任务上下文并参与协同；"
+                    "如无需补充，请明确说明。\n\n"
+                    f"{body}"
+                ),
+            )
+            queued_runs += 1
+        elif participant.agent_id not in already_delivered_agent_ids:
+            _legacy_task_delivery(
+                session,
+                task=task,
+                activity=activity,
+                sender_agent_id=sender_agent_id,
+                recipient_agent_id=participant.agent_id,
+                subject=subject,
+                content_format=content_format,
+                body=body,
+            )
+            legacy_deliveries += 1
+    return queued_runs, legacy_deliveries
+
+
+def send_task_message_by_agent(
+    session: Session,
+    *,
+    agent: Agent,
+    task_id: UUID,
+    payload: AgentTaskMessageCreate,
+    idempotency_key: str,
+) -> AgentTaskMessageResponse:
+    task, _, _ = _task_participation_for_agent(session, agent=agent, task_id=task_id)
+    request_hash = hashlib.sha256(
+        json.dumps(payload.model_dump(mode="json"), sort_keys=True, ensure_ascii=False).encode()
+    ).hexdigest()
+    existing = session.scalar(
+        select(TaskActivity).where(
+            TaskActivity.actor_agent_id == agent.id,
+            TaskActivity.idempotency_key == idempotency_key,
+        )
+    )
+    if existing is not None:
+        if existing.request_hash != request_hash or existing.task_id != task.id:
+            raise TaskMessageIdempotencyConflictError
+        return AgentTaskMessageResponse(
+            task_id=task.id,
+            thread_id=task.thread_id,
+            activity_id=existing.id,
+            queued_run_count=int(existing.activity_metadata.get("queued_run_count", 0)),
+            legacy_delivery_count=int(existing.activity_metadata.get("legacy_delivery_count", 0)),
+            replayed=True,
+        )
+    activity = _add_activity(
+        session,
+        task_id=task.id,
+        kind="task_message",
+        actor_type="agent",
+        actor_agent_id=agent.id,
+        metadata={
+            "subject": payload.subject,
+            "content_format": payload.content_format,
+            "body": payload.body,
+        },
+        external=True,
+        idempotency_key=idempotency_key,
+        request_hash=request_hash,
+    )
+    try:
+        session.flush()
+    except IntegrityError:
+        session.rollback()
+        existing = session.scalar(
+            select(TaskActivity).where(
+                TaskActivity.actor_agent_id == agent.id,
+                TaskActivity.idempotency_key == idempotency_key,
+            )
+        )
+        if existing is None:
+            raise
+        if existing.request_hash != request_hash or existing.task_id != task.id:
+            raise TaskMessageIdempotencyConflictError from None
+        return AgentTaskMessageResponse(
+            task_id=task.id,
+            thread_id=task.thread_id,
+            activity_id=existing.id,
+            queued_run_count=int(existing.activity_metadata.get("queued_run_count", 0)),
+            legacy_delivery_count=int(existing.activity_metadata.get("legacy_delivery_count", 0)),
+            replayed=True,
+        )
+    queued_runs, legacy_deliveries = _fanout_task_message(
+        session,
+        task=task,
+        activity=activity,
+        sender_agent_id=agent.id,
+        subject=payload.subject,
+        content_format=payload.content_format,
+        body=payload.body,
+    )
+    activity.activity_metadata = {
+        **activity.activity_metadata,
+        "queued_run_count": queued_runs,
+        "legacy_delivery_count": legacy_deliveries,
+    }
+    task.updated_at = utc_now()
+    session.commit()
+    return AgentTaskMessageResponse(
+        task_id=task.id,
+        thread_id=task.thread_id,
+        activity_id=activity.id,
+        queued_run_count=queued_runs,
+        legacy_delivery_count=legacy_deliveries,
+    )
+
+
+def record_legacy_task_reply(
+    session: Session,
+    *,
+    agent: Agent,
+    parent: Message,
+    reply: Message,
+) -> None:
+    if not parent.message_metadata.get("agentpost_task_bridge"):
+        return
+    try:
+        task_id = UUID(str(parent.message_metadata["agentpost_task_id"]))
+    except (KeyError, TypeError, ValueError):
+        return
+    try:
+        task, _, _ = _task_participation_for_agent(session, agent=agent, task_id=task_id)
+    except TaskNotFoundError:
+        return
+    activity = _add_activity(
+        session,
+        task_id=task.id,
+        kind="task_message",
+        actor_type="agent",
+        actor_agent_id=agent.id,
+        metadata={
+            "subject": reply.subject,
+            "content_format": reply.content_format,
+            "body": reply.content_body,
+            "legacy_reply_message_id": reply.id,
+        },
+        external=True,
+    )
+    session.flush()
+    _fanout_task_message(
+        session,
+        task=task,
+        activity=activity,
+        sender_agent_id=agent.id,
+        subject=reply.subject,
+        content_format=reply.content_format,
+        body=reply.content_body,
+        already_delivered_agent_ids={parent.sender_agent_id},
+    )
+    task.updated_at = utc_now()
 
 
 def list_task_invitation_candidates(

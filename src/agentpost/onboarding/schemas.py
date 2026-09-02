@@ -95,6 +95,7 @@ class PairingConnectorResponse(OnboardingModel):
     client_version: str | None
     runtime_version: str | None = None
     runtime_version_reported_at: datetime | None = None
+    runtime_capabilities: list[str] = Field(default_factory=list)
     status: Literal["active", "replaced", "revoked"]
     health_status: Literal["unknown", "healthy", "degraded", "error"]
     created_at: datetime
@@ -266,6 +267,7 @@ class ConnectorConfirmationCreate(OnboardingModel):
 class ConnectorHeartbeatCreate(OnboardingModel):
     health_status: Literal["healthy", "degraded", "error"] = "healthy"
     client_version: str | None = Field(default=None, max_length=100)
+    capabilities: list[str] = Field(default_factory=list, max_length=64)
     last_error_code: str | None = Field(
         default=None,
         min_length=1,
@@ -287,6 +289,16 @@ class ConnectorHeartbeatCreate(OnboardingModel):
         if value is None:
             return None
         return value.strip() or None
+
+    @field_validator("capabilities")
+    @classmethod
+    def clean_capabilities(cls, value: list[str]) -> list[str]:
+        cleaned = [item.strip() for item in value]
+        if any(not item or len(item) > 100 for item in cleaned):
+            raise ValueError("capabilities must contain 1-100 character names")
+        if len(cleaned) != len(set(cleaned)):
+            raise ValueError("capabilities must be unique")
+        return cleaned
 
 
 class ConnectorHeartbeatResponse(OnboardingModel):

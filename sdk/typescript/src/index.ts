@@ -58,6 +58,30 @@ export type TaskResolution = {
   security_label: "external_agent_content" | string;
 };
 
+export type TaskContext = JsonObject & {
+  task_id: string;
+  thread_id: string;
+  title: string;
+  goal: string;
+  expected_output: string;
+  status: string;
+  members: JsonObject[];
+  assignments: JsonObject[];
+  activities: JsonObject[];
+};
+
+export type TaskMessageResult = {
+  task_id: string;
+  thread_id: string;
+  activity_id: string;
+  queued_run_count: number;
+  legacy_delivery_count: number;
+  replayed: boolean;
+  security_label: "external_agent_content" | string;
+};
+
+const RUNTIME_CAPABILITIES = ["task_context_read", "task_message_send", "durable_task_run"];
+
 export class AgentPostError extends Error {
   readonly code: string;
   readonly statusCode?: number;
@@ -315,12 +339,46 @@ export class AgentPostClient {
     }) as TaskResolution;
   }
 
+  async getTask(taskId: string): Promise<TaskContext> {
+    return await this.request(
+      "GET",
+      `/agent/tasks/${encodeURIComponent(taskId)}`,
+    ) as TaskContext;
+  }
+
+  async sendTaskMessage(options: {
+    taskId: string;
+    body: unknown;
+    subject?: string;
+    format?: "text" | "markdown" | "json";
+    idempotencyKey?: string;
+  }): Promise<TaskMessageResult> {
+    const key = options.idempotencyKey ?? idempotencyKey();
+    return await this.request(
+      "POST",
+      `/agent/tasks/${encodeURIComponent(options.taskId)}/messages`,
+      {
+        idempotencyKey: key,
+        acceptanceUnknown: true,
+        body: {
+          subject: options.subject ?? "",
+          content_format: options.format ?? "text",
+          body: options.body,
+        },
+      },
+    ) as TaskMessageResult;
+  }
+
   async heartbeat(
     healthStatus: "healthy" | "degraded" | "error" = "healthy",
     lastErrorCode?: string,
   ): Promise<JsonObject> {
     return await this.request("POST", "/connect/heartbeat", {
-      body: { health_status: healthStatus, last_error_code: lastErrorCode ?? null },
+      body: {
+        health_status: healthStatus,
+        last_error_code: lastErrorCode ?? null,
+        capabilities: RUNTIME_CAPABILITIES,
+      },
     }) as JsonObject;
   }
 

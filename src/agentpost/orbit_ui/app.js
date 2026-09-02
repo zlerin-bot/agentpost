@@ -772,6 +772,7 @@ function activityText(activity) {
     resumed: actor + "恢复了任务",
     archived: actor + "归档了任务",
     restored: actor + "恢复了任务",
+    task_message: actor + "发布了任务协作消息",
   };
   if (activity.kind === "agent_delivery") {
     return actor + "通过 " + (activity.agent_display_name || "Agent")
@@ -976,7 +977,15 @@ function renderProjectDetail() {
     textNode.textContent = activityText(activity);
     const time = document.createElement("small");
     time.textContent = dateText(activity.created_at);
-    copy.append(textNode, time);
+    copy.append(textNode);
+    if (activity.kind === "task_message" && activity.metadata?.body !== undefined) {
+      const body = document.createElement("p");
+      body.textContent = typeof activity.metadata.body === "string"
+        ? activity.metadata.body
+        : JSON.stringify(activity.metadata.body);
+      copy.append(body);
+    }
+    copy.append(time);
     row.append(marker, copy);
     elements.projectActivityList.append(row);
   });

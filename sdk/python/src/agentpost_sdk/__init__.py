@@ -38,6 +38,8 @@ from agentpost_sdk.models import (
     RecipientCandidate,
     RecipientResolution,
     TaskCandidate,
+    TaskContext,
+    TaskMessageResult,
     TaskResolution,
 )
 from agentpost_sdk.onboarding import (
@@ -82,10 +84,12 @@ __all__ = [
     "RecipientCandidate",
     "RecipientResolution",
     "TaskCandidate",
+    "TaskContext",
+    "TaskMessageResult",
     "TaskResolution",
     "ResponseError",
     "TransportError",
     "ValidationError",
 ]
 
-__version__ = "0.1.39"
+__version__ = "0.1.40"

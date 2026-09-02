@@ -47,6 +47,7 @@ class ConnectorInstance(Base):
     runtime_version_reported_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    runtime_capabilities: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="active", index=True)
     health_status: Mapped[str] = mapped_column(
         String(16), nullable=False, default="unknown", index=True

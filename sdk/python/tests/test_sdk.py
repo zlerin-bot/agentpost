@@ -310,6 +310,66 @@ def test_sdk_resolves_task_title_through_scoped_server_endpoint() -> None:
     assert result.security_label == "external_agent_content"
 
 
+def test_sdk_reads_task_context_and_sends_idempotent_task_message() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        if request.method == "GET":
+            return json_response(
+                request,
+                200,
+                {
+                    "task_id": TASK_ID,
+                    "thread_id": THREAD_ID,
+                    "title": "测试任务",
+                    "goal": "验证协作",
+                    "expected_output": "协作结果",
+                    "status": "active",
+                    "owner_display_name": "Mars",
+                    "members": [],
+                    "assignments": [],
+                    "activities": [],
+                },
+            )
+        return json_response(
+            request,
+            201,
+            {
+                "task_id": TASK_ID,
+                "thread_id": THREAD_ID,
+                "activity_id": "55555555-5555-5555-5555-555555555555",
+                "queued_run_count": 1,
+                "legacy_delivery_count": 0,
+                "replayed": False,
+                "security_label": "external_agent_content",
+            },
+        )
+
+    with make_client(handler) as client:
+        context = client.get_task(TASK_ID)
+        result = client.send_task_message(
+            TASK_ID,
+            "请继续协同",
+            subject="进展",
+            format="markdown",
+            idempotency_key="task-message-idempotency",
+        )
+
+    assert context.title == "测试任务"
+    assert result.queued_run_count == 1
+    assert [(request.method, request.url.path) for request in seen] == [
+        ("GET", f"/base/api/v1/agent/tasks/{TASK_ID}"),
+        ("POST", f"/base/api/v1/agent/tasks/{TASK_ID}/messages"),
+    ]
+    assert seen[1].headers["Idempotency-Key"] == "task-message-idempotency"
+    assert json.loads(seen[1].content) == {
+        "subject": "进展",
+        "content_format": "markdown",
+        "body": "请继续协同",
+    }
+
+
 def test_send_builds_wire_envelope_and_task_convenience() -> None:
     requests: list[httpx.Request] = []
 

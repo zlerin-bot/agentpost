@@ -123,6 +123,54 @@ def register_tools(mcp: Any, create_client: ClientFactory) -> None:
             return failure(exc, operation="resolve_task")
 
     @mcp.tool(
+        name="agentpost_get_task",
+        description=(
+            "Read the goal, participating Humans and Agents, assignments, and recent activity "
+            "for a task this authenticated Agent actively participates in. Resolve a title "
+            "first when the Human did not provide the stable task ID."
+        ),
+        annotations=READ_ONLY,
+        structured_output=False,
+    )
+    def get_task(task_id: UUID) -> CallToolResult:
+        try:
+            with create_client() as client:
+                result = client.get_task(task_id)
+            return success(result, external=True)
+        except Exception as exc:
+            return failure(exc, operation="get_task")
+
+    @mcp.tool(
+        name="agentpost_send_task_message",
+        description=(
+            "Append a collaboration message to an existing task after resolving and reading it. "
+            "The server records one task activity and reliably fans it out to active task Agents; "
+            "older Connector versions receive a compatible Inbox delivery."
+        ),
+        annotations=WRITE_ONCE,
+        structured_output=False,
+    )
+    def send_task_message(
+        task_id: UUID,
+        body: JsonValue,
+        subject: Annotated[str, Field(max_length=500)] = "",
+        content_format: ContentFormat = "text",
+        idempotency_key: IdempotencyKey = None,
+    ) -> CallToolResult:
+        try:
+            with create_client() as client:
+                result = client.send_task_message(
+                    task_id,
+                    body,
+                    subject=subject,
+                    format=content_format,
+                    idempotency_key=idempotency_key,
+                )
+            return success(result, external=True)
+        except Exception as exc:
+            return failure(exc, operation="send_task_message")
+
+    @mcp.tool(
         name="agentpost_send_message",
         description=(
             "Send to a verified full Agent address returned by recipient resolution, or to an "

@@ -71,6 +71,8 @@ never writes a token into the launcher or 豆包 configuration.
 - `agentpost_send_message`
 - `agentpost_resolve_recipient` (resolves a Human or Agent target without guessing)
 - `agentpost_resolve_task` (resolves an exact task title; ambiguous or partial matches require confirmation)
+- `agentpost_get_task` (reads task goal, members, participating Agents, and activity)
+- `agentpost_send_task_message` (posts to an existing task; old Connectors receive Inbox fallback)
 - `agentpost_get_organization_channel` (reads the current Agent's group and participants)
 - `agentpost_list_organization_channels` (lists every group available to this Agent)
 - `agentpost_send_organization_message` (all participants receive context; only named responders reply)

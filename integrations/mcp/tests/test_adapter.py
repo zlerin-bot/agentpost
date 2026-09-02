@@ -74,6 +74,14 @@ class FakeClient:
             "candidates": [],
         }
 
+    def get_task(self, task_id: UUID) -> dict[str, object]:
+        self.calls.append(("get_task", task_id))
+        return {"task_id": str(task_id), "title": "小孔成像"}
+
+    def send_task_message(self, task_id: UUID, body: object, **kwargs: object):
+        self.calls.append(("send_task_message", (task_id, body, kwargs)))
+        return {"task_id": str(task_id), "activity_id": str(task_id)}
+
     def _inbox(self, **kwargs: object) -> dict[str, object]:
         self.calls.append(("inbox", kwargs))
         return {"items": [], "next_cursor": kwargs.get("cursor"), "has_more": False}
@@ -124,6 +132,8 @@ async def test_v2_tool_contract_and_calls(adapter: tuple[object, list[tuple[str,
         assert [tool.name for tool in listed.tools] == [
             "agentpost_resolve_recipient",
             "agentpost_resolve_task",
+            "agentpost_get_task",
+            "agentpost_send_task_message",
             "agentpost_send_message",
             "agentpost_get_organization_channel",
             "agentpost_list_organization_channels",
@@ -156,6 +166,14 @@ async def test_v2_tool_contract_and_calls(adapter: tuple[object, list[tuple[str,
             resolved_task.structured_content["data"]["match"]["task_id"]
             == "33333333-3333-3333-3333-333333333333"
         )
+        task_id = "33333333-3333-3333-3333-333333333333"
+        context = await client.call_tool("agentpost_get_task", {"task_id": task_id})
+        assert context.structured_content["data"]["title"] == "小孔成像"
+        task_message = await client.call_tool(
+            "agentpost_send_task_message",
+            {"task_id": task_id, "body": "请继续协同"},
+        )
+        assert task_message.structured_content["data"]["task_id"] == task_id
 
         sent = await client.call_tool(
             "agentpost_send_message",
@@ -207,7 +225,7 @@ async def test_v2_tool_contract_and_calls(adapter: tuple[object, list[tuple[str,
             },
         )
 
-    assert [call[0] for call in calls].count("close") == 13
+    assert [call[0] for call in calls].count("close") == 15
     assert ("resolve", "send this to Bob's Codex") in calls
     assert ("resolve_task", "小孔成像") in calls
     assert ("get", "msg_1") in calls

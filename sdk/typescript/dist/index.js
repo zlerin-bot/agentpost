@@ -1,3 +1,4 @@
+const RUNTIME_CAPABILITIES = ["task_context_read", "task_message_send", "durable_task_run"];
 export class AgentPostError extends Error {
     code;
     statusCode;
@@ -200,9 +201,28 @@ export class AgentPostClient {
             body: { query },
         });
     }
+    async getTask(taskId) {
+        return await this.request("GET", `/agent/tasks/${encodeURIComponent(taskId)}`);
+    }
+    async sendTaskMessage(options) {
+        const key = options.idempotencyKey ?? idempotencyKey();
+        return await this.request("POST", `/agent/tasks/${encodeURIComponent(options.taskId)}/messages`, {
+            idempotencyKey: key,
+            acceptanceUnknown: true,
+            body: {
+                subject: options.subject ?? "",
+                content_format: options.format ?? "text",
+                body: options.body,
+            },
+        });
+    }
     async heartbeat(healthStatus = "healthy", lastErrorCode) {
         return await this.request("POST", "/connect/heartbeat", {
-            body: { health_status: healthStatus, last_error_code: lastErrorCode ?? null },
+            body: {
+                health_status: healthStatus,
+                last_error_code: lastErrorCode ?? null,
+                capabilities: RUNTIME_CAPABILITIES,
+            },
         });
     }
     async rotateCredential() {

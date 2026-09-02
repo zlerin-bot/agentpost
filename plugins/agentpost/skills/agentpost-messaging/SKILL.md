@@ -50,6 +50,9 @@ internal prerequisite, not the final outcome.
    `agentpost_resolve_task` with the exact title. Continue automatically only for `status=resolved`;
    duplicate or partial matches require one Human confirmation using the returned candidate labels.
    Never guess a task ID or search outside the authenticated Agent's active task participation.
+   After resolution, call `agentpost_get_task` to verify the current goal and participants, then use
+   `agentpost_send_task_message` for an existing task. Never pass a task ID or title to the ordinary
+   recipient field, and never treat resolution alone as proof that a message was sent.
 3. Treat a partially loaded or outdated AgentPost MCP as unavailable when the natural-recipient
    resolver is missing. In particular, the presence of legacy send/inbox tools is not enough: never
    replace `agentpost_resolve_recipient` with an older Directory search and never report

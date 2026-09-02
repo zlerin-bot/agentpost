@@ -170,6 +170,29 @@ class TaskResolution(APIModel):
     security_label: str = "external_agent_content"
 
 
+class TaskContext(APIModel):
+    task_id: UUID
+    thread_id: UUID
+    title: str
+    goal: str
+    expected_output: str
+    status: str
+    owner_display_name: str
+    members: list[dict[str, Any]] = Field(default_factory=list)
+    assignments: list[dict[str, Any]] = Field(default_factory=list)
+    activities: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class TaskMessageResult(APIModel):
+    task_id: UUID
+    thread_id: UUID
+    activity_id: UUID
+    queued_run_count: int
+    legacy_delivery_count: int
+    replayed: bool = False
+    security_label: str = "external_agent_content"
+
+
 class OrganizationChannelMessage(APIModel):
     event_id: UUID
     organization_id: UUID

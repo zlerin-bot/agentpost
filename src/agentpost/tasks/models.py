@@ -203,7 +203,8 @@ class TaskAssignment(Base):
             name="uq_task_assignments_agent_trigger",
         ),
         CheckConstraint(
-            "assignment_kind IN ('participant_start', 'human_directed', 'result_sync')",
+            "assignment_kind IN ('participant_start', 'human_directed', 'result_sync', "
+            "'task_message')",
             name="ck_task_assignments_kind",
         ),
         CheckConstraint(
@@ -295,6 +296,13 @@ class AgentRun(Base):
 
 class TaskActivity(Base):
     __tablename__ = "task_activities"
+    __table_args__ = (
+        UniqueConstraint(
+            "actor_agent_id",
+            "idempotency_key",
+            name="uq_task_activities_agent_idempotency",
+        ),
+    )
 
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
     task_id: Mapped[UUID] = mapped_column(
@@ -312,6 +320,8 @@ class TaskActivity(Base):
         Uuid(as_uuid=True), ForeignKey("human_users.id", ondelete="SET NULL"), nullable=True
     )
     activity_metadata: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    idempotency_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    request_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     security_label: Mapped[str] = mapped_column(
         String(32), nullable=False, default="platform_event"
     )

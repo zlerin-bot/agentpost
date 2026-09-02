@@ -54,6 +54,26 @@ export type TaskResolution = {
     reason: string;
     security_label: "external_agent_content" | string;
 };
+export type TaskContext = JsonObject & {
+    task_id: string;
+    thread_id: string;
+    title: string;
+    goal: string;
+    expected_output: string;
+    status: string;
+    members: JsonObject[];
+    assignments: JsonObject[];
+    activities: JsonObject[];
+};
+export type TaskMessageResult = {
+    task_id: string;
+    thread_id: string;
+    activity_id: string;
+    queued_run_count: number;
+    legacy_delivery_count: number;
+    replayed: boolean;
+    security_label: "external_agent_content" | string;
+};
 export declare class AgentPostError extends Error {
     readonly code: string;
     readonly statusCode?: number;
@@ -124,6 +144,14 @@ export declare class AgentPostClient {
         limit?: number;
     }): Promise<JsonObject[]>;
     resolveTask(query: string): Promise<TaskResolution>;
+    getTask(taskId: string): Promise<TaskContext>;
+    sendTaskMessage(options: {
+        taskId: string;
+        body: unknown;
+        subject?: string;
+        format?: "text" | "markdown" | "json";
+        idempotencyKey?: string;
+    }): Promise<TaskMessageResult>;
     heartbeat(healthStatus?: "healthy" | "degraded" | "error", lastErrorCode?: string): Promise<JsonObject>;
     rotateCredential(): Promise<{
         connector_id: string;
