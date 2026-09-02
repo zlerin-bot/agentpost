@@ -1,5 +1,5 @@
 const RUNTIME_CAPABILITIES = ["task_context_read", "task_message_send", "durable_task_run"];
-const RUNTIME_VERSION = "agentpost-connect/0.1.43";
+const RUNTIME_VERSION = "agentpost-connect/0.1.44";
 const RUNTIME_SESSION_STARTED_AT = new Date().toISOString();
 export class AgentPostError extends Error {
     code;
@@ -35,6 +35,8 @@ function idempotencyKey() {
     return `ts_${globalThis.crypto.randomUUID()}`;
 }
 async function parseResponse(response, options = {}) {
+    if (response.ok && response.status === 204)
+        return undefined;
     let payload;
     try {
         payload = await response.json();
@@ -208,13 +210,54 @@ export class AgentPostClient {
     }
     async sendTaskMessage(options) {
         const key = options.idempotencyKey ?? idempotencyKey();
+        const body = {
+            subject: options.subject ?? "",
+            content_format: options.format ?? "text",
+            body: options.body,
+        };
+        if (options.attachmentIds?.length)
+            body.attachments = options.attachmentIds;
         return await this.request("POST", `/agent/tasks/${encodeURIComponent(options.taskId)}/messages`, {
             idempotencyKey: key,
             acceptanceUnknown: true,
+            body,
+        });
+    }
+    async listPendingTaskRuns(options = {}) {
+        return await this.request("GET", "/task-runs/pending", {
+            query: { task_id: options.taskId, limit: options.limit ?? 50 },
+        });
+    }
+    async claimTaskRun(options = {}) {
+        const body = {};
+        if (options.taskId)
+            body.task_id = options.taskId;
+        if (options.assignmentId)
+            body.assignment_id = options.assignmentId;
+        return await this.request("POST", "/task-runs/claim", {
+            body: Object.keys(body).length ? body : undefined,
+        });
+    }
+    async updateTaskRun(options) {
+        return await this.request("POST", `/task-runs/${encodeURIComponent(options.runId)}/heartbeat`, {
             body: {
-                subject: options.subject ?? "",
-                content_format: options.format ?? "text",
-                body: options.body,
+                lease_token: options.leaseToken,
+                status: options.status,
+                checkpoint: options.checkpoint ?? {},
+                wake_status: options.wakeStatus,
+                local_session_id: options.localSessionId,
+            },
+        });
+    }
+    async completeTaskRun(options) {
+        await this.request("POST", `/task-runs/${encodeURIComponent(options.runId)}/result`, {
+            idempotencyKey: options.idempotencyKey ?? idempotencyKey(),
+            acceptanceUnknown: true,
+            body: {
+                lease_token: options.leaseToken,
+                status: options.status,
+                summary: options.summary,
+                checkpoint: options.checkpoint ?? {},
             },
         });
     }

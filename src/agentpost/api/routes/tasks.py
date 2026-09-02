@@ -6,11 +6,14 @@ from uuid import UUID
 from fastapi import APIRouter, Header, HTTPException, Query, Request, Response, status
 
 from agentpost.api.dependencies import CurrentAgentDep, SessionDep
+from agentpost.attachments.service import AttachmentUnavailableError
 from agentpost.control.auth import CurrentHumanDep
 from agentpost.control.human_security import HumanCsrfDep, human_session_id_from_request
 from agentpost.tasks.schemas import (
     AgentChoice,
     AgentRunClaim,
+    AgentRunClaimRequest,
+    AgentRunPendingList,
     AgentRunResult,
     AgentRunUpdate,
     AgentTaskCreate,
@@ -54,6 +57,7 @@ from agentpost.tasks.service import (
     invite_task_members,
     list_friend_suggestions,
     list_friends,
+    list_pending_agent_runs,
     list_task_invitation_candidates,
     list_tasks,
     remove_friendship,
@@ -262,6 +266,11 @@ def send_agent_task_message(
         raise _not_found() from exc
     except TaskMessageIdempotencyConflictError as exc:
         raise _conflict("idempotency_conflict") from exc
+    except AttachmentUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "attachment_unavailable", "message": str(exc)},
+        ) from exc
 
 
 @router.get("/tasks/{task_id}", response_model=TaskDetail)
@@ -517,10 +526,34 @@ def decide_human_task_acceptance(
         raise _conflict() from exc
 
 
+@router.get("/task-runs/pending", response_model=AgentRunPendingList)
+def pending_task_runs(
+    current_agent: CurrentAgentDep,
+    session: SessionDep,
+    task_id: UUID | None = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+) -> AgentRunPendingList:
+    return list_pending_agent_runs(
+        session,
+        agent=current_agent,
+        task_id=task_id,
+        limit=limit,
+    )
+
+
 @router.post("/task-runs/claim", response_model=AgentRunClaim | None)
-def claim_task_run(current_agent: CurrentAgentDep, session: SessionDep) -> AgentRunClaim | None:
+def claim_task_run(
+    current_agent: CurrentAgentDep,
+    session: SessionDep,
+    payload: AgentRunClaimRequest | None = None,
+) -> AgentRunClaim | None:
     try:
-        return claim_agent_run(session, agent=current_agent)
+        return claim_agent_run(
+            session,
+            agent=current_agent,
+            task_id=payload.task_id if payload else None,
+            assignment_id=payload.assignment_id if payload else None,
+        )
     except AgentRunNotFoundError as exc:
         raise _not_found("run_not_found") from exc
 
@@ -544,9 +577,20 @@ def complete_task_run(
     payload: AgentRunResult,
     current_agent: CurrentAgentDep,
     session: SessionDep,
+    idempotency_key: Annotated[
+        str | None, Header(alias="Idempotency-Key", min_length=1, max_length=255)
+    ] = None,
 ) -> Response:
     try:
-        complete_agent_run(session, agent=current_agent, run_id=run_id, payload=payload)
+        complete_agent_run(
+            session,
+            agent=current_agent,
+            run_id=run_id,
+            payload=payload,
+            idempotency_key=idempotency_key,
+        )
     except (AgentRunNotFoundError, AgentRunLeaseError) as exc:
         raise _not_found("run_not_found") from exc
+    except TaskStateConflictError as exc:
+        raise _conflict("idempotency_conflict") from exc
     return Response(status_code=status.HTTP_204_NO_CONTENT)

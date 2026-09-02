@@ -924,6 +924,8 @@ def test_task_run_claim_heartbeat_and_result_are_explicit() -> None:
 
     def handler(request: httpx.Request) -> httpx.Response:
         requests.append(request)
+        if request.url.path.endswith("/task-runs/pending"):
+            return json_response(request, 200, {"items": [{"run_id": "run-1"}], "count": 1})
         if request.url.path.endswith("/task-runs/claim"):
             return json_response(request, 200, {"run_id": "run-1", "lease_token": "x" * 24})
         if request.url.path.endswith("/heartbeat"):
@@ -931,9 +933,15 @@ def test_task_run_claim_heartbeat_and_result_are_explicit() -> None:
         return httpx.Response(204, request=request)
 
     with make_client(handler) as client:
-        claimed = client.task_runs.claim()
+        pending = client.task_runs.pending(task_id=TASK_ID, limit=10)
+        claimed = client.task_runs.claim(task_id=TASK_ID, assignment_id="assignment-1")
         heartbeat = client.task_runs.heartbeat(
-            "run-1", lease_token="x" * 24, status="running", checkpoint={"step": 2}
+            "run-1",
+            lease_token="x" * 24,
+            status="running",
+            checkpoint={"step": 2},
+            wake_status="woken",
+            local_session_id="local-session-1",
         )
         completed = client.task_runs.complete(
             "run-1",
@@ -941,14 +949,24 @@ def test_task_run_claim_heartbeat_and_result_are_explicit() -> None:
             status="completed",
             summary="done",
             output={"artifact": "report"},
+            idempotency_key="result-once",
         )
 
+    assert pending["count"] == 1
     assert claimed == {"run_id": "run-1", "lease_token": "x" * 24}
     assert heartbeat["run_id"] == "run-1"
     assert completed is None
-    assert json.loads(requests[1].content)["checkpoint"] == {"step": 2}
-    assert json.loads(requests[2].content)["status"] == "completed"
-    assert json.loads(requests[2].content)["checkpoint"] == {"artifact": "report"}
+    assert dict(requests[0].url.params) == {"limit": "10", "task_id": TASK_ID}
+    assert json.loads(requests[1].content) == {
+        "task_id": TASK_ID,
+        "assignment_id": "assignment-1",
+    }
+    assert json.loads(requests[2].content)["checkpoint"] == {"step": 2}
+    assert json.loads(requests[2].content)["wake_status"] == "woken"
+    assert json.loads(requests[2].content)["local_session_id"] == "local-session-1"
+    assert requests[3].headers["Idempotency-Key"] == "result-once"
+    assert json.loads(requests[3].content)["status"] == "completed"
+    assert json.loads(requests[3].content)["checkpoint"] == {"artifact": "report"}
 
 
 def test_task_run_result_rejects_new_and_legacy_checkpoint_together() -> None:

@@ -204,13 +204,17 @@ class TaskAssignment(Base):
         ),
         CheckConstraint(
             "assignment_kind IN ('participant_start', 'human_directed', 'result_sync', "
-            "'task_message')",
+            "'task_message', 'revision')",
             name="ck_task_assignments_kind",
         ),
         CheckConstraint(
             "status IN ('queued', 'running', 'waiting_human', 'completed', "
             "'partial', 'failed', 'cancelled')",
             name="ck_task_assignments_status",
+        ),
+        CheckConstraint(
+            "priority IN ('low', 'normal', 'high', 'urgent')",
+            name="ck_task_assignments_priority",
         ),
     )
 
@@ -235,6 +239,8 @@ class TaskAssignment(Base):
         ForeignKey("task_activities.id", ondelete="CASCADE"),
         nullable=True,
     )
+    source_message_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    priority: Mapped[str] = mapped_column(String(16), nullable=False, default="normal")
     instruction: Mapped[str] = mapped_column(Text, nullable=False)
     expected_output: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="queued", index=True)
@@ -258,6 +264,9 @@ class AgentRun(Base):
     __tablename__ = "agent_runs"
     __table_args__ = (
         UniqueConstraint("assignment_id", "attempt", name="uq_agent_runs_assignment_attempt"),
+        UniqueConstraint(
+            "agent_id", "result_idempotency_key", name="uq_agent_runs_agent_result_idempotency"
+        ),
         CheckConstraint(
             "status IN ('queued', 'leased', 'starting', 'running', 'waiting_human', "
             "'completed', 'partial', 'failed', 'cancelled', 'interrupted')",
@@ -285,9 +294,17 @@ class AgentRun(Base):
     last_heartbeat_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    local_session_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    session_mapped_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    woken_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     checkpoint: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    result_idempotency_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    result_request_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )

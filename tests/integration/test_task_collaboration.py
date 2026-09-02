@@ -200,13 +200,29 @@ def test_confirmed_friends_task_agent_selection_run_and_human_acceptance(
         assert selected_member["agent_selection_source"] == "selected"
         assert len(selected.json()["assignments"]) == 2
 
+        owner_pending = client.get(
+            "/api/v1/task-runs/pending",
+            headers={"Authorization": f"Bearer {owner_agent['api_key']}"},
+            params={"task_id": task_id},
+        )
+        assert owner_pending.status_code == 200, owner_pending.text
+        owner_preview = owner_pending.json()["items"][0]
+        assert owner_preview["task_id"] == task_id
+        assert owner_preview["source_activity_id"]
+        assert owner_preview["reply_thread_id"] == task["thread_id"]
+        assert owner_preview["target_human_user_id"] == owner["user"]["id"]
+
         owner_run_response = client.post(
             "/api/v1/task-runs/claim",
             headers={"Authorization": f"Bearer {owner_agent['api_key']}"},
+            json={"assignment_id": owner_preview["assignment_id"]},
         )
         assert owner_run_response.status_code == 200, owner_run_response.text
         owner_run = owner_run_response.json()
         assert owner_run["task_id"] == task_id
+        assert owner_run["source_activity_id"] == owner_preview["source_activity_id"]
+        assert owner_run["reply_thread_id"] == task["thread_id"]
+        assert owner_run["wake_stage"] == "claimed"
         assert set(owner_run["participant_agent_ids"]) == {owner_agent_id, member_agent_id}
         owner_result = client.post(
             f"/api/v1/task-runs/{owner_run['run_id']}/result",
@@ -233,9 +249,16 @@ def test_confirmed_friends_task_agent_selection_run_and_human_acceptance(
         heartbeat = client.post(
             f"/api/v1/task-runs/{run['run_id']}/heartbeat",
             headers={"Authorization": f"Bearer {member_agent['api_key']}"},
-            json={"lease_token": run["lease_token"], "status": "running"},
+            json={
+                "lease_token": run["lease_token"],
+                "status": "running",
+                "wake_status": "woken",
+                "local_session_id": "local-task-session-1",
+            },
         )
         assert heartbeat.status_code == 200, heartbeat.text
+        assert heartbeat.json()["wake_stage"] == "running"
+        assert heartbeat.json()["local_session_id"] == "local-task-session-1"
 
         with database.session_factory() as session:
             leased_run = session.scalar(select(AgentRun).where(AgentRun.id == UUID(run["run_id"])))
@@ -251,10 +274,23 @@ def test_confirmed_friends_task_agent_selection_run_and_human_acceptance(
         reclaimed_run = reclaimed.json()
         assert reclaimed_run["run_id"] != run["run_id"]
         assert reclaimed_run["attempt"] == 2
+        with database.session_factory() as session:
+            replacement_runs = list(
+                session.scalars(
+                    select(AgentRun).where(
+                        AgentRun.assignment_id == UUID(reclaimed_run["assignment_id"]),
+                        AgentRun.status == "queued",
+                    )
+                )
+            )
+            assert len(replacement_runs) == 0
 
         result = client.post(
             f"/api/v1/task-runs/{reclaimed_run['run_id']}/result",
-            headers={"Authorization": f"Bearer {member_agent['api_key']}"},
+            headers={
+                "Authorization": f"Bearer {member_agent['api_key']}",
+                "Idempotency-Key": "member-result-once",
+            },
             json={
                 "lease_token": reclaimed_run["lease_token"],
                 "status": "completed",
@@ -262,43 +298,32 @@ def test_confirmed_friends_task_agent_selection_run_and_human_acceptance(
             },
         )
         assert result.status_code == 204, result.text
-
-        owner_sync_response = client.post(
-            "/api/v1/task-runs/claim",
-            headers={"Authorization": f"Bearer {owner_agent['api_key']}"},
-        )
-        assert owner_sync_response.status_code == 200, owner_sync_response.text
-        owner_sync = owner_sync_response.json()
-        assert "识别三项风险并给出措施" in owner_sync["instruction"]
-        assert len(owner_sync["collaboration_updates"]) == 2
-        owner_sync_result = client.post(
-            f"/api/v1/task-runs/{owner_sync['run_id']}/result",
-            headers={"Authorization": f"Bearer {owner_agent['api_key']}"},
+        replayed_result = client.post(
+            f"/api/v1/task-runs/{reclaimed_run['run_id']}/result",
+            headers={
+                "Authorization": f"Bearer {member_agent['api_key']}",
+                "Idempotency-Key": "member-result-once",
+            },
             json={
-                "lease_token": owner_sync["lease_token"],
+                "lease_token": reclaimed_run["lease_token"],
                 "status": "completed",
-                "summary": "已校验风险措施，可以汇总",
+                "summary": "识别三项风险并给出措施",
             },
         )
-        assert owner_sync_result.status_code == 204, owner_sync_result.text
-
-        member_sync_response = client.post(
-            "/api/v1/task-runs/claim",
-            headers={"Authorization": f"Bearer {member_agent['api_key']}"},
-        )
-        assert member_sync_response.status_code == 200, member_sync_response.text
-        member_sync = member_sync_response.json()
-        assert "已整理目标、材料与协同边界" in member_sync["instruction"]
-        member_sync_result = client.post(
-            f"/api/v1/task-runs/{member_sync['run_id']}/result",
-            headers={"Authorization": f"Bearer {member_agent['api_key']}"},
+        assert replayed_result.status_code == 204, replayed_result.text
+        conflicting_result = client.post(
+            f"/api/v1/task-runs/{reclaimed_run['run_id']}/result",
+            headers={
+                "Authorization": f"Bearer {member_agent['api_key']}",
+                "Idempotency-Key": "member-result-once",
+            },
             json={
-                "lease_token": member_sync["lease_token"],
+                "lease_token": reclaimed_run["lease_token"],
                 "status": "completed",
-                "summary": "已吸收共同目标，无需补充",
+                "summary": "不同结果",
             },
         )
-        assert member_sync_result.status_code == 204, member_sync_result.text
+        assert conflicting_result.status_code == 409, conflicting_result.text
 
         owner_csrf = _login(client, "task-owner")
         detail = client.get(f"/api/v1/tasks/{task_id}")
@@ -334,6 +359,11 @@ def test_confirmed_friends_task_agent_selection_run_and_human_acceptance(
         assert changes.json()["state_axes"]["human_acceptance_status"] == "changes_requested"
         assert changes.json()["state_axes"]["run_counts"]["queued"] == 2
         assert changes.json()["state_axes"]["agent_result_status"] == "mixed"
+        assert {
+            assignment["assignment_kind"]
+            for assignment in changes.json()["assignments"]
+            if assignment["status"] == "queued"
+        } == {"revision"}
 
         for agent in (owner_agent, member_agent):
             revision_run = client.post(
@@ -520,17 +550,40 @@ def test_task_messages_use_legacy_inbox_and_native_run_without_breaking_old_conn
             )
             session.commit()
 
+        uploaded = client.post(
+            "/api/v1/attachments",
+            headers={"Authorization": f"Bearer {owner_agent['api_key']}"},
+            files={"file": ("协同说明.md", b"# task attachment", "text/markdown")},
+        )
+        assert uploaded.status_code == 201, uploaded.text
+        attachment_id = uploaded.json()["id"]
+
         native = client.post(
             f"/api/v1/agent/tasks/{task_id}/messages",
             headers={
                 "Authorization": f"Bearer {owner_agent['api_key']}",
                 "Idempotency-Key": "native-task-message",
             },
-            json={"content_format": "markdown", "body": "请继续协同"},
+            json={
+                "content_format": "markdown",
+                "body": "请继续协同",
+                "attachments": [attachment_id],
+            },
         )
         assert native.status_code == 201, native.text
         assert native.json()["queued_run_count"] == 1
         assert native.json()["legacy_delivery_count"] == 0
+        assert native.json()["attachment_ids"] == [attachment_id]
+        member_download = client.get(
+            f"/api/v1/attachments/{attachment_id}",
+            headers={"Authorization": f"Bearer {member_agent['api_key']}"},
+        )
+        assert member_download.status_code == 200, member_download.text
+        outsider_download = client.get(
+            f"/api/v1/attachments/{attachment_id}",
+            headers={"Authorization": f"Bearer {outsider_agent['api_key']}"},
+        )
+        assert outsider_download.status_code == 404
 
         owner_csrf = _login(client, "message-owner")
         task_detail = client.get(
@@ -546,6 +599,7 @@ def test_task_messages_use_legacy_inbox_and_native_run_without_breaking_old_conn
         assert native_activity["actor_display_name"] == "message-owner"
         assert native_activity["actor_agent_display_name"] == "message-owner-ai"
         assert native_activity["metadata"]["content_format"] == "markdown"
+        assert native_activity["metadata"]["attachments"][0]["id"] == attachment_id
 
         with database.session_factory() as session:
             message_activities = list(
@@ -571,6 +625,35 @@ def test_task_messages_use_legacy_inbox_and_native_run_without_breaking_old_conn
             )
             assert len(native_assignments) == 1
             assert native_assignments[0].assignee_agent_id == member_agent_id
+            native_assignment_id = str(native_assignments[0].id)
+
+        claimed_native = client.post(
+            "/api/v1/task-runs/claim",
+            headers={"Authorization": f"Bearer {member_agent['api_key']}"},
+            json={"assignment_id": native_assignment_id},
+        )
+        assert claimed_native.status_code == 200, claimed_native.text
+        completed_native = client.post(
+            f"/api/v1/task-runs/{claimed_native.json()['run_id']}/result",
+            headers={"Authorization": f"Bearer {member_agent['api_key']}"},
+            json={
+                "lease_token": claimed_native.json()["lease_token"],
+                "status": "completed",
+                "summary": "任务消息已处理",
+            },
+        )
+        assert completed_native.status_code == 204, completed_native.text
+        with database.session_factory() as session:
+            generated_sync = list(
+                session.scalars(
+                    select(TaskAssignment).where(
+                        TaskAssignment.task_id == UUID(task_id),
+                        TaskAssignment.assignment_kind == "result_sync",
+                        TaskAssignment.trigger_activity_id == UUID(native.json()["activity_id"]),
+                    )
+                )
+            )
+            assert generated_sync == []
 
 
 def test_agent_resolves_only_its_participating_tasks_by_exact_title(
@@ -658,6 +741,73 @@ def test_agent_resolves_only_its_participating_tasks_by_exact_title(
             json={"query": "   "},
         )
         assert blank.status_code == 422, blank.text
+
+
+def test_pending_runs_survive_restart_and_can_be_claimed_for_a_specific_task(
+    settings: Settings, database: Database
+) -> None:
+    runtime = _runtime(settings)
+    with TestClient(create_app(settings=runtime, database=database)) as client:
+        owner = _register(client, "targeted-owner")
+        agent = _create_owned_agent(
+            client, human_id=str(owner["user"]["id"]), handle="targeted-owner"
+        )
+        with database.session_factory() as session:
+            connector = ConnectorInstance(
+                connector_id="targeted-current",
+                agent_id=UUID(agent["agent"]["id"]),
+                human_user_id=UUID(owner["user"]["id"]),
+                connector_type="codex",
+                display_name="targeted-current",
+                client_version="agentpost-connect/0.1.43",
+                runtime_version="agentpost-connect/0.1.43",
+                status="active",
+                health_status="healthy",
+            )
+            session.add(connector)
+            session.flush()
+            session.add(
+                AgentConnectorBinding(
+                    agent_id=UUID(agent["agent"]["id"]),
+                    connector_instance_id=connector.id,
+                )
+            )
+            session.commit()
+
+        tasks = []
+        for index in (1, 2):
+            response = client.post(
+                "/api/v1/agent/tasks",
+                headers={
+                    "Authorization": f"Bearer {agent['api_key']}",
+                    "Idempotency-Key": f"targeted-task-{index}",
+                },
+                json={
+                    "title": f"定向任务 {index}",
+                    "goal": "验证重启与定向认领",
+                    "expected_output": "指定任务的执行结果",
+                },
+            )
+            assert response.status_code == 201, response.text
+            tasks.append(response.json())
+
+    with TestClient(create_app(settings=runtime, database=database)) as client:
+        pending = client.get(
+            "/api/v1/task-runs/pending",
+            headers={"Authorization": f"Bearer {agent['api_key']}"},
+        )
+        assert pending.status_code == 200, pending.text
+        assert [item["task_id"] for item in pending.json()["items"]] == [
+            tasks[0]["task_id"],
+            tasks[1]["task_id"],
+        ]
+        claimed = client.post(
+            "/api/v1/task-runs/claim",
+            headers={"Authorization": f"Bearer {agent['api_key']}"},
+            json={"task_id": tasks[1]["task_id"]},
+        )
+        assert claimed.status_code == 200, claimed.text
+        assert claimed.json()["task_id"] == tasks[1]["task_id"]
 
 
 def test_message_history_is_only_a_friend_suggestion(

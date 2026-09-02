@@ -281,7 +281,7 @@ test("heartbeat reports the packaged runtime version and exposes upgrade directi
       ...heartbeat(),
       upgrade: {
         action: "upgrade_recommended",
-        target_version: "0.1.43",
+        target_version: "0.1.44",
         minimum_supported_version: "0.1.34",
         reason: "有新版本",
         prompt: "请安全升级",
@@ -298,9 +298,9 @@ test("heartbeat reports the packaged runtime version and exposes upgrade directi
 
   const result = await client.heartbeat();
 
-  assert.equal(heartbeatBody.client_version, "agentpost-connect/0.1.43");
-  assert.equal(heartbeatBody.installed_version, "agentpost-connect/0.1.43");
-  assert.equal(heartbeatBody.configured_version, "agentpost-connect/0.1.43");
+  assert.equal(heartbeatBody.client_version, "agentpost-connect/0.1.44");
+  assert.equal(heartbeatBody.installed_version, "agentpost-connect/0.1.44");
+  assert.equal(heartbeatBody.configured_version, "agentpost-connect/0.1.44");
   assert.match(heartbeatBody.runtime_session_started_at, /Z$/);
   assert.deepEqual(heartbeatBody.capabilities, [
     "task_context_read",
@@ -364,6 +364,56 @@ test("task context and task messages use the participating task endpoints", asyn
     content_format: "markdown",
     body: "请继续协同",
   });
+});
+
+test("task runs can be previewed, claimed by task, woken, and completed idempotently", async () => {
+  const requests = [];
+  const fetchImpl = async (target, init) => {
+    const url = new URL(target);
+    requests.push({ url, init });
+    if (url.pathname.endsWith("/task-runs/pending")) {
+      return jsonResponse(200, { items: [{ run_id: "run-1" }], count: 1 });
+    }
+    if (url.pathname.endsWith("/task-runs/claim")) {
+      return jsonResponse(200, { run_id: "run-1", lease_token: "x".repeat(24) });
+    }
+    if (url.pathname.endsWith("/heartbeat")) {
+      return jsonResponse(200, { run_id: "run-1", wake_stage: "running" });
+    }
+    return new Response(null, { status: 204 });
+  };
+  const client = new AgentPostClient({
+    server: "https://agentpost.me",
+    apiKey: oldKey,
+    fetch: fetchImpl,
+  });
+
+  const pending = await client.listPendingTaskRuns({ taskId: "task-2", limit: 5 });
+  await client.claimTaskRun({ taskId: "task-2", assignmentId: "assignment-2" });
+  await client.updateTaskRun({
+    runId: "run-1",
+    leaseToken: "x".repeat(24),
+    status: "running",
+    wakeStatus: "woken",
+    localSessionId: "local-session-2",
+  });
+  await client.completeTaskRun({
+    runId: "run-1",
+    leaseToken: "x".repeat(24),
+    status: "partial",
+    summary: "部分完成",
+    idempotencyKey: "typescript-result-once",
+  });
+
+  assert.equal(pending.count, 1);
+  assert.equal(requests[0].url.searchParams.get("task_id"), "task-2");
+  assert.deepEqual(JSON.parse(requests[1].init.body), {
+    task_id: "task-2",
+    assignment_id: "assignment-2",
+  });
+  assert.equal(JSON.parse(requests[2].init.body).wake_status, "woken");
+  assert.equal(JSON.parse(requests[2].init.body).local_session_id, "local-session-2");
+  assert.equal(requests[3].init.headers["Idempotency-Key"], "typescript-result-once");
 });
 
 test("worker reads, handles, ACKs, then advances the opaque cursor", async () => {

@@ -7,23 +7,24 @@ Last updated: 2026-09-02
 `local_verified`、`deployed_https_verified` 与 `production_accepted` 是不同门禁。任何未运行或缺少
 真实环境证据的项目必须标记为 `待确认`、`partial` 或 `no_evidence`。
 
-## Current baseline — 0.1.43
+## Current baseline — 0.1.44
 
 - Task 是唯一多人协作容器；一个 Task 对应一个稳定 ID 和一条主 Thread。
 - Friendship 是双向 Human 关系，只负责识别和邀请 Task 成员。
 - 每位 Human 至少拥有一个 Agent，并可设置默认 Agent；Task 内可另选参与 Agent。
 - Task 成员 Agent 自动进入上下文协同，点名工单是可选的执行细化。
-- Agent Run 具备 claim、lease、heartbeat、幂等 result 与过期重排。
+- Agent Run 具备待执行预览、定向 claim、lease、heartbeat、本地会话唤醒证据、幂等 result 与过期重排。
 - Agent Result、Task 提交和 Human 验收相互独立。
 - Human 界面固定为任务、好友、AI、设置。
 - Connector heartbeat 上报实际版本，服务端返回兼容性和升级指令。
 - 任务状态、Run、Agent Result、提交和 Human 验收以独立状态轴呈现。
 - Connector 分别上报已安装、配置目标和实际加载版本；旧会话仍加载旧版本时提示重连。
-- 协议合同 0.2 固化任务消息与 Run 结果字段，并兼容旧 `format` / `output` 请求。
+- Task 消息支持受权限保护的附件；进展按 Human 显示并折叠历史同步噪声。
+- 协议合同 0.3 固化任务消息、Run 路由和唤醒字段，并兼容旧 `format` / `output` 请求。
 
 ## Phase 1 — Task 闭环生产验收
 
-1. 在 PostgreSQL 验证 0031 → 0032 → 0033 → 0032 → 0033，并核对核心数据关系。
+1. 在 PostgreSQL 验证 0033 → 0034 → 0033 → 0034，并核对核心数据关系。
 2. 覆盖两人及多人 Task：自动加入、邮件/站内通知、默认 Agent、显式 Agent 选择。
 3. 覆盖离线 Agent、租约过期、重复 claim、重复 result、部分失败和重新执行。
 4. 覆盖提交、要求修改、再次提交、接受和拒绝的 Human 验收闭环。

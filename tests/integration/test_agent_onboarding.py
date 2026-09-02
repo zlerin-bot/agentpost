@@ -303,9 +303,9 @@ def test_outdated_connector_heartbeat_requests_upgrade_once_and_keeps_inbox_comp
 ) -> None:
     runtime = _runtime_settings(
         settings,
-        connector_release_version="0.1.43",
+        connector_release_version="0.1.44",
         connector_wheel_url=(
-            "https://agentpost.example/downloads/agentpost-0.1.43-py3-none-any.whl"
+            "https://agentpost.example/downloads/agentpost-0.1.44-py3-none-any.whl"
         ),
     )
     with TestClient(create_app(settings=runtime, database=database)) as client:
@@ -336,16 +336,16 @@ def test_outdated_connector_heartbeat_requests_upgrade_once_and_keeps_inbox_comp
             json={
                 "health_status": "healthy",
                 "client_version": "agentpost-connect/0.1.20",
-                "installed_version": "agentpost-connect/0.1.43",
-                "configured_version": "agentpost-connect/0.1.43",
+                "installed_version": "agentpost-connect/0.1.44",
+                "configured_version": "agentpost-connect/0.1.44",
                 "runtime_session_started_at": "2026-09-02T12:00:00Z",
                 "capabilities": ["legacy_inbox"],
             },
         )
         assert first.status_code == 200, first.text
         first_connector = first.json()["connector"]
-        assert first_connector["installed_version"] == "agentpost-connect/0.1.43"
-        assert first_connector["configured_version"] == "agentpost-connect/0.1.43"
+        assert first_connector["installed_version"] == "agentpost-connect/0.1.44"
+        assert first_connector["configured_version"] == "agentpost-connect/0.1.44"
         assert first_connector["runtime_version"] == "agentpost-connect/0.1.20"
         assert first_connector["runtime_session_started_at"] == "2026-09-02T12:00:00Z"
         assert first_connector["runtime_capabilities"] == ["legacy_inbox"]
@@ -353,11 +353,11 @@ def test_outdated_connector_heartbeat_requests_upgrade_once_and_keeps_inbox_comp
         assert visible[0]["reconnect_required"] is True
         directive = first.json()["upgrade"]
         assert directive["action"] == "upgrade_required"
-        assert directive["target_version"] == "0.1.43"
+        assert directive["target_version"] == "0.1.44"
         assert directive["minimum_supported_version"] == "0.1.34"
         assert "不要重新配对" in directive["prompt"]
         assert first.headers["X-AgentPost-Upgrade-Action"] == "upgrade_required"
-        assert first.headers["X-AgentPost-Upgrade-Version"] == "0.1.43"
+        assert first.headers["X-AgentPost-Upgrade-Version"] == "0.1.44"
 
         second = client.post(
             "/api/v1/connect/heartbeat",
@@ -394,9 +394,9 @@ def test_outdated_connector_heartbeat_requests_upgrade_once_and_keeps_inbox_comp
             headers={"Authorization": f"Bearer {agent_key}"},
             json={
                 "health_status": "healthy",
-                "client_version": "agentpost-connect/0.1.43",
-                "installed_version": "agentpost-connect/0.1.43",
-                "configured_version": "agentpost-connect/0.1.43",
+                "client_version": "agentpost-connect/0.1.44",
+                "installed_version": "agentpost-connect/0.1.44",
+                "configured_version": "agentpost-connect/0.1.44",
                 "runtime_session_started_at": "2026-09-02T12:05:00Z",
                 "capabilities": ["task_context_read"],
             },
@@ -411,7 +411,7 @@ def test_outdated_connector_heartbeat_requests_upgrade_once_and_keeps_inbox_comp
             select(ConnectorInstance).where(ConnectorInstance.connector_id == connector_id)
         )
         assert connector is not None
-        assert connector.upgrade_target_version == "0.1.43"
+        assert connector.upgrade_target_version == "0.1.44"
         assert connector.upgrade_status == "completed"
         assert connector.upgrade_requested_at is not None
         assert connector.upgrade_completed_at is not None

@@ -76,8 +76,14 @@ export type TaskMessageResult = {
   activity_id: string;
   queued_run_count: number;
   legacy_delivery_count: number;
+  attachment_ids: string[];
   replayed: boolean;
   security_label: "external_agent_content" | string;
+};
+
+export type PendingTaskRuns = {
+  items: JsonObject[];
+  count: number;
 };
 
 export type ConnectorUpgradeDirective = {
@@ -95,7 +101,7 @@ export type ConnectorHeartbeat = JsonObject & {
 };
 
 const RUNTIME_CAPABILITIES = ["task_context_read", "task_message_send", "durable_task_run"];
-const RUNTIME_VERSION = "agentpost-connect/0.1.43";
+const RUNTIME_VERSION = "agentpost-connect/0.1.44";
 const RUNTIME_SESSION_STARTED_AT = new Date().toISOString();
 
 export class AgentPostError extends Error {
@@ -146,6 +152,7 @@ async function parseResponse(
   response: Response,
   options: { idempotencyKey?: string; acceptanceUnknown?: boolean } = {},
 ): Promise<unknown> {
+  if (response.ok && response.status === 204) return undefined;
   let payload: unknown;
   try {
     payload = await response.json();
@@ -367,22 +374,93 @@ export class AgentPostClient {
     body: unknown;
     subject?: string;
     format?: "text" | "markdown" | "json";
+    attachmentIds?: string[];
     idempotencyKey?: string;
   }): Promise<TaskMessageResult> {
     const key = options.idempotencyKey ?? idempotencyKey();
+    const body: JsonObject = {
+      subject: options.subject ?? "",
+      content_format: options.format ?? "text",
+      body: options.body,
+    };
+    if (options.attachmentIds?.length) body.attachments = options.attachmentIds;
     return await this.request(
       "POST",
       `/agent/tasks/${encodeURIComponent(options.taskId)}/messages`,
       {
         idempotencyKey: key,
         acceptanceUnknown: true,
-        body: {
-          subject: options.subject ?? "",
-          content_format: options.format ?? "text",
-          body: options.body,
-        },
+        body,
       },
     ) as TaskMessageResult;
+  }
+
+  async listPendingTaskRuns(options: {
+    taskId?: string;
+    limit?: number;
+  } = {}): Promise<PendingTaskRuns> {
+    return await this.request("GET", "/task-runs/pending", {
+      query: { task_id: options.taskId, limit: options.limit ?? 50 },
+    }) as PendingTaskRuns;
+  }
+
+  async claimTaskRun(options: {
+    taskId?: string;
+    assignmentId?: string;
+  } = {}): Promise<JsonObject | null> {
+    const body: JsonObject = {};
+    if (options.taskId) body.task_id = options.taskId;
+    if (options.assignmentId) body.assignment_id = options.assignmentId;
+    return await this.request("POST", "/task-runs/claim", {
+      body: Object.keys(body).length ? body : undefined,
+    }) as JsonObject | null;
+  }
+
+  async updateTaskRun(options: {
+    runId: string;
+    leaseToken: string;
+    status: "starting" | "running" | "waiting_human";
+    checkpoint?: JsonObject;
+    wakeStatus?: "mapped" | "woken";
+    localSessionId?: string;
+  }): Promise<JsonObject> {
+    return await this.request(
+      "POST",
+      `/task-runs/${encodeURIComponent(options.runId)}/heartbeat`,
+      {
+        body: {
+          lease_token: options.leaseToken,
+          status: options.status,
+          checkpoint: options.checkpoint ?? {},
+          wake_status: options.wakeStatus,
+          local_session_id: options.localSessionId,
+        },
+      },
+    ) as JsonObject;
+  }
+
+  async completeTaskRun(options: {
+    runId: string;
+    leaseToken: string;
+    status: "completed" | "partial" | "failed" | "cancelled";
+    summary: string;
+    checkpoint?: JsonObject;
+    idempotencyKey?: string;
+  }): Promise<void> {
+    await this.request(
+      "POST",
+      `/task-runs/${encodeURIComponent(options.runId)}/result`,
+      {
+        idempotencyKey: options.idempotencyKey ?? idempotencyKey(),
+        acceptanceUnknown: true,
+        body: {
+          lease_token: options.leaseToken,
+          status: options.status,
+          summary: options.summary,
+          checkpoint: options.checkpoint ?? {},
+        },
+      },
+    );
   }
 
   async heartbeat(

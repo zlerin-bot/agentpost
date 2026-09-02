@@ -360,12 +360,46 @@ class _TaskRunsResource:
     def __init__(self, owner: AgentPost) -> None:
         self._owner = owner
 
-    def claim(self) -> dict[str, Any] | None:
-        data = self._owner._request("POST", "/task-runs/claim")
+    def pending(
+        self,
+        *,
+        task_id: UUID | str | None = None,
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {"limit": limit}
+        if task_id is not None:
+            params["task_id"] = str(task_id)
+        data = self._owner._request("GET", "/task-runs/pending", params=params)
+        if not isinstance(data, dict):
+            raise ProtocolError(
+                "Malformed pending task runs",
+                status_code=None,
+                code="MALFORMED_TASK_RUN",
+            )
+        return data
+
+    def claim(
+        self,
+        *,
+        task_id: UUID | str | None = None,
+        assignment_id: UUID | str | None = None,
+    ) -> dict[str, Any] | None:
+        body: dict[str, str] = {}
+        if task_id is not None:
+            body["task_id"] = str(task_id)
+        if assignment_id is not None:
+            body["assignment_id"] = str(assignment_id)
+        data = self._owner._request(
+            "POST",
+            "/task-runs/claim",
+            **({"json": body} if body else {}),
+        )
         if data is None:
             return None
         if not isinstance(data, dict):
-            raise ProtocolError("Malformed task run claim", code="MALFORMED_TASK_RUN")
+            raise ProtocolError(
+                "Malformed task run claim", status_code=None, code="MALFORMED_TASK_RUN"
+            )
         return data
 
     def heartbeat(
@@ -375,18 +409,29 @@ class _TaskRunsResource:
         lease_token: str,
         status: str,
         checkpoint: Mapping[str, Any] | None = None,
+        wake_status: str | None = None,
+        local_session_id: str | None = None,
     ) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "lease_token": lease_token,
+            "status": status,
+            "checkpoint": dict(checkpoint or {}),
+        }
+        if wake_status is not None:
+            body["wake_status"] = wake_status
+        if local_session_id is not None:
+            body["local_session_id"] = local_session_id
         data = self._owner._request(
             "POST",
             f"/task-runs/{run_id}/heartbeat",
-            json={
-                "lease_token": lease_token,
-                "status": status,
-                "checkpoint": dict(checkpoint or {}),
-            },
+            json=body,
         )
         if not isinstance(data, dict):
-            raise ProtocolError("Malformed task run heartbeat", code="MALFORMED_TASK_RUN")
+            raise ProtocolError(
+                "Malformed task run heartbeat",
+                status_code=None,
+                code="MALFORMED_TASK_RUN",
+            )
         return data
 
     def complete(
@@ -398,6 +443,7 @@ class _TaskRunsResource:
         summary: str,
         checkpoint: Mapping[str, Any] | None = None,
         output: Mapping[str, Any] | None = None,
+        idempotency_key: str | None = None,
     ) -> None:
         if checkpoint is not None and output is not None:
             raise ConfigurationError("use checkpoint or legacy output, not both")
@@ -411,6 +457,7 @@ class _TaskRunsResource:
                 "summary": summary,
                 "checkpoint": dict(resolved_checkpoint or {}),
             },
+            idempotency_key=idempotency_key or _idempotency_key(),
         )
 
 
@@ -686,15 +733,23 @@ class AgentPost:
         *,
         subject: str = "",
         format: str = "text",
+        attachments: list[UUID | str] | None = None,
         idempotency_key: str | None = None,
     ) -> TaskMessageResult:
         """Append collaboration context to an existing participating task."""
         if format not in _BODY_FORMATS:
             raise ConfigurationError("format must be text, markdown, or json")
+        request_body: dict[str, Any] = {
+            "subject": subject,
+            "content_format": format,
+            "body": body,
+        }
+        if attachments:
+            request_body["attachments"] = [str(value) for value in attachments]
         data, replayed = self._idempotent_request(
             "POST",
             f"/agent/tasks/{task_id}/messages",
-            json={"subject": subject, "content_format": format, "body": body},
+            json=request_body,
             idempotency_key=idempotency_key or _idempotency_key(),
         )
         try:

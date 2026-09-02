@@ -10,11 +10,11 @@ def test_public_agent_integration_contract_preserves_machine_and_human_semantics
 
     assert response.status_code == 200
     assert response.headers["Cache-Control"] == "public, max-age=300"
-    assert response.headers["X-AgentPost-Contract-Version"] == "0.2"
+    assert response.headers["X-AgentPost-Contract-Version"] == "0.3"
     assert response.headers["X-Content-Type-Options"] == "nosniff"
     payload = response.json()
     assert payload["contract"] == "AGENTPOST_AGENT_INTEGRATION"
-    assert payload["version"] == "0.2"
+    assert payload["version"] == "0.3"
     assert payload["openapi_url"] == "/openapi.json"
     send_endpoint = next(
         endpoint for endpoint in payload["endpoints"] if endpoint["path"] == "/api/v1/messages"
@@ -45,19 +45,32 @@ def test_public_agent_integration_contract_preserves_machine_and_human_semantics
         "unique_exact_title_resolves_automatically": True,
         "ambiguous_or_partial_title_requires_confirmation": True,
         "resolver_scope": "authenticated_agent_active_task_participation",
+        "pending_endpoint": "/api/v1/task-runs/pending",
         "heartbeat_endpoint_template": "/api/v1/task-runs/{run_id}/heartbeat",
         "result_endpoint_template": "/api/v1/task-runs/{run_id}/result",
         "lease_seconds": 90,
         "durable_queue": True,
-        "claim_is_idempotent_per_active_lease": True,
+        "claim_is_idempotent_per_active_lease": False,
+        "claim_retry_should_use_assignment_id": True,
+        "targeted_claim_by_task_or_assignment": True,
+        "claim_exposes_source_target_and_reply_scope": True,
+        "connector_reports_local_session_wakeup": True,
+        "body_mentions_do_not_create_assignments": True,
+        "result_idempotency_key_supported": True,
         "result_requires_human_acceptance": True,
         "task_id_is_global_stable_identifier": True,
         "active_task_agents_receive_durable_runs": True,
         "request_shapes": {
             "extra_fields": "forbid",
-            "task_message_fields": ["subject", "content_format", "body"],
+            "task_message_fields": ["subject", "content_format", "body", "attachments"],
             "task_message_legacy_aliases": {"format": "content_format"},
-            "run_heartbeat_fields": ["lease_token", "status", "checkpoint"],
+            "run_heartbeat_fields": [
+                "lease_token",
+                "status",
+                "checkpoint",
+                "wake_status",
+                "local_session_id",
+            ],
             "run_result_fields": ["lease_token", "status", "summary", "checkpoint"],
             "run_result_legacy_aliases": {"output": "checkpoint"},
         },

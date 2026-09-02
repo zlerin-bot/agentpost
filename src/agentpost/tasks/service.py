@@ -8,11 +8,13 @@ import unicodedata
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from agentpost.accounts.mailer import EmailDeliveryError, deliver_task_membership_notification
+from agentpost.attachments.models import Attachment
+from agentpost.attachments.service import attachment_metadata, bind_attachments
 from agentpost.config import Settings
 from agentpost.control.human_security import add_human_action_audit
 from agentpost.control.models import AgentOwnership, HumanUser
@@ -32,6 +34,8 @@ from agentpost.tasks.schemas import (
     AgentChoice,
     AgentCollaborationUpdate,
     AgentRunClaim,
+    AgentRunPending,
+    AgentRunPendingList,
     AgentRunResult,
     AgentRunUpdate,
     AgentSummary,
@@ -481,8 +485,24 @@ def _queue_collaboration_assignment(
     created_by_human_id: UUID,
     assignment_kind: str = "participant_start",
     trigger_activity_id: UUID | None = None,
+    source_message_id: str | None = None,
+    priority: str = "normal",
     instruction: str | None = None,
+    expected_output: str | None = None,
+    due_at: datetime | None = None,
 ) -> TaskAssignment:
+    join_activity: TaskActivity | None = None
+    if assignment_kind == "participant_start" and trigger_activity_id is None:
+        join_activity = _add_activity(
+            session,
+            task_id=task.id,
+            kind="agent_joined_collaboration",
+            actor_type="platform",
+            target_human_id=human_id,
+            metadata={"agent_id": str(agent_id)},
+        )
+        session.flush()
+        trigger_activity_id = join_activity.id
     assignment = TaskAssignment(
         task_id=task.id,
         responsible_human_user_id=human_id,
@@ -490,28 +510,40 @@ def _queue_collaboration_assignment(
         created_by_human_user_id=created_by_human_id,
         assignment_kind=assignment_kind,
         trigger_activity_id=trigger_activity_id,
+        source_message_id=source_message_id,
+        priority=priority,
         instruction=instruction
         or (
             "你已加入这个任务的协同。请结合完整任务目标和其他参与者的进展，"
             "主动贡献、报告阻塞或明确说明暂不需要行动。"
         ),
-        expected_output=task.expected_output,
-        due_at=task.due_at,
+        expected_output=expected_output or task.expected_output,
+        due_at=due_at if due_at is not None else task.due_at,
         status="queued",
     )
     session.add(assignment)
     session.flush()
     session.add(AgentRun(assignment_id=assignment.id, agent_id=agent_id))
-    if assignment_kind == "participant_start":
-        _add_activity(
-            session,
-            task_id=task.id,
-            kind="agent_joined_collaboration",
-            actor_type="platform",
-            target_human_id=human_id,
-            metadata={"assignment_id": str(assignment.id), "agent_id": str(agent_id)},
-        )
+    if join_activity is not None:
+        join_activity.activity_metadata = {
+            **join_activity.activity_metadata,
+            "assignment_id": str(assignment.id),
+        }
     return assignment
+
+
+def _run_wake_stage(run: AgentRun) -> str:
+    if run.status in {"completed", "partial", "failed", "cancelled", "interrupted"}:
+        return "finished"
+    if run.status in {"starting", "running", "waiting_human"}:
+        return "running"
+    if run.woken_at is not None:
+        return "woken"
+    if run.session_mapped_at is not None:
+        return "mapped"
+    if run.claimed_at is not None or run.status == "leased":
+        return "claimed"
+    return "queued"
 
 
 def _task_state_axes(
@@ -644,6 +676,10 @@ def _task_detail(session: Session, *, task: Task, viewer_membership: TaskMembers
             assignee_agent_id=item.assignee_agent_id,
             assignee_agent_display_name=agents[item.assignee_agent_id].display_name,
             assignment_kind=item.assignment_kind,  # type: ignore[arg-type]
+            source_activity_id=item.trigger_activity_id,
+            source_message_id=item.source_message_id,
+            reply_thread_id=task.thread_id,
+            priority=item.priority,  # type: ignore[arg-type]
             instruction=item.instruction,
             expected_output=item.expected_output,
             due_at=_as_utc(item.due_at),
@@ -651,6 +687,9 @@ def _task_detail(session: Session, *, task: Task, viewer_membership: TaskMembers
             result_status=item.result_status,
             result_summary=item.result_summary,
             run_status=(latest_run[item.id].status if item.id in latest_run else None),
+            wake_stage=(
+                _run_wake_stage(latest_run[item.id]) if item.id in latest_run else "queued"
+            ),  # type: ignore[arg-type]
             created_at=_as_utc(item.created_at),
         )
         for item in assignment_rows
@@ -1071,6 +1110,7 @@ def _legacy_task_delivery(
     subject: str,
     content_format: str,
     body: object,
+    source_message_id: str,
 ) -> Message:
     now = utc_now()
     message = Message(
@@ -1091,6 +1131,7 @@ def _legacy_task_delivery(
             "agentpost_task_id": str(task.id),
             "agentpost_task_activity_id": str(activity.id),
             "agentpost_task_title": task.title,
+            "agentpost_task_source_message_id": source_message_id,
         },
         accepted_at=now,
         created_at=now,
@@ -1120,10 +1161,12 @@ def _fanout_task_message(
     subject: str,
     content_format: str,
     body: object,
+    source_message_id: str,
     already_delivered_agent_ids: set[UUID] | None = None,
-) -> tuple[int, int]:
+) -> tuple[int, int, list[Message]]:
     queued_runs = 0
     legacy_deliveries = 0
+    legacy_messages: list[Message] = []
     already_delivered_agent_ids = already_delivered_agent_ids or set()
     participants = list(
         session.scalars(
@@ -1144,6 +1187,7 @@ def _fanout_task_message(
                 created_by_human_id=task.owner_human_user_id,
                 assignment_kind="task_message",
                 trigger_activity_id=activity.id,
+                source_message_id=source_message_id,
                 instruction=(
                     "任务中出现一条新的协作消息。请读取任务上下文并参与协同；"
                     "如无需补充，请明确说明。\n\n"
@@ -1152,7 +1196,7 @@ def _fanout_task_message(
             )
             queued_runs += 1
         elif participant.agent_id not in already_delivered_agent_ids:
-            _legacy_task_delivery(
+            legacy_message = _legacy_task_delivery(
                 session,
                 task=task,
                 activity=activity,
@@ -1161,9 +1205,11 @@ def _fanout_task_message(
                 subject=subject,
                 content_format=content_format,
                 body=body,
+                source_message_id=source_message_id,
             )
+            legacy_messages.append(legacy_message)
             legacy_deliveries += 1
-    return queued_runs, legacy_deliveries
+    return queued_runs, legacy_deliveries, legacy_messages
 
 
 def send_task_message_by_agent(
@@ -1193,8 +1239,12 @@ def send_task_message_by_agent(
             activity_id=existing.id,
             queued_run_count=int(existing.activity_metadata.get("queued_run_count", 0)),
             legacy_delivery_count=int(existing.activity_metadata.get("legacy_delivery_count", 0)),
+            attachment_ids=[
+                UUID(value) for value in existing.activity_metadata.get("attachment_ids", [])
+            ],
             replayed=True,
         )
+    source_message_id = f"msg_{secrets.token_hex(16)}"
     activity = _add_activity(
         session,
         task_id=task.id,
@@ -1205,6 +1255,8 @@ def send_task_message_by_agent(
             "subject": payload.subject,
             "content_format": payload.content_format,
             "body": payload.body,
+            "source_message_id": source_message_id,
+            "attachment_ids": [str(value) for value in payload.attachments],
         },
         external=True,
         idempotency_key=idempotency_key,
@@ -1230,9 +1282,36 @@ def send_task_message_by_agent(
             activity_id=existing.id,
             queued_run_count=int(existing.activity_metadata.get("queued_run_count", 0)),
             legacy_delivery_count=int(existing.activity_metadata.get("legacy_delivery_count", 0)),
+            attachment_ids=[
+                UUID(value) for value in existing.activity_metadata.get("attachment_ids", [])
+            ],
             replayed=True,
         )
-    queued_runs, legacy_deliveries = _fanout_task_message(
+    source_message = Message(
+        id=source_message_id,
+        sender_agent_id=agent.id,
+        subject=payload.subject or f"任务更新：{task.title}",
+        content_format=payload.content_format,
+        content_body=payload.body,
+        message_type="notification",
+        priority="normal",
+        thread_id=task.thread_id,
+        reply_to_message_id=None,
+        requires_ack=False,
+        task_payload=None,
+        result_payload=None,
+        message_metadata={
+            "agentpost_task_source": True,
+            "agentpost_task_id": str(task.id),
+            "agentpost_task_activity_id": str(activity.id),
+        },
+        accepted_at=utc_now(),
+        created_at=utc_now(),
+        expires_at=None,
+    )
+    session.add(source_message)
+    session.flush()
+    queued_runs, legacy_deliveries, legacy_messages = _fanout_task_message(
         session,
         task=task,
         activity=activity,
@@ -1240,11 +1319,23 @@ def send_task_message_by_agent(
         subject=payload.subject,
         content_format=payload.content_format,
         body=payload.body,
+        source_message_id=source_message_id,
+    )
+    bind_attachments(
+        session,
+        sender=agent,
+        attachment_ids=payload.attachments,
+        message_id=source_message_id,
+        visible_message_ids=[source_message_id, *[message.id for message in legacy_messages]],
+    )
+    attachments = list(
+        session.scalars(select(Attachment).where(Attachment.id.in_(payload.attachments)))
     )
     activity.activity_metadata = {
         **activity.activity_metadata,
         "queued_run_count": queued_runs,
         "legacy_delivery_count": legacy_deliveries,
+        "attachments": [attachment_metadata(item) for item in attachments],
     }
     task.updated_at = utc_now()
     session.commit()
@@ -1254,6 +1345,7 @@ def send_task_message_by_agent(
         activity_id=activity.id,
         queued_run_count=queued_runs,
         legacy_delivery_count=legacy_deliveries,
+        attachment_ids=payload.attachments,
     )
 
 
@@ -1297,6 +1389,7 @@ def record_legacy_task_reply(
         subject=reply.subject,
         content_format=reply.content_format,
         body=reply.content_body,
+        source_message_id=reply.id,
         already_delivered_agent_ids={parent.sender_agent_id},
     )
     task.updated_at = utc_now()
@@ -1652,32 +1745,33 @@ def create_assignment(
         or participant.human_user_id != payload.responsible_human_user_id
     ):
         raise TaskAgentSelectionError
-    assignment = TaskAssignment(
-        task_id=task_id,
-        responsible_human_user_id=payload.responsible_human_user_id,
-        assignee_agent_id=payload.assignee_agent_id,
-        created_by_human_user_id=user.id,
-        assignment_kind="human_directed",
-        instruction=payload.instruction,
-        expected_output=payload.expected_output or task.expected_output,
-        due_at=payload.due_at,
-        status="queued",
-    )
-    session.add(assignment)
-    session.flush()
-    session.add(AgentRun(assignment_id=assignment.id, agent_id=payload.assignee_agent_id))
-    _add_activity(
+    source_activity = _add_activity(
         session,
         task_id=task_id,
         kind="assignment_created",
         actor_type="human",
         actor_human_id=user.id,
         target_human_id=payload.responsible_human_user_id,
-        metadata={
-            "assignment_id": str(assignment.id),
-            "assignee_agent_id": str(payload.assignee_agent_id),
-        },
+        metadata={"assignee_agent_id": str(payload.assignee_agent_id)},
     )
+    session.flush()
+    assignment = _queue_collaboration_assignment(
+        session,
+        task=task,
+        human_id=payload.responsible_human_user_id,
+        agent_id=payload.assignee_agent_id,
+        created_by_human_id=user.id,
+        assignment_kind="human_directed",
+        trigger_activity_id=source_activity.id,
+        priority=payload.priority,
+        instruction=payload.instruction,
+        expected_output=payload.expected_output,
+        due_at=payload.due_at,
+    )
+    source_activity.activity_metadata = {
+        **source_activity.activity_metadata,
+        "assignment_id": str(assignment.id),
+    }
     add_human_action_audit(
         session,
         human_user_id=user.id,
@@ -1841,7 +1935,7 @@ def decide_task_acceptance(
                 human_id=participant.human_user_id,
                 agent_id=participant.agent_id,
                 created_by_human_id=user.id,
-                assignment_kind="result_sync",
+                assignment_kind="revision",
                 trigger_activity_id=decision_activity.id,
                 instruction=(
                     "Human 已要求修改任务结果。请读取完整任务上下文和历史结果，"
@@ -1905,8 +1999,8 @@ def _agent_collaboration_context(
     return participant_ids, updates
 
 
-def claim_agent_run(session: Session, *, agent: Agent) -> AgentRunClaim | None:
-    now = utc_now()
+def _requeue_expired_agent_runs(session: Session, *, agent: Agent, now: datetime) -> None:
+    """Create one successor attempt for each expired lease without duplicating queued attempts."""
     expired = list(
         session.scalars(
             select(AgentRun).where(
@@ -1920,22 +2014,115 @@ def claim_agent_run(session: Session, *, agent: Agent) -> AgentRunClaim | None:
         run.status = "interrupted"
         assignment = session.get(TaskAssignment, run.assignment_id)
         if assignment is not None and assignment.status not in {"completed", "cancelled"}:
-            session.add(
-                AgentRun(
-                    assignment_id=assignment.id,
-                    agent_id=agent.id,
-                    attempt=run.attempt + 1,
-                    checkpoint=run.checkpoint,
+            queued_successor = session.scalar(
+                select(AgentRun.id).where(
+                    AgentRun.assignment_id == assignment.id,
+                    AgentRun.agent_id == agent.id,
+                    AgentRun.status == "queued",
                 )
             )
+            if queued_successor is None:
+                session.add(
+                    AgentRun(
+                        assignment_id=assignment.id,
+                        agent_id=agent.id,
+                        attempt=run.attempt + 1,
+                        checkpoint=run.checkpoint,
+                    )
+                )
+
+
+def list_pending_agent_runs(
+    session: Session,
+    *,
+    agent: Agent,
+    task_id: UUID | None = None,
+    limit: int = 50,
+) -> AgentRunPendingList:
+    now = utc_now()
+    _requeue_expired_agent_runs(session, agent=agent, now=now)
     session.flush()
-    run = session.scalar(
-        select(AgentRun)
-        .where(AgentRun.agent_id == agent.id, AgentRun.status == "queued")
-        .order_by(AgentRun.attempt.desc(), AgentRun.created_at)
-        .with_for_update(skip_locked=True)
-        .limit(1)
+    statement = (
+        select(AgentRun, TaskAssignment, Task)
+        .join(TaskAssignment, TaskAssignment.id == AgentRun.assignment_id)
+        .join(Task, Task.id == TaskAssignment.task_id)
+        .where(
+            AgentRun.agent_id == agent.id,
+            AgentRun.status == "queued",
+            Task.status == "active",
+        )
+        .order_by(
+            case(
+                (TaskAssignment.priority == "urgent", 0),
+                (TaskAssignment.priority == "high", 1),
+                (TaskAssignment.priority == "normal", 2),
+                else_=3,
+            ),
+            AgentRun.attempt.desc(),
+            AgentRun.created_at,
+        )
     )
+    if task_id is not None:
+        statement = statement.where(Task.id == task_id)
+    rows = list(session.execute(statement.limit(limit)))
+    session.commit()
+    items = [
+        AgentRunPending(
+            run_id=run.id,
+            task_id=task.id,
+            thread_id=task.thread_id,
+            task_title=task.title,
+            assignment_id=assignment.id,
+            source_activity_id=assignment.trigger_activity_id,
+            source_message_id=assignment.source_message_id,
+            instruction=assignment.instruction,
+            target_human_user_id=assignment.responsible_human_user_id,
+            target_agent_id=assignment.assignee_agent_id,
+            reply_thread_id=task.thread_id,
+            priority=assignment.priority,  # type: ignore[arg-type]
+            attempt=run.attempt,
+            created_at=_as_utc(run.created_at),
+        )
+        for run, assignment, task in rows
+    ]
+    return AgentRunPendingList(items=items, count=len(items))
+
+
+def claim_agent_run(
+    session: Session,
+    *,
+    agent: Agent,
+    task_id: UUID | None = None,
+    assignment_id: UUID | None = None,
+) -> AgentRunClaim | None:
+    now = utc_now()
+    _requeue_expired_agent_runs(session, agent=agent, now=now)
+    session.flush()
+    statement = (
+        select(AgentRun)
+        .join(TaskAssignment, TaskAssignment.id == AgentRun.assignment_id)
+        .join(Task, Task.id == TaskAssignment.task_id)
+        .where(
+            AgentRun.agent_id == agent.id,
+            AgentRun.status == "queued",
+            Task.status == "active",
+        )
+        .order_by(
+            case(
+                (TaskAssignment.priority == "urgent", 0),
+                (TaskAssignment.priority == "high", 1),
+                (TaskAssignment.priority == "normal", 2),
+                else_=3,
+            ),
+            AgentRun.attempt.desc(),
+            AgentRun.created_at,
+        )
+    )
+    if task_id is not None:
+        statement = statement.where(TaskAssignment.task_id == task_id)
+    if assignment_id is not None:
+        statement = statement.where(TaskAssignment.id == assignment_id)
+    run = session.scalar(statement.with_for_update(skip_locked=True).limit(1))
     if run is None:
         session.commit()
         return None
@@ -1951,6 +2138,7 @@ def claim_agent_run(session: Session, *, agent: Agent) -> AgentRunClaim | None:
     run.lease_token_digest = _digest_lease(token)
     run.lease_expires_at = expires
     run.last_heartbeat_at = now
+    run.claimed_at = now
     assignment.status = "running"
     assignment.updated_at = now
     _add_activity(
@@ -1974,12 +2162,20 @@ def claim_agent_run(session: Session, *, agent: Agent) -> AgentRunClaim | None:
         task_title=task.title,
         task_goal=task.goal,
         assignment_id=assignment.id,
+        source_activity_id=assignment.trigger_activity_id,
+        source_message_id=assignment.source_message_id,
+        target_human_user_id=assignment.responsible_human_user_id,
+        target_agent_id=assignment.assignee_agent_id,
+        reply_thread_id=task.thread_id,
+        priority=assignment.priority,  # type: ignore[arg-type]
         instruction=assignment.instruction,
         expected_output=assignment.expected_output,
         due_at=_as_utc(assignment.due_at),
         attempt=run.attempt,
         participant_agent_ids=participant_agent_ids,
         collaboration_updates=collaboration_updates,
+        wake_stage="claimed",
+        local_session_id=run.local_session_id,
     )
 
 
@@ -2020,6 +2216,12 @@ def update_agent_run(
     run.last_heartbeat_at = now
     run.lease_expires_at = now + timedelta(seconds=RUN_LEASE_SECONDS)
     run.checkpoint = payload.checkpoint
+    if payload.local_session_id is not None:
+        run.local_session_id = payload.local_session_id
+    if payload.wake_status in {"mapped", "woken"} and run.session_mapped_at is None:
+        run.session_mapped_at = now
+    if payload.wake_status == "woken" and run.woken_at is None:
+        run.woken_at = now
     if run.started_at is None and payload.status in {"starting", "running"}:
         run.started_at = now
     assignment.status = "waiting_human" if payload.status == "waiting_human" else "running"
@@ -2035,6 +2237,7 @@ def update_agent_run(
                 "assignment_id": str(assignment.id),
                 "run_id": str(run.id),
                 "status": payload.status,
+                "wake_status": payload.wake_status,
             },
         )
     session.commit()
@@ -2050,18 +2253,46 @@ def update_agent_run(
         task_title=task.title,
         task_goal=task.goal,
         assignment_id=assignment.id,
+        source_activity_id=assignment.trigger_activity_id,
+        source_message_id=assignment.source_message_id,
+        target_human_user_id=assignment.responsible_human_user_id,
+        target_agent_id=assignment.assignee_agent_id,
+        reply_thread_id=task.thread_id,
+        priority=assignment.priority,  # type: ignore[arg-type]
         instruction=assignment.instruction,
         expected_output=assignment.expected_output,
         due_at=_as_utc(assignment.due_at),
         attempt=run.attempt,
         participant_agent_ids=participant_agent_ids,
         collaboration_updates=collaboration_updates,
+        wake_stage=_run_wake_stage(run),  # type: ignore[arg-type]
+        local_session_id=run.local_session_id,
     )
 
 
 def complete_agent_run(
-    session: Session, *, agent: Agent, run_id: UUID, payload: AgentRunResult
+    session: Session,
+    *,
+    agent: Agent,
+    run_id: UUID,
+    payload: AgentRunResult,
+    idempotency_key: str | None = None,
 ) -> None:
+    request_hash = hashlib.sha256(
+        json.dumps(payload.model_dump(mode="json"), sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    if idempotency_key is not None:
+        existing_by_key = session.scalar(
+            select(AgentRun).where(
+                AgentRun.agent_id == agent.id,
+                AgentRun.result_idempotency_key == idempotency_key,
+            )
+        )
+        if existing_by_key is not None:
+            if existing_by_key.id != run_id or existing_by_key.result_request_hash != request_hash:
+                raise TaskStateConflictError
+            if existing_by_key.status in {"completed", "partial", "failed", "cancelled"}:
+                return
     run, assignment, task = _leased_run(
         session, agent=agent, run_id=run_id, lease_token=payload.lease_token
     )
@@ -2072,6 +2303,8 @@ def complete_agent_run(
     run.lease_expires_at = None
     run.lease_token_digest = None
     run.checkpoint = payload.checkpoint
+    run.result_idempotency_key = idempotency_key
+    run.result_request_hash = request_hash if idempotency_key is not None else None
     assignment.status = payload.status
     assignment.result_status = payload.status
     assignment.result_summary = payload.summary
@@ -2093,7 +2326,10 @@ def complete_agent_run(
         external=True,
     )
     session.flush()
-    if assignment.assignment_kind != "result_sync":
+    # Every recipient of a task_message already has the same source activity in its
+    # Task context. Fan-out of each reply would create N×N result_sync work and
+    # duplicate progress cards, so only explicitly directed work propagates a bounded sync.
+    if assignment.assignment_kind == "human_directed":
         other_participants = list(
             session.scalars(
                 select(TaskAgentParticipant).where(

@@ -2,11 +2,11 @@
 
 ## 当前接续摘要
 
-- 交接阶段：`v0.1.43-task-state-and-runtime-truth-local-verified`
-- 本地版本：`0.1.43 / 0033_connector_runtime_truth`
+- 交接阶段：`v0.1.44-targeted-runs-and-task-attachments-local-candidate`
+- 本地版本：`0.1.44 / 0034_task_run_routing`
 - 当前生产：`422c5cc / 0.1.40 / 0030_task_messages / deployed_https_verified`
 - 生产接受状态：不是 `production_accepted`
-- 本切片：P0 状态语义、Connector 运行真相和协议参数一致性，尚未部署
+- 本切片：Run 定向路由、可靠唤醒证据、任务附件和进展去重，尚未部署
 
 ## 当前产品模型
 
@@ -35,23 +35,30 @@ AgentPost 的多人协作只发生在 Task 内。每个 Task 有一个稳定 `ta
 - 修复 MCP/Python SDK Run 结果字段与服务端不一致；新合同使用 `checkpoint`，服务端和 Python SDK继续兼容旧 `output`。任务消息同理兼容旧 `format`。
 - 公开机器合同升级为 0.2；包、SDK、MCP、TypeScript Connector 和插件版本统一为 0.1.43。
 - 新增 0033 迁移，仅增加 Connector 运行真相字段，可回退删除。
+- Run 新增待执行预览与按 `task_id` / `assignment_id` 定向认领，返回来源、目标、回复范围、优先级和唤醒阶段。
+- Connector 可通过 Run heartbeat 回报本地会话 ID、已映射和已唤醒；这些状态不再由服务端猜测。
+- Run result 支持独立幂等键；相同键同载荷安全重放，不同载荷返回冲突。旧 Connector 不带该头仍可继续使用。
+- Task 消息支持附件，并保持 TaskMembership / TaskAgentParticipant 权限边界；Human 任务记录按附件卡展示。
+- 初始参与和任务消息结果不再派生递归 `result_sync`；Human 要求修改使用独立、可见的 `revision` Run。
+- Human 进展界面过滤历史同步噪声，按 Human 展示执行依据、优先级和真实唤醒阶段。
+- 协议合同升级为 0.3；包、SDK、MCP、TypeScript Connector 和插件统一为 0.1.44；新增 0034 迁移。
 
 ## 本地验证证据
 
 - `.venv/bin/ruff check .`：通过。
 - `.venv/bin/ruff format --check .`：通过。
-- Orbit 与 TypeScript JavaScript：39 passed。
-- `.venv/bin/pytest -m "not postgres" -q`：451 passed、1 expected skip、5 deselected。
+- Orbit 与 TypeScript JavaScript：40 passed。
+- `.venv/bin/pytest -m "not postgres" -q`：452 passed、1 expected skip、5 deselected。
 - 旧目录/频道关键字扫描：运行时 `src`、SDK、MCP、OpenClaw、插件和 Skill 无旧能力残留；迁移与反向门禁测试中保留必要名称。
 - 隔离演示种子已改为 Task API，不再依赖旧多人容器；认证后的桌面端与 390px 任务列表/详情均通过，页面无横向溢出，控制台无 warning/error。
-- 公共桌面和 390px 页面壳层无横向溢出、无 console error；认证后的新状态条和连接详情视觉验收仍为 `待确认`，API/DOM 合同测试已通过。
-- SQLite 从零迁移仍在历史 0019 的 constraint ALTER 处失败，尚未执行到 0033；这是既有边界，不是 0033 的验证证据。
+- 认证后的桌面和 390px 任务列表/详情无横向溢出、无 console error；Run 路由/唤醒标签与任务 ID 复制入口可见。真实任务附件卡因隔离种子没有物理附件，API/DOM 已覆盖但认证视觉验收仍为 `待确认`。
+- SQLite 从零迁移仍在历史 0019 的 constraint ALTER 处失败，尚未执行到 0034；这是既有边界，不是 0034 的验证证据。
 
 ## 待完成
 
-1. 在隔离 PostgreSQL 上验证 0031 → 0032 → 0033 → 0032 → 0033，确认 0033 可逆且不改变既有关系。
+1. 在隔离 PostgreSQL 上验证 0033 → 0034 → 0033 → 0034，确认 0034 可逆且不改变既有关系。
 2. 检查迁移前后 Task、TaskMembership、Friendship、Agent、Connector、Message、Attachment 的数量与关键关系。
-3. 完成认证后的桌面与 390px 新状态条、连接详情视觉验收。
+3. 完成真实任务附件卡和连接详情的认证视觉验收。
 4. 复核 diff、提交当前切片；不要纳入两个无关的未跟踪管理汇报文件。
 5. 只有用户明确要求部署后，才按 `docs/ALIYUN_DEPLOYMENT_EFFICIENCY.md` 执行发布。
 

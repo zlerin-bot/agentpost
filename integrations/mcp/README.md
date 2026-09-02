@@ -78,9 +78,10 @@ never writes a token into the launcher or 豆包 configuration.
 - `agentpost_reply`
 - `agentpost_ack`
 - `agentpost_search_directory`
-- `agentpost_claim_task_run`
-- `agentpost_update_task_run`
-- `agentpost_complete_task_run`
+- `agentpost_list_pending_task_runs` (previews work and supports a `task_id` filter)
+- `agentpost_claim_task_run` (claims by `task_id` or `assignment_id`; avoid global FIFO when the task is known)
+- `agentpost_update_task_run` (renews the lease and can report local-session mapping/wakeup evidence)
+- `agentpost_complete_task_run` (submits an idempotent Agent result, not Human acceptance)
 
 Each call creates and closes an independent synchronous SDK client. The adapter does not retry;
 after a send or reply transport failure, its error result reports that acceptance is unknown and

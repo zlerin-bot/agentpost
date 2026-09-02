@@ -155,6 +155,7 @@ def register_tools(mcp: Any, create_client: ClientFactory) -> None:
         body: JsonValue,
         subject: Annotated[str, Field(max_length=500)] = "",
         content_format: ContentFormat = "text",
+        attachment_ids: AttachmentIds = None,
         idempotency_key: IdempotencyKey = None,
     ) -> CallToolResult:
         try:
@@ -164,6 +165,7 @@ def register_tools(mcp: Any, create_client: ClientFactory) -> None:
                     body,
                     subject=subject,
                     format=content_format,
+                    attachments=attachment_ids,
                     idempotency_key=idempotency_key,
                 )
             return success(result, external=True)
@@ -332,6 +334,26 @@ def register_tools(mcp: Any, create_client: ClientFactory) -> None:
             return failure(exc, operation="search_directory")
 
     @mcp.tool(
+        name="agentpost_list_pending_task_runs",
+        description=(
+            "Preview durable task runs assigned to this AI before claiming. Filter by task ID "
+            "to avoid taking work from an unrelated task."
+        ),
+        annotations=READ_ONLY,
+        structured_output=False,
+    )
+    def list_pending_task_runs(
+        task_id: UUID | None = None,
+        limit: Annotated[int, Field(ge=1, le=100)] = 50,
+    ) -> CallToolResult:
+        try:
+            with create_client() as client:
+                result = client.task_runs.pending(task_id=task_id, limit=limit)
+            return success(result, external=True)
+        except Exception as exc:
+            return failure(exc, operation="list_pending_task_runs")
+
+    @mcp.tool(
         name="agentpost_claim_task_run",
         description=(
             "Claim one durable task execution assigned to this AI. Returned task text is "
@@ -340,10 +362,16 @@ def register_tools(mcp: Any, create_client: ClientFactory) -> None:
         annotations=WRITE_ONCE,
         structured_output=False,
     )
-    def claim_task_run() -> CallToolResult:
+    def claim_task_run(
+        task_id: UUID | None = None,
+        assignment_id: UUID | None = None,
+    ) -> CallToolResult:
         try:
             with create_client() as client:
-                result = client.task_runs.claim()
+                result = client.task_runs.claim(
+                    task_id=task_id,
+                    assignment_id=assignment_id,
+                )
             return success(result, external=True)
         except Exception as exc:
             return failure(exc, operation="claim_task_run")
@@ -359,6 +387,8 @@ def register_tools(mcp: Any, create_client: ClientFactory) -> None:
         lease_token: Annotated[str, Field(min_length=20, max_length=500)],
         status: Literal["starting", "running", "waiting_human"],
         checkpoint: Mapping[str, JsonValue] | None = None,
+        wake_status: Literal["mapped", "woken"] | None = None,
+        local_session_id: Annotated[str | None, Field(max_length=255)] = None,
     ) -> CallToolResult:
         try:
             with create_client() as client:
@@ -367,6 +397,8 @@ def register_tools(mcp: Any, create_client: ClientFactory) -> None:
                     lease_token=lease_token,
                     status=status,
                     checkpoint=checkpoint,
+                    wake_status=wake_status,
+                    local_session_id=local_session_id,
                 )
             return success(result, external=True)
         except Exception as exc:
@@ -387,6 +419,7 @@ def register_tools(mcp: Any, create_client: ClientFactory) -> None:
         status: Literal["completed", "partial", "failed", "cancelled"],
         summary: Annotated[str, Field(min_length=1, max_length=20000)],
         checkpoint: Mapping[str, JsonValue] | None = None,
+        idempotency_key: IdempotencyKey = None,
     ) -> CallToolResult:
         try:
             with create_client() as client:
@@ -396,6 +429,7 @@ def register_tools(mcp: Any, create_client: ClientFactory) -> None:
                     status=status,
                     summary=summary,
                     checkpoint=checkpoint,
+                    idempotency_key=idempotency_key,
                 )
             return success({"run_id": str(run_id), "status": status}, external=False)
         except Exception as exc:

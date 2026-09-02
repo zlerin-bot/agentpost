@@ -733,6 +733,21 @@ function createTaskActivityAttachment(activity, format, body) {
   return details;
 }
 
+function visibleTaskAssignments(project) {
+  const latest = new Map();
+  (project.assignments || [])
+    .filter((assignment) => assignment.assignment_kind !== "result_sync")
+    .forEach((assignment) => {
+      const source = assignment.source_activity_id || assignment.assignment_id;
+      const key = [source, assignment.responsible_human_user_id, assignment.assignee_agent_id].join(":");
+      const previous = latest.get(key);
+      if (!previous || String(previous.created_at) < String(assignment.created_at)) {
+        latest.set(key, assignment);
+      }
+    });
+  return [...latest.values()];
+}
+
 function taskStateAxesLabel(project) {
   const axes = project.state_axes;
   if (!axes) {
@@ -807,7 +822,8 @@ function renderProjectDetail() {
   elements.taskCompletedSummary.textContent = project.final_summary || "任务结果已验收通过。";
   elements.taskReviewNote.value = "";
   elements.taskAssignmentOutputInherited.textContent = project.expected_output;
-  const unfinishedAssignments = (project.assignments || []).filter(
+  const visibleAssignments = visibleTaskAssignments(project);
+  const unfinishedAssignments = visibleAssignments.filter(
     (assignment) => !["completed", "cancelled"].includes(assignment.status),
   ).length;
   elements.taskSubmitFinal.disabled = unfinishedAssignments > 0;
@@ -910,7 +926,7 @@ function renderProjectDetail() {
   }
 
   elements.projectCollaborationList.replaceChildren();
-  (project.assignments || []).forEach((assignment) => {
+  visibleAssignments.forEach((assignment) => {
     const row = document.createElement("article");
     row.className = "project-collaboration-row";
     const avatar = document.createElement("span");
@@ -939,13 +955,26 @@ function renderProjectDetail() {
     heading.append(name, status);
     const agent = document.createElement("small");
     agent.textContent = "使用 AI：" + assignment.assignee_agent_display_name;
+    const route = document.createElement("small");
+    const priorityLabels = { low: "低", normal: "普通", high: "高", urgent: "紧急" };
+    const wakeLabels = {
+      queued: "等待 Connector 领取",
+      claimed: "Connector 已领取",
+      mapped: "已映射本地会话",
+      woken: "本地 AI 已唤醒",
+      running: "本地 AI 已唤醒并执行",
+      finished: "执行已结束",
+    };
+    route.textContent = `执行依据：${assignment.source_activity_id || "任务创建"} · `
+      + `优先级 ${priorityLabels[assignment.priority] || assignment.priority} · `
+      + `${wakeLabels[assignment.wake_stage] || assignment.wake_stage}`;
     const summary = document.createElement("p");
     summary.textContent = assignment.result_summary || assignment.instruction;
-    copy.append(heading, agent, summary);
+    copy.append(heading, agent, route, summary);
     row.append(avatar, copy);
     elements.projectCollaborationList.append(row);
   });
-  if (!(project.assignments || []).length) {
+  if (!visibleAssignments.length) {
     const empty = document.createElement("p");
     empty.className = "prototype-inline-empty";
     empty.textContent = "参与 Agent 加入后会在这里显示送达、执行、阻塞和结果。";
@@ -991,6 +1020,9 @@ function renderProjectDetail() {
           : JSON.stringify(activity.metadata.body);
         copy.append(body);
       }
+    }
+    if (Array.isArray(activity.metadata?.attachments)) {
+      appendThreadAttachments({ attachments: activity.metadata.attachments }, copy);
     }
     row.append(avatar, copy);
     elements.projectActivityList.append(row);

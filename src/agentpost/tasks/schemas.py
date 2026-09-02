@@ -125,6 +125,7 @@ class AgentTaskMessageCreate(TaskModel):
         validation_alias=AliasChoices("content_format", "format"),
     )
     body: JsonValue
+    attachments: list[UUID] = Field(default_factory=list, max_length=32)
 
     @model_validator(mode="after")
     def validate_body(self) -> AgentTaskMessageCreate:
@@ -133,6 +134,13 @@ class AgentTaskMessageCreate(TaskModel):
             raise ValueError("task message body cannot be blank")
         return self
 
+    @field_validator("attachments")
+    @classmethod
+    def unique_attachments(cls, value: list[UUID]) -> list[UUID]:
+        if len(value) != len(set(value)):
+            raise ValueError("attachments must be unique")
+        return value
+
 
 class AgentTaskMessageResponse(TaskModel):
     task_id: UUID
@@ -140,6 +148,7 @@ class AgentTaskMessageResponse(TaskModel):
     activity_id: UUID
     queued_run_count: int
     legacy_delivery_count: int
+    attachment_ids: list[UUID] = Field(default_factory=list)
     replayed: bool = False
     security_label: Literal["external_agent_content"] = "external_agent_content"
 
@@ -170,6 +179,7 @@ class TaskAssignmentCreate(TaskModel):
     instruction: str = Field(min_length=1, max_length=10_000)
     expected_output: str | None = Field(default=None, max_length=10_000)
     due_at: datetime | None = None
+    priority: Literal["low", "normal", "high", "urgent"] = "normal"
 
     @field_validator("instruction")
     @classmethod
@@ -258,7 +268,13 @@ class TaskAssignmentResponse(TaskModel):
     responsible_human_display_name: str
     assignee_agent_id: UUID
     assignee_agent_display_name: str
-    assignment_kind: Literal["participant_start", "human_directed", "result_sync", "task_message"]
+    assignment_kind: Literal[
+        "participant_start", "human_directed", "result_sync", "task_message", "revision"
+    ]
+    source_activity_id: UUID | None
+    source_message_id: str | None
+    reply_thread_id: UUID
+    priority: Literal["low", "normal", "high", "urgent"]
     instruction: str
     expected_output: str
     due_at: datetime | None
@@ -266,6 +282,7 @@ class TaskAssignmentResponse(TaskModel):
     result_status: str | None
     result_summary: str | None
     run_status: str | None
+    wake_stage: Literal["queued", "claimed", "mapped", "woken", "running", "finished"]
     created_at: datetime
 
 
@@ -349,19 +366,63 @@ class AgentRunClaim(TaskModel):
     task_title: str
     task_goal: str
     assignment_id: UUID
+    source_activity_id: UUID | None
+    source_message_id: str | None
+    target_human_user_id: UUID
+    target_agent_id: UUID
+    reply_thread_id: UUID
+    priority: Literal["low", "normal", "high", "urgent"]
     instruction: str
     expected_output: str
     due_at: datetime | None
     attempt: int
     participant_agent_ids: list[UUID]
     collaboration_updates: list[AgentCollaborationUpdate]
+    wake_stage: Literal["claimed", "mapped", "woken", "running"]
+    local_session_id: str | None = None
     security_label: Literal["external_agent_content"] = "external_agent_content"
+
+
+class AgentRunClaimRequest(TaskModel):
+    task_id: UUID | None = None
+    assignment_id: UUID | None = None
+
+
+class AgentRunPending(TaskModel):
+    run_id: UUID
+    task_id: UUID
+    thread_id: UUID
+    task_title: str
+    assignment_id: UUID
+    source_activity_id: UUID | None
+    source_message_id: str | None
+    instruction: str
+    target_human_user_id: UUID
+    target_agent_id: UUID
+    reply_thread_id: UUID
+    priority: Literal["low", "normal", "high", "urgent"]
+    attempt: int
+    created_at: datetime
+    wake_stage: Literal["queued"] = "queued"
+
+
+class AgentRunPendingList(TaskModel):
+    items: list[AgentRunPending]
+    count: int
 
 
 class AgentRunUpdate(TaskModel):
     lease_token: str = Field(min_length=20, max_length=500)
     status: Literal["starting", "running", "waiting_human"]
     checkpoint: dict[str, Any] = Field(default_factory=dict)
+    wake_status: Literal["mapped", "woken"] | None = None
+    local_session_id: str | None = Field(default=None, max_length=255)
+
+    @model_validator(mode="after")
+    def require_local_session_for_wakeup(self) -> AgentRunUpdate:
+        if self.wake_status is not None and not self.local_session_id:
+            raise ValueError("local_session_id is required when reporting wake_status")
+        return self
 
 
 class AgentRunResult(TaskModel):

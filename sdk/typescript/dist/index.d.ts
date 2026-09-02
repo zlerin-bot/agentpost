@@ -71,8 +71,13 @@ export type TaskMessageResult = {
     activity_id: string;
     queued_run_count: number;
     legacy_delivery_count: number;
+    attachment_ids: string[];
     replayed: boolean;
     security_label: "external_agent_content" | string;
+};
+export type PendingTaskRuns = {
+    items: JsonObject[];
+    count: number;
 };
 export type ConnectorUpgradeDirective = {
     action: "upgrade_required" | "upgrade_recommended";
@@ -162,8 +167,33 @@ export declare class AgentPostClient {
         body: unknown;
         subject?: string;
         format?: "text" | "markdown" | "json";
+        attachmentIds?: string[];
         idempotencyKey?: string;
     }): Promise<TaskMessageResult>;
+    listPendingTaskRuns(options?: {
+        taskId?: string;
+        limit?: number;
+    }): Promise<PendingTaskRuns>;
+    claimTaskRun(options?: {
+        taskId?: string;
+        assignmentId?: string;
+    }): Promise<JsonObject | null>;
+    updateTaskRun(options: {
+        runId: string;
+        leaseToken: string;
+        status: "starting" | "running" | "waiting_human";
+        checkpoint?: JsonObject;
+        wakeStatus?: "mapped" | "woken";
+        localSessionId?: string;
+    }): Promise<JsonObject>;
+    completeTaskRun(options: {
+        runId: string;
+        leaseToken: string;
+        status: "completed" | "partial" | "failed" | "cancelled";
+        summary: string;
+        checkpoint?: JsonObject;
+        idempotencyKey?: string;
+    }): Promise<void>;
     heartbeat(healthStatus?: "healthy" | "degraded" | "error", lastErrorCode?: string): Promise<ConnectorHeartbeat>;
     rotateCredential(): Promise<{
         connector_id: string;

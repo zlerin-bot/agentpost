@@ -62,6 +62,7 @@ def _oauth_path_allowed(request: Request, scopes: set[str]) -> bool:
         "/api/v1/inbox",
         "/api/v1/directory/search",
         "/api/v1/oauth/token-info",
+        "/api/v1/task-runs/pending",
     }:
         return True
     if path.startswith("/api/v1/messages/"):

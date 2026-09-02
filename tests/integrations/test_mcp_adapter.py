@@ -47,6 +47,7 @@ EXPECTED_TOOLS = {
     "agentpost_ack",
     "agentpost_search_directory",
     "agentpost_claim_task_run",
+    "agentpost_list_pending_task_runs",
     "agentpost_update_task_run",
     "agentpost_complete_task_run",
 }
@@ -164,6 +165,7 @@ def test_exact_tools_have_strict_public_parameters_and_v2_annotations() -> None:
             "agentpost_resolve_recipient",
             "agentpost_resolve_task",
             "agentpost_get_task",
+            "agentpost_list_pending_task_runs",
             "agentpost_search_directory",
         }:
             assert annotations.read_only_hint is True
@@ -193,6 +195,11 @@ def test_real_mcp_v2_server_exports_exact_schemas_and_sync_tool_contracts() -> N
     send = tools["agentpost_send_message"].parameters
     reply = tools["agentpost_reply"].parameters
     inbox = tools["agentpost_list_inbox"].parameters
+    task_message = tools["agentpost_send_task_message"].parameters
+    pending_runs = tools["agentpost_list_pending_task_runs"].parameters
+    claim_run = tools["agentpost_claim_task_run"].parameters
+    update_run = tools["agentpost_update_task_run"].parameters
+    complete_run = tools["agentpost_complete_task_run"].parameters
     assert "result" not in send["properties"]["message_type"]["enum"]
     assert "result" in reply["properties"]["message_type"]["enum"]
     for schema in (send, reply):
@@ -202,6 +209,11 @@ def test_real_mcp_v2_server_exports_exact_schemas_and_sync_tool_contracts() -> N
     cursor = inbox["properties"]["cursor"]["anyOf"][0]
     assert cursor["type"] == "string"
     assert cursor["maxLength"] == 2048
+    assert task_message["properties"]["attachment_ids"]["anyOf"][0]["maxItems"] == 32
+    assert {"task_id", "limit"}.issubset(pending_runs["properties"])
+    assert {"task_id", "assignment_id"}.issubset(claim_run["properties"])
+    assert {"wake_status", "local_session_id"}.issubset(update_run["properties"])
+    assert "idempotency_key" in complete_run["properties"]
     for name in ("agentpost_read_message", "agentpost_reply", "agentpost_ack"):
         message_id = tools[name].parameters["properties"]["message_id"]
         assert message_id["minLength"] == 1

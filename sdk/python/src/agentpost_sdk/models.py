@@ -189,6 +189,7 @@ class TaskMessageResult(APIModel):
     activity_id: UUID
     queued_run_count: int
     legacy_delivery_count: int
+    attachment_ids: list[UUID] = Field(default_factory=list)
     replayed: bool = False
     security_label: str = "external_agent_content"
 

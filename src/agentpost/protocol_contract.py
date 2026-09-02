@@ -14,7 +14,7 @@ from agentpost.messaging.schemas import (
 from agentpost.onboarding.connectivity import heartbeat_timeout_seconds
 from agentpost.tasks.service import RUN_LEASE_SECONDS
 
-PROTOCOL_CONTRACT_VERSION = "0.2"
+PROTOCOL_CONTRACT_VERSION = "0.3"
 
 
 class ContractModel(BaseModel):
@@ -64,13 +64,19 @@ class StateContract(ContractModel):
 class TaskRequestShapeContract(ContractModel):
     extra_fields: Literal["forbid"] = "forbid"
     task_message_fields: list[str] = Field(
-        default_factory=lambda: ["subject", "content_format", "body"]
+        default_factory=lambda: ["subject", "content_format", "body", "attachments"]
     )
     task_message_legacy_aliases: dict[str, str] = Field(
         default_factory=lambda: {"format": "content_format"}
     )
     run_heartbeat_fields: list[str] = Field(
-        default_factory=lambda: ["lease_token", "status", "checkpoint"]
+        default_factory=lambda: [
+            "lease_token",
+            "status",
+            "checkpoint",
+            "wake_status",
+            "local_session_id",
+        ]
     )
     run_result_fields: list[str] = Field(
         default_factory=lambda: ["lease_token", "status", "summary", "checkpoint"]
@@ -107,6 +113,7 @@ class TaskExecutionContract(ContractModel):
     resolver_scope: Literal["authenticated_agent_active_task_participation"] = (
         "authenticated_agent_active_task_participation"
     )
+    pending_endpoint: Literal["/api/v1/task-runs/pending"] = "/api/v1/task-runs/pending"
     claim_endpoint: Literal["/api/v1/task-runs/claim"] = "/api/v1/task-runs/claim"
     heartbeat_endpoint_template: Literal["/api/v1/task-runs/{run_id}/heartbeat"] = (
         "/api/v1/task-runs/{run_id}/heartbeat"
@@ -116,7 +123,13 @@ class TaskExecutionContract(ContractModel):
     )
     lease_seconds: int
     durable_queue: Literal[True] = True
-    claim_is_idempotent_per_active_lease: Literal[True] = True
+    claim_is_idempotent_per_active_lease: Literal[False] = False
+    claim_retry_should_use_assignment_id: Literal[True] = True
+    targeted_claim_by_task_or_assignment: Literal[True] = True
+    claim_exposes_source_target_and_reply_scope: Literal[True] = True
+    connector_reports_local_session_wakeup: Literal[True] = True
+    body_mentions_do_not_create_assignments: Literal[True] = True
+    result_idempotency_key_supported: Literal[True] = True
     result_requires_human_acceptance: Literal[True] = True
     task_id_is_global_stable_identifier: Literal[True] = True
     active_task_agents_receive_durable_runs: Literal[True] = True
@@ -188,7 +201,7 @@ class OnboardingStep(ContractModel):
 
 class AgentIntegrationContract(ContractModel):
     contract: Literal["AGENTPOST_AGENT_INTEGRATION"] = "AGENTPOST_AGENT_INTEGRATION"
-    version: Literal["0.2"] = PROTOCOL_CONTRACT_VERSION
+    version: Literal["0.3"] = PROTOCOL_CONTRACT_VERSION
     authentication: Literal["agent_bearer_token_from_os_vault"] = "agent_bearer_token_from_os_vault"
     openapi_url: Literal["/openapi.json"] = "/openapi.json"
     endpoints: list[EndpointContract]
@@ -280,9 +293,18 @@ def build_agent_integration_contract(settings: Settings) -> AgentIntegrationCont
                 required_headers=["Idempotency-Key"],
             ),
             EndpointContract(
+                method="GET",
+                path="/api/v1/task-runs/pending",
+                purpose="preview assigned durable runs, optionally filtered by task ID",
+                changes_state=False,
+            ),
+            EndpointContract(
                 method="POST",
                 path="/api/v1/task-runs/claim",
-                purpose="claim one durable execution assigned to the authenticated Agent",
+                purpose=(
+                    "claim one durable execution assigned to the authenticated Agent, "
+                    "optionally by task ID or assignment ID"
+                ),
                 changes_state=True,
             ),
             EndpointContract(

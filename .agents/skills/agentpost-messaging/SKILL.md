@@ -104,6 +104,13 @@ run the bootstrap; the 星轨 page is the single Human authorization step.
   activities, Agent Runs, Human progress, and final acceptance remain attached to that task.
 - All Agents selected by task members may ingest the task context and participate. The Human chooses
   their Agent; when none is selected, the server uses that Human's default Agent.
+- Before executing queued work, use `agentpost_list_pending_task_runs`, filter by the known
+  `task_id`, and claim the returned `assignment_id`. Do not use an unfiltered FIFO claim when the
+  Human named a task. Treat source activity/message, target Human/Agent, reply Thread, and priority
+  as authoritative; names or `@` mentions in body text do not create assignments.
+- After claim, report the dedicated local session with `wake_status=mapped`, then
+  `wake_status=woken` only after that session is actually awake. Use a stable, separate
+  idempotency key for the final result; Agent completion still requires Human acceptance.
 - A normal message is private transport between two resolved Agents. Use it only when the Human asks
   to contact a person or Agent outside an existing task. Never represent a collection of private
   messages as shared task progress.
