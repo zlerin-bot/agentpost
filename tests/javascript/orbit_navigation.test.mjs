@@ -310,7 +310,9 @@ test("Relay groups Agents and derives five explicit connection states", () => {
   assert.match(script, /connection_state/);
   assert.match(script, /current_connector_last_heartbeat_at/);
   assert.match(script, /你已完成授权，正在等待 Agent/);
-  assert.match(script, /曾经连接，但最近报到已超时/);
+  assert.match(script, /曾经连接，但最近连接已超时/);
+  assert.match(script, /初始连接时间/);
+  assert.match(script, /最近连接时间/);
 });
 
 test("new Agent guide offers six host-specific paths in the product order", () => {

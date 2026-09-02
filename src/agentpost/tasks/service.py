@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import secrets
+import unicodedata
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
@@ -30,7 +31,9 @@ from agentpost.tasks.schemas import (
     AgentRunResult,
     AgentRunUpdate,
     AgentSummary,
+    AgentTaskCandidate,
     AgentTaskCreate,
+    AgentTaskResolution,
     FriendResponse,
     TaskAcceptanceDecision,
     TaskActivityResponse,
@@ -828,6 +831,96 @@ def create_task_by_agent(
     )
     session.commit()
     return _task_detail(session, task=task, viewer_membership=membership)
+
+
+def _normalize_task_reference(value: str) -> str:
+    return " ".join(unicodedata.normalize("NFKC", value).casefold().split())
+
+
+def resolve_task_for_agent(
+    session: Session,
+    *,
+    agent: Agent,
+    query: str,
+    candidate_limit: int = 5,
+) -> AgentTaskResolution:
+    rows = session.execute(
+        select(Task, TaskMembership, HumanUser)
+        .join(
+            TaskAgentParticipant,
+            TaskAgentParticipant.task_id == Task.id,
+        )
+        .join(
+            TaskMembership,
+            (TaskMembership.task_id == Task.id)
+            & (TaskMembership.human_user_id == TaskAgentParticipant.human_user_id),
+        )
+        .join(HumanUser, HumanUser.id == Task.owner_human_user_id)
+        .where(
+            TaskAgentParticipant.agent_id == agent.id,
+            TaskAgentParticipant.active.is_(True),
+            TaskMembership.status == "active",
+        )
+        .order_by(Task.updated_at.desc(), Task.id)
+    ).all()
+    normalized_query = _normalize_task_reference(query)
+
+    def candidate(row, *, match_kind: str) -> AgentTaskCandidate:
+        task, membership, owner = row
+        return AgentTaskCandidate(
+            task_id=task.id,
+            thread_id=task.thread_id,
+            title=task.title,
+            owner_human_user_id=owner.id,
+            owner_display_name=owner.display_name,
+            status=task.status,
+            membership_role=membership.role,  # type: ignore[arg-type]
+            updated_at=_as_utc(task.updated_at),
+            label=f"{task.title} · {owner.display_name} · {task.status}",
+            match_kind=match_kind,  # type: ignore[arg-type]
+        )
+
+    exact_rows = [
+        row for row in rows if _normalize_task_reference(row[0].title) == normalized_query
+    ]
+    if len(exact_rows) == 1:
+        return AgentTaskResolution(
+            status="resolved",
+            query=query,
+            match=candidate(exact_rows[0], match_kind="exact"),
+            total_candidates=1,
+            reason="unique_exact_title",
+        )
+    if exact_rows:
+        return AgentTaskResolution(
+            status="needs_clarification",
+            query=query,
+            candidates=[candidate(row, match_kind="exact") for row in exact_rows[:candidate_limit]],
+            total_candidates=len(exact_rows),
+            reason="duplicate_exact_title",
+        )
+
+    partial_rows = [
+        row
+        for row in rows
+        if normalized_query in _normalize_task_reference(row[0].title)
+        or _normalize_task_reference(row[0].title) in normalized_query
+    ]
+    if partial_rows:
+        return AgentTaskResolution(
+            status="needs_clarification",
+            query=query,
+            candidates=[
+                candidate(row, match_kind="partial") for row in partial_rows[:candidate_limit]
+            ],
+            total_candidates=len(partial_rows),
+            reason="partial_title_requires_confirmation",
+        )
+    return AgentTaskResolution(
+        status="not_found",
+        query=query,
+        reason="no_participating_task_match",
+    )
 
 
 def list_task_invitation_candidates(

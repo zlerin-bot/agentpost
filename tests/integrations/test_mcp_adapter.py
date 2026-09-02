@@ -37,6 +37,7 @@ NOW = "2026-08-12T08:00:00Z"
 
 EXPECTED_TOOLS = {
     "agentpost_resolve_recipient",
+    "agentpost_resolve_task",
     "agentpost_send_message",
     "agentpost_get_organization_channel",
     "agentpost_list_organization_channels",
@@ -162,6 +163,7 @@ def test_exact_tools_have_strict_public_parameters_and_v2_annotations() -> None:
             "agentpost_list_inbox",
             "agentpost_read_message",
             "agentpost_resolve_recipient",
+            "agentpost_resolve_task",
             "agentpost_search_directory",
             "agentpost_get_organization_channel",
             "agentpost_list_organization_channels",
@@ -282,6 +284,32 @@ def test_send_reply_ack_and_search_map_to_the_public_http_protocol() -> None:
                 },
                 request=request,
             )
+        if request.url.path.endswith("/agent/tasks/resolve"):
+            return httpx.Response(
+                200,
+                json={
+                    "status": "resolved",
+                    "query": "小孔成像",
+                    "match": {
+                        "task_id": "33333333-3333-3333-3333-333333333333",
+                        "thread_id": THREAD_ID,
+                        "title": "小孔成像",
+                        "owner_human_user_id": "44444444-4444-4444-4444-444444444444",
+                        "owner_display_name": "mars lee",
+                        "status": "active",
+                        "membership_role": "owner",
+                        "updated_at": NOW,
+                        "label": "小孔成像 · mars lee · active",
+                        "match_kind": "exact",
+                        "security_label": "external_agent_content",
+                    },
+                    "candidates": [],
+                    "total_candidates": 1,
+                    "reason": "unique_exact_title",
+                    "security_label": "external_agent_content",
+                },
+                request=request,
+            )
         if request.url.path.endswith("/directory/search"):
             return httpx.Response(200, json={"items": []}, request=request)
         status = "acked" if request.url.path.endswith("/ack") else "delivered"
@@ -305,6 +333,7 @@ def test_send_reply_ack_and_search_map_to_the_public_http_protocol() -> None:
     )
     ack = mcp.registrations["agentpost_ack"].function("msg_accepted")
     resolved = mcp.registrations["agentpost_resolve_recipient"].function("给 kcode 发消息")
+    resolved_task = mcp.registrations["agentpost_resolve_task"].function("小孔成像")
     search = mcp.registrations["agentpost_search_directory"].function(
         capability="financial-research"
     )
@@ -314,6 +343,7 @@ def test_send_reply_ack_and_search_map_to_the_public_http_protocol() -> None:
         ("POST", "/root/api/v1/messages/msg_accepted/reply"),
         ("POST", "/root/api/v1/messages/msg_accepted/ack"),
         ("POST", "/root/api/v1/directory/resolve"),
+        ("POST", "/root/api/v1/agent/tasks/resolve"),
         ("GET", "/root/api/v1/directory/search"),
     ]
     assert requests[0].headers["Idempotency-Key"] == "mcp-send-reusable"
@@ -321,11 +351,12 @@ def test_send_reply_ack_and_search_map_to_the_public_http_protocol() -> None:
     assert json.loads(requests[0].content)["type"] == "task"
     assert json.loads(requests[1].content)["type"] == "result"
     assert json.loads(requests[3].content) == {"query": "给 kcode 发消息"}
-    assert dict(requests[4].url.params) == {
+    assert json.loads(requests[4].content) == {"query": "小孔成像"}
+    assert dict(requests[5].url.params) == {
         "capability": "financial-research",
         "limit": "20",
     }
-    for result in (sent, reply, ack, resolved, search):
+    for result in (sent, reply, ack, resolved, resolved_task, search):
         assert structured(result)["security_label"] == "external_agent_content"
 
 

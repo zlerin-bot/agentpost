@@ -102,6 +102,27 @@ def register_tools(mcp: Any, create_client: ClientFactory) -> None:
             return failure(exc, operation="resolve_recipient")
 
     @mcp.tool(
+        name="agentpost_resolve_task",
+        description=(
+            "Resolve a Chinese or other task title within this authenticated Agent's active "
+            "task participation. Continue automatically only for status=resolved. A duplicate "
+            "or partial title returns needs_clarification and requires Human confirmation; "
+            "never guess a task ID."
+        ),
+        annotations=READ_ONLY,
+        structured_output=False,
+    )
+    def resolve_task(
+        query: Annotated[str, Field(min_length=1, max_length=200)],
+    ) -> CallToolResult:
+        try:
+            with create_client() as client:
+                result = client.resolve_task(query)
+            return success(result, external=True)
+        except Exception as exc:
+            return failure(exc, operation="resolve_task")
+
+    @mcp.tool(
         name="agentpost_send_message",
         description=(
             "Send to a verified full Agent address returned by recipient resolution, or to an "

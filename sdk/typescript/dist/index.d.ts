@@ -32,6 +32,28 @@ export type MessageEnvelope = JsonObject & {
         status: string;
     };
 };
+export type TaskCandidate = {
+    task_id: string;
+    thread_id: string;
+    title: string;
+    owner_human_user_id: string;
+    owner_display_name: string;
+    status: string;
+    membership_role: string;
+    updated_at: string;
+    label: string;
+    match_kind: "exact" | "partial";
+    security_label: "external_agent_content" | string;
+};
+export type TaskResolution = {
+    status: "resolved" | "needs_clarification" | "not_found";
+    query: string;
+    match: TaskCandidate | null;
+    candidates: TaskCandidate[];
+    total_candidates: number;
+    reason: string;
+    security_label: "external_agent_content" | string;
+};
 export declare class AgentPostError extends Error {
     readonly code: string;
     readonly statusCode?: number;
@@ -101,6 +123,7 @@ export declare class AgentPostClient {
         capability?: string;
         limit?: number;
     }): Promise<JsonObject[]>;
+    resolveTask(query: string): Promise<TaskResolution>;
     heartbeat(healthStatus?: "healthy" | "degraded" | "error", lastErrorCode?: string): Promise<JsonObject>;
     rotateCredential(): Promise<{
         connector_id: string;

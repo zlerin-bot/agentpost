@@ -53,6 +53,12 @@ class StateContract(ContractModel):
 class TaskExecutionContract(ContractModel):
     create_endpoint: Literal["/api/v1/agent/tasks"] = "/api/v1/agent/tasks"
     create_requires_idempotency_key: Literal[True] = True
+    resolve_endpoint: Literal["/api/v1/agent/tasks/resolve"] = "/api/v1/agent/tasks/resolve"
+    unique_exact_title_resolves_automatically: Literal[True] = True
+    ambiguous_or_partial_title_requires_confirmation: Literal[True] = True
+    resolver_scope: Literal["authenticated_agent_active_task_participation"] = (
+        "authenticated_agent_active_task_participation"
+    )
     claim_endpoint: Literal["/api/v1/task-runs/claim"] = "/api/v1/task-runs/claim"
     heartbeat_endpoint_template: Literal["/api/v1/task-runs/{run_id}/heartbeat"] = (
         "/api/v1/task-runs/{run_id}/heartbeat"
@@ -229,6 +235,16 @@ def build_agent_integration_contract(settings: Settings) -> AgentIntegrationCont
                 ),
                 changes_state=True,
                 required_headers=["Idempotency-Key"],
+            ),
+            EndpointContract(
+                method="POST",
+                path="/api/v1/agent/tasks/resolve",
+                purpose=(
+                    "resolve a Chinese or other task title to one stable task_id within the "
+                    "authenticated Agent's active task participation; ambiguous matches require "
+                    "Human confirmation"
+                ),
+                changes_state=False,
             ),
             EndpointContract(
                 method="POST",

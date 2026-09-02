@@ -230,6 +230,48 @@ test("managed restore and rotation persist the replacement credential", async ()
   ]);
 });
 
+test("task title resolution uses the authenticated Agent endpoint", async () => {
+  const fetchImpl = async (target, init) => {
+    const url = new URL(target);
+    assert.equal(url.pathname, "/api/v1/agent/tasks/resolve");
+    assert.equal(init.method, "POST");
+    assert.deepEqual(JSON.parse(init.body), { query: "小孔成像" });
+    return jsonResponse(200, {
+      status: "resolved",
+      query: "小孔成像",
+      match: {
+        task_id: "50000000-0000-0000-0000-000000000005",
+        thread_id: "60000000-0000-0000-0000-000000000006",
+        title: "小孔成像",
+        owner_human_user_id: "70000000-0000-0000-0000-000000000007",
+        owner_display_name: "Mars",
+        status: "active",
+        membership_role: "owner",
+        updated_at: now,
+        label: "小孔成像 · Mars · active",
+        match_kind: "exact",
+        security_label: "external_agent_content",
+      },
+      candidates: [],
+      total_candidates: 1,
+      reason: "unique_exact_title",
+      security_label: "external_agent_content",
+    });
+  };
+  const client = new AgentPostClient({
+    server: "https://agentpost.me",
+    apiKey: oldKey,
+    fetch: fetchImpl,
+  });
+
+  const resolution = await client.resolveTask("小孔成像");
+
+  assert.equal(resolution.match.task_id, "50000000-0000-0000-0000-000000000005");
+  await assert.rejects(() => client.resolveTask("  "), {
+    code: "INVALID_CONFIGURATION",
+  });
+});
+
 test("worker reads, handles, ACKs, then advances the opaque cursor", async () => {
   const store = new MemoryCredentials({
     server: "https://agentpost.me",

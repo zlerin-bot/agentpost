@@ -19,6 +19,7 @@ from starlette.testclient import TestClient
 
 EXPECTED_TOOLS = {
     "agentpost_resolve_recipient",
+    "agentpost_resolve_task",
     "agentpost_send_message",
     "agentpost_get_organization_channel",
     "agentpost_list_organization_channels",

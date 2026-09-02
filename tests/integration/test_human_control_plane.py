@@ -308,6 +308,7 @@ def test_orbit_site_is_branded_and_does_not_persist_credentials(
     assert "权限与关系" in orbit.text
     assert "删除采用软删除" in orbit.text
     assert "可执行的操作以你的实际权限为准" in script.text
+    assert "current_connector_activated_at" in script.text
     assert "current_connector_last_heartbeat_at" in script.text
     assert "agent-workspace-mode:not(.agent-detail-open)" in stylesheet.text
     assert "activateRoute" in script.text

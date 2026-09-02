@@ -326,6 +326,93 @@ def test_confirmed_friends_task_agent_selection_run_and_human_acceptance(
         assert completed.json()["status"] == "completed"
 
 
+def test_agent_resolves_only_its_participating_tasks_by_exact_title(
+    settings: Settings, database: Database
+) -> None:
+    with TestClient(create_app(settings=_runtime(settings), database=database)) as client:
+        owner = _register(client, "resolve-owner")
+        other = _register(client, "resolve-other")
+        participating_agent = _create_owned_agent(
+            client, human_id=str(owner["user"]["id"]), handle="resolve-participant"
+        )
+        same_human_unselected_agent = _create_owned_agent(
+            client, human_id=str(owner["user"]["id"]), handle="resolve-unselected"
+        )
+        unrelated_agent = _create_owned_agent(
+            client, human_id=str(other["user"]["id"]), handle="resolve-unrelated"
+        )
+
+        def create(title: str, key: str) -> dict[str, object]:
+            response = client.post(
+                "/api/v1/agent/tasks",
+                headers={
+                    "Authorization": f"Bearer {participating_agent['api_key']}",
+                    "Idempotency-Key": key,
+                },
+                json={
+                    "title": title,
+                    "goal": "验证任务名称解析",
+                    "expected_output": "返回稳定任务 ID",
+                },
+            )
+            assert response.status_code == 201, response.text
+            return response.json()
+
+        unique_task = create("ＨｉＰｉ 知识库", "resolve-unique")
+        duplicate_tasks = [create("小孔成像", f"resolve-duplicate-{index}") for index in range(6)]
+
+        exact = client.post(
+            "/api/v1/agent/tasks/resolve",
+            headers={"Authorization": f"Bearer {participating_agent['api_key']}"},
+            json={"query": "hipi   知识库"},
+        )
+        assert exact.status_code == 200, exact.text
+        exact_body = exact.json()
+        assert exact_body["status"] == "resolved"
+        assert exact_body["reason"] == "unique_exact_title"
+        assert exact_body["match"]["task_id"] == unique_task["task_id"]
+        assert exact_body["match"]["match_kind"] == "exact"
+        assert exact_body["match"]["security_label"] == "external_agent_content"
+
+        duplicate = client.post(
+            "/api/v1/agent/tasks/resolve",
+            headers={"Authorization": f"Bearer {participating_agent['api_key']}"},
+            json={"query": "小孔成像"},
+        )
+        assert duplicate.status_code == 200, duplicate.text
+        duplicate_body = duplicate.json()
+        assert duplicate_body["status"] == "needs_clarification"
+        assert duplicate_body["reason"] == "duplicate_exact_title"
+        assert duplicate_body["total_candidates"] == len(duplicate_tasks)
+        assert len(duplicate_body["candidates"]) == 5
+
+        partial = client.post(
+            "/api/v1/agent/tasks/resolve",
+            headers={"Authorization": f"Bearer {participating_agent['api_key']}"},
+            json={"query": "请给 hipi 知识库任务发消息"},
+        )
+        assert partial.status_code == 200, partial.text
+        assert partial.json()["status"] == "needs_clarification"
+        assert partial.json()["reason"] == "partial_title_requires_confirmation"
+
+        for hidden_agent in (same_human_unselected_agent, unrelated_agent):
+            hidden = client.post(
+                "/api/v1/agent/tasks/resolve",
+                headers={"Authorization": f"Bearer {hidden_agent['api_key']}"},
+                json={"query": "小孔成像"},
+            )
+            assert hidden.status_code == 200, hidden.text
+            assert hidden.json()["status"] == "not_found"
+            assert hidden.json()["candidates"] == []
+
+        blank = client.post(
+            "/api/v1/agent/tasks/resolve",
+            headers={"Authorization": f"Bearer {participating_agent['api_key']}"},
+            json={"query": "   "},
+        )
+        assert blank.status_code == 422, blank.text
+
+
 def test_message_history_is_only_a_friend_suggestion(
     settings: Settings, database: Database
 ) -> None:

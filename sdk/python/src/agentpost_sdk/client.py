@@ -36,6 +36,7 @@ from agentpost_sdk.models import (
     OrganizationChannelMessage,
     OrganizationChannelSummary,
     RecipientResolution,
+    TaskResolution,
 )
 
 if TYPE_CHECKING:
@@ -722,6 +723,20 @@ class AgentPost:
             return RecipientResolution.model_validate(data)
         except PydanticValidationError as exc:
             raise self._protocol_error("Malformed recipient resolution response", exc) from exc
+
+    def resolve_task(self, query: str) -> TaskResolution:
+        """Resolve an exact task title without letting the client guess a task ID."""
+        if not isinstance(query, str) or not query.strip():
+            raise ConfigurationError("task query must not be blank")
+        data = self._request(
+            "POST",
+            "/agent/tasks/resolve",
+            json={"query": query},
+        )
+        try:
+            return TaskResolution.model_validate(data)
+        except PydanticValidationError as exc:
+            raise self._protocol_error("Malformed task resolution response", exc) from exc
 
     def _message(self, data: Any, *, idempotency_replayed: bool = False) -> Message:
         try:

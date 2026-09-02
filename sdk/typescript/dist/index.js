@@ -189,6 +189,17 @@ export class AgentPostClient {
         });
         return payload.items;
     }
+    async resolveTask(query) {
+        if (!query.trim()) {
+            throw new AgentPostError({
+                code: "INVALID_CONFIGURATION",
+                message: "task query is required",
+            });
+        }
+        return await this.request("POST", "/agent/tasks/resolve", {
+            body: { query },
+        });
+    }
     async heartbeat(healthStatus = "healthy", lastErrorCode) {
         return await this.request("POST", "/connect/heartbeat", {
             body: { health_status: healthStatus, last_error_code: lastErrorCode ?? null },

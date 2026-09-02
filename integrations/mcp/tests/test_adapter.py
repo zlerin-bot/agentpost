@@ -62,6 +62,18 @@ class FakeClient:
             "candidates": [],
         }
 
+    def resolve_task(self, query: str) -> dict[str, object]:
+        self.calls.append(("resolve_task", query))
+        return {
+            "status": "resolved",
+            "query": query,
+            "match": {
+                "task_id": "33333333-3333-3333-3333-333333333333",
+                "title": "小孔成像",
+            },
+            "candidates": [],
+        }
+
     def _inbox(self, **kwargs: object) -> dict[str, object]:
         self.calls.append(("inbox", kwargs))
         return {"items": [], "next_cursor": kwargs.get("cursor"), "has_more": False}
@@ -111,6 +123,7 @@ async def test_v2_tool_contract_and_calls(adapter: tuple[object, list[tuple[str,
         listed = await client.list_tools()
         assert [tool.name for tool in listed.tools] == [
             "agentpost_resolve_recipient",
+            "agentpost_resolve_task",
             "agentpost_send_message",
             "agentpost_get_organization_channel",
             "agentpost_list_organization_channels",
@@ -134,6 +147,15 @@ async def test_v2_tool_contract_and_calls(adapter: tuple[object, list[tuple[str,
             {"query": "send this to Bob's Codex"},
         )
         assert resolved.structured_content["data"]["match"]["address"] == "bob@agents.local"
+
+        resolved_task = await client.call_tool(
+            "agentpost_resolve_task",
+            {"query": "小孔成像"},
+        )
+        assert (
+            resolved_task.structured_content["data"]["match"]["task_id"]
+            == "33333333-3333-3333-3333-333333333333"
+        )
 
         sent = await client.call_tool(
             "agentpost_send_message",
@@ -185,8 +207,9 @@ async def test_v2_tool_contract_and_calls(adapter: tuple[object, list[tuple[str,
             },
         )
 
-    assert [call[0] for call in calls].count("close") == 12
+    assert [call[0] for call in calls].count("close") == 13
     assert ("resolve", "send this to Bob's Codex") in calls
+    assert ("resolve_task", "小孔成像") in calls
     assert ("get", "msg_1") in calls
     organization_call = next(value for name, value in calls if name == "send_organization")
     assert organization_call[1]["attachments"] == [UUID("44444444-4444-4444-8444-444444444444")]

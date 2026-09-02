@@ -146,6 +146,30 @@ class RecipientResolution(APIModel):
     security_label: str = "external_agent_content"
 
 
+class TaskCandidate(APIModel):
+    task_id: UUID
+    thread_id: UUID
+    title: str
+    owner_human_user_id: UUID
+    owner_display_name: str
+    status: str
+    membership_role: str
+    updated_at: datetime
+    label: str
+    match_kind: str
+    security_label: str = "external_agent_content"
+
+
+class TaskResolution(APIModel):
+    status: str
+    query: str
+    match: TaskCandidate | None = None
+    candidates: list[TaskCandidate] = Field(default_factory=list)
+    total_candidates: int = 0
+    reason: str
+    security_label: str = "external_agent_content"
+
+
 class OrganizationChannelMessage(APIModel):
     event_id: UUID
     organization_id: UUID

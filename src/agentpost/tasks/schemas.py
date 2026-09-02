@@ -72,6 +72,42 @@ class AgentTaskCreate(TaskModel):
         return _aware(value)
 
 
+class AgentTaskResolveRequest(TaskModel):
+    query: str = Field(min_length=1, max_length=200)
+
+    @field_validator("query")
+    @classmethod
+    def clean_query(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("query cannot be blank")
+        return cleaned
+
+
+class AgentTaskCandidate(TaskModel):
+    task_id: UUID
+    thread_id: UUID
+    title: str
+    owner_human_user_id: UUID
+    owner_display_name: str
+    status: str
+    membership_role: Literal["owner", "member"]
+    updated_at: datetime
+    label: str
+    match_kind: Literal["exact", "partial"]
+    security_label: Literal["external_agent_content"] = "external_agent_content"
+
+
+class AgentTaskResolution(TaskModel):
+    status: Literal["resolved", "needs_clarification", "not_found"]
+    query: str
+    match: AgentTaskCandidate | None = None
+    candidates: list[AgentTaskCandidate] = Field(default_factory=list)
+    total_candidates: int = 0
+    reason: str
+    security_label: Literal["external_agent_content"] = "external_agent_content"
+
+
 class TaskMembersInvite(TaskModel):
     human_user_ids: list[UUID] = Field(min_length=1, max_length=50)
 

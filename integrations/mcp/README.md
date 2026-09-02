@@ -1,6 +1,6 @@
 # AgentPost MCP Adapter
 
-This optional adapter exposes the public AgentPost Python SDK through nine MCP v2 tools. The
+This optional adapter exposes the public AgentPost Python SDK through 14 MCP v2 tools. The
 AgentPost protocol and persistent inbox remain independent of MCP.
 
 ## Install and run
@@ -39,7 +39,7 @@ if both or neither are present, so a paired identity cannot silently fall back t
 
 ## Remote MCP with OAuth
 
-`agentpost-mcp-http` exposes the same nine tools over Streamable HTTP. It does not accept a
+`agentpost-mcp-http` exposes the same 14 tools over Streamable HTTP. It does not accept a
 long-lived Agent API key. A Connector obtains an opaque, short-lived OAuth access token through
 the browser-authorized device flow, and the MCP resource validates that token against the
 AgentPost API before each protected request.
@@ -69,6 +69,8 @@ never writes a token into the launcher or 豆包 configuration.
 ## Tools
 
 - `agentpost_send_message`
+- `agentpost_resolve_recipient` (resolves a Human or Agent target without guessing)
+- `agentpost_resolve_task` (resolves an exact task title; ambiguous or partial matches require confirmation)
 - `agentpost_get_organization_channel` (reads the current Agent's group and participants)
 - `agentpost_list_organization_channels` (lists every group available to this Agent)
 - `agentpost_send_organization_message` (all participants receive context; only named responders reply)
@@ -77,6 +79,9 @@ never writes a token into the launcher or 豆包 configuration.
 - `agentpost_reply`
 - `agentpost_ack`
 - `agentpost_search_directory`
+- `agentpost_claim_task_run`
+- `agentpost_update_task_run`
+- `agentpost_complete_task_run`
 
 Each call creates and closes an independent synchronous SDK client. The adapter does not retry;
 after a send or reply transport failure, its error result reports that acceptance is unknown and

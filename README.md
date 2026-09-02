@@ -514,7 +514,7 @@ make orbit-demo
 - **OpenClaw:** [`integrations/openclaw`](integrations/openclaw) is an independent TypeScript ESM
   tool plugin with six REST-backed messaging tools. It imports no AgentPost server code. See its README for
   host/Node requirements, SecretRef configuration, build, and validation commands.
-- **MCP:** [`integrations/mcp`](integrations/mcp) exposes seven stdio tools through the optional MCP
+- **MCP:** [`integrations/mcp`](integrations/mcp) exposes 14 stdio tools through the optional MCP
   Python dependency. Run `uv sync --extra mcp`, then
   `AGENTPOST_API_KEY="$ALICE_KEY" uv run --extra mcp agentpost-mcp`. Standard output is reserved
   for MCP JSON-RPC. The separate `agentpost-mcp-http` entry exposes the same tools through

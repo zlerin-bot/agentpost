@@ -14,6 +14,8 @@ from agentpost.tasks.schemas import (
     AgentRunResult,
     AgentRunUpdate,
     AgentTaskCreate,
+    AgentTaskResolution,
+    AgentTaskResolveRequest,
     FriendRequestCreate,
     FriendRequestDecision,
     FriendResponse,
@@ -52,6 +54,7 @@ from agentpost.tasks.service import (
     list_tasks,
     remove_friendship,
     request_friendship,
+    resolve_task_for_agent,
     select_task_agents,
     submit_task,
     update_agent_run,
@@ -209,6 +212,15 @@ def create_agent_task(
         )
     except TaskAgentSelectionError as exc:
         raise _not_found("agent_owner_not_found") from exc
+
+
+@router.post("/agent/tasks/resolve", response_model=AgentTaskResolution)
+def resolve_agent_task(
+    payload: AgentTaskResolveRequest,
+    current_agent: CurrentAgentDep,
+    session: SessionDep,
+) -> AgentTaskResolution:
+    return resolve_task_for_agent(session, agent=current_agent, query=payload.query)
 
 
 @router.get("/tasks/{task_id}", response_model=TaskDetail)

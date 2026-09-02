@@ -37,6 +37,8 @@ from agentpost_sdk.models import (
     OrganizationChannelSummary,
     RecipientCandidate,
     RecipientResolution,
+    TaskCandidate,
+    TaskResolution,
 )
 from agentpost_sdk.onboarding import (
     ConnectorCredentialRotation,
@@ -79,9 +81,11 @@ __all__ = [
     "RateLimitError",
     "RecipientCandidate",
     "RecipientResolution",
+    "TaskCandidate",
+    "TaskResolution",
     "ResponseError",
     "TransportError",
     "ValidationError",
 ]
 
-__version__ = "0.1.38"
+__version__ = "0.1.39"

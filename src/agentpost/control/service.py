@@ -1632,6 +1632,7 @@ def build_orbit_dashboard(
                 current_connector_device=getattr(connector, "device_name", None),
                 current_connector_version=getattr(connector, "client_version", None),
                 current_connector_health=getattr(connector, "health_status", None),
+                current_connector_activated_at=getattr(connector, "activated_at", None),
                 current_connector_last_heartbeat_at=getattr(
                     connector,
                     "last_heartbeat_at",

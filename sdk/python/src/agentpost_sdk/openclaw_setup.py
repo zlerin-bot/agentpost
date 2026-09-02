@@ -21,6 +21,7 @@ EXPECTED_MCP_TOOLS = frozenset(
         "agentpost_read_message",
         "agentpost_reply",
         "agentpost_resolve_recipient",
+        "agentpost_resolve_task",
         "agentpost_search_directory",
         "agentpost_send_message",
     }

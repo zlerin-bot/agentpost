@@ -29,6 +29,7 @@ AGENT_ID = "10000000-0000-0000-0000-000000000001"
 RECIPIENT_ID = "20000000-0000-0000-0000-000000000002"
 DELIVERY_ID = "30000000-0000-0000-0000-000000000003"
 THREAD_ID = "40000000-0000-0000-0000-000000000004"
+TASK_ID = "45000000-0000-0000-0000-000000000004"
 ATTACHMENT_ID = "50000000-0000-0000-0000-000000000005"
 ORGANIZATION_ID = "60000000-0000-0000-0000-000000000006"
 ORGANIZATION_EVENT_ID = "70000000-0000-0000-0000-000000000007"
@@ -135,6 +136,33 @@ def recipient_resolution_json(**extra: Any) -> dict[str, Any]:
         "candidates": [],
         "total_candidates": 1,
         "reason": "unique_match",
+        "security_label": "external_agent_content",
+    }
+    payload.update(extra)
+    return payload
+
+
+def task_resolution_json(**extra: Any) -> dict[str, Any]:
+    candidate = {
+        "task_id": TASK_ID,
+        "thread_id": THREAD_ID,
+        "title": "小孔成像",
+        "owner_human_user_id": "46000000-0000-0000-0000-000000000004",
+        "owner_display_name": "mars lee",
+        "status": "active",
+        "membership_role": "owner",
+        "updated_at": NOW,
+        "label": "小孔成像 · mars lee · active",
+        "match_kind": "exact",
+        "security_label": "external_agent_content",
+    }
+    payload: dict[str, Any] = {
+        "status": "resolved",
+        "query": "小孔成像",
+        "match": candidate,
+        "candidates": [],
+        "total_candidates": 1,
+        "reason": "unique_exact_title",
         "security_label": "external_agent_content",
     }
     payload.update(extra)
@@ -259,6 +287,26 @@ def test_sdk_resolves_natural_recipient_through_verified_server_endpoint() -> No
     assert result.match is not None
     assert result.match.handle == "kcode"
     assert result.match.label == "张子良的 Codex"
+    assert result.security_label == "external_agent_content"
+
+
+def test_sdk_resolves_task_title_through_scoped_server_endpoint() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return json_response(request, 200, task_resolution_json())
+
+    with make_client(handler) as client:
+        result = client.resolve_task("小孔成像")
+
+    assert seen[0].method == "POST"
+    assert seen[0].url.path == "/base/api/v1/agent/tasks/resolve"
+    assert json.loads(seen[0].content) == {"query": "小孔成像"}
+    assert result.status == "resolved"
+    assert result.match is not None
+    assert str(result.match.task_id) == TASK_ID
+    assert result.match.title == "小孔成像"
     assert result.security_label == "external_agent_content"
 
 

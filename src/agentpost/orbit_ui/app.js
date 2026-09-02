@@ -3076,10 +3076,10 @@ function renderAgents(agents) {
 
 function agentConnectionCopy(agent) {
   const copies = {
-    connected: `${safeText(agent.current_connector_name, agent.current_connector_type || "当前连接")} 正常连接，最近报到 ${dateText(agent.current_connector_last_heartbeat_at)}`,
+    connected: `${safeText(agent.current_connector_name, agent.current_connector_type || "当前连接")} 正常连接，最近连接 ${dateText(agent.current_connector_last_heartbeat_at)}`,
     awaiting_agent: "你已完成授权，正在等待 Agent 完成设置并首次上线",
     disconnected: "没有当前有效连接；Agent 身份和历史仍保留",
-    offline: `曾经连接，但最近报到已超时（${dateText(agent.current_connector_last_heartbeat_at)}）`,
+    offline: `曾经连接，但最近连接已超时（${dateText(agent.current_connector_last_heartbeat_at)}）`,
     connection_error: `检测到明确连接异常${agent.current_connector_error_code ? `：${safeText(agent.current_connector_error_code)}` : ""}`,
   };
   return copies[agent.connection_state] || "连接证据不足";
@@ -3257,7 +3257,8 @@ function renderCurrentAgentConnection(agent) {
     ["Agent 类型", agent.current_connector_type || "未提供"],
     ["当前连接", agent.current_connector_name || "名称未提供"],
     ["设备", agent.current_connector_device || "设备未提供"],
-    ["最近报到", dateText(agent.current_connector_last_heartbeat_at)],
+    ["初始连接时间", dateText(agent.current_connector_activated_at)],
+    ["最近连接时间", dateText(agent.current_connector_last_heartbeat_at)],
     ["健康证据", statusLabel(agent.current_connector_health || "unknown")],
   ].forEach(([label, value]) => facts.append(detailFact(label, value)));
   const technical = document.createElement("details");
@@ -3629,8 +3630,8 @@ function connectorCard(connector, historical = false) {
     ["设备", connector.device_name],
     ["当前版本", connector.runtime_version || "未上报"],
     ["升级建议", connectorVersionLabel(connector.version_status)],
-    ["最近连接", dateText(connector.last_seen_at)],
-    ["最近报到", dateText(connector.last_heartbeat_at)],
+    ["初始连接时间", dateText(connector.activated_at)],
+    ["最近连接时间", dateText(connector.last_heartbeat_at)],
     ["连接状态", statusLabel(connector.health_status)],
   ].forEach(([label, value]) => {
     const cell = document.createElement("div");
@@ -3682,7 +3683,7 @@ function connectorCard(connector, historical = false) {
     const connected = connector.connection_state === "connected";
     current.textContent = connected
       ? "当前连接 · Agent 身份和历史记录会独立保留"
-      : "授权已完成，但本机配置和首次报到尚未完成；现在不能收发消息";
+      : "授权已完成，但本机配置和首次连接尚未完成；现在不能收发消息";
     const revoke = document.createElement("button");
     revoke.type = "button";
     revoke.className = "quiet-button danger";
