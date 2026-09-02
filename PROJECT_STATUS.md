@@ -2,7 +2,7 @@
 
 Last updated: 2026-09-02
 
-Current handoff stage: `v0.1.44-targeted-runs-and-task-attachments-local-candidate`
+Current handoff stage: `v0.1.44-targeted-runs-and-task-attachments-deployed`
 
 ## Current local candidate
 
@@ -35,19 +35,21 @@ configuration, and test paths.
 - Orbit and TypeScript JavaScript: 40 passed.
 - Non-PostgreSQL Pytest: 452 passed, one expected loopback sandbox skip, five PostgreSQL tests deselected.
 - Fresh SQLite Alembic chain: blocked at the pre-existing 0019 constraint-alter limitation before reaching 0034.
-- PostgreSQL migration acceptance: `待确认`.
+- PostgreSQL 0030 → 0034 → 0030 → 0034 rehearsal and production upgrade: passed in the protected release switch.
 - Authenticated desktop and 390px Task list/detail: passed with zero horizontal overflow and no console errors; Run routing/wake labels and copyable Task ID were visible. A real task attachment card has API/DOM coverage but authenticated visual acceptance remains `待确认` because the isolated seed has no physical attachment.
 
 ## Production
 
-- Current production commit: `422c5cc3f10231e324797695e5f45b1e2161a22a`
-- Current production version/schema: `0.1.40 / 0030_task_messages`
+- Current production commit: `6609837`
+- Current production version/schema: `0.1.44 / 0034_task_run_routing`
 - State: `deployed_https_verified`, not `production_accepted`.
-- This 0.1.44 candidate has not been uploaded or deployed.
+- Protected switch reported `deploy_status=ok`; corrected full postflight reported `postflight_status=ok`.
+- Public health/ready report 0.1.44, protocol contract reports 0.3, the public wheel SHA-256 matches the release manifest, and an unknown wheel URL returns 404.
+- The authenticated production Task page loaded the four primary entries and existing Task data successfully.
+- The original postflight package expected the obsolete protocol contract 0.1. The assertion is corrected to 0.3 with a regression test; rerunning the otherwise unchanged postflight pipeline passed all gates.
 
 ## Next release gates
 
-1. Complete PostgreSQL upgrade/rollback acceptance through 0034 and verify Task, Friendship, Connector, message, and attachment counts.
-2. Complete authenticated visual acceptance of a real Task attachment card and Connector runtime details.
-3. Commit only the P0 slice and leave the two unrelated untracked management-report files untouched.
-4. Deploy only after explicit authorization, using the protected Alibaba Cloud release scripts and postflight gates.
+1. Complete authenticated visual acceptance of a real Task attachment card and Connector runtime details.
+2. Complete real-user cross-device acceptance before changing the state to `production_accepted`.
+3. Keep the two unrelated untracked management-report files untouched.

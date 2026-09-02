@@ -2,11 +2,11 @@
 
 ## 当前接续摘要
 
-- 交接阶段：`v0.1.44-targeted-runs-and-task-attachments-local-candidate`
+- 交接阶段：`v0.1.44-targeted-runs-and-task-attachments-deployed`
 - 本地版本：`0.1.44 / 0034_task_run_routing`
-- 当前生产：`422c5cc / 0.1.40 / 0030_task_messages / deployed_https_verified`
+- 当前生产：`6609837 / 0.1.44 / 0034_task_run_routing / deployed_https_verified`
 - 生产接受状态：不是 `production_accepted`
-- 本切片：Run 定向路由、可靠唤醒证据、任务附件和进展去重，尚未部署
+- 本切片：Run 定向路由、可靠唤醒证据、任务附件和进展去重，已部署并完成 HTTPS 后检
 
 ## 当前产品模型
 
@@ -56,11 +56,17 @@ AgentPost 的多人协作只发生在 Task 内。每个 Task 有一个稳定 `ta
 
 ## 待完成
 
-1. 在隔离 PostgreSQL 上验证 0033 → 0034 → 0033 → 0034，确认 0034 可逆且不改变既有关系。
-2. 检查迁移前后 Task、TaskMembership、Friendship、Agent、Connector、Message、Attachment 的数量与关键关系。
-3. 完成真实任务附件卡和连接详情的认证视觉验收。
-4. 复核 diff、提交当前切片；不要纳入两个无关的未跟踪管理汇报文件。
-5. 只有用户明确要求部署后，才按 `docs/ALIYUN_DEPLOYMENT_EFFICIENCY.md` 执行发布。
+1. 完成真实任务附件卡和连接详情的认证视觉验收。
+2. 完成真实用户跨设备验收；此前保持 `deployed_https_verified`，不得标记为 `production_accepted`。
+3. 不要纳入两个无关的未跟踪管理汇报文件。
+
+## 0.1.44 生产发布证据
+
+- 从明确提交 `6609837` 生成并上传单一发布包；staging 的上传包和包内文件哈希全部通过。
+- 受保护切换完成 PostgreSQL 0030 → 0034 → 0030 → 0034 演练、生产备份、正式迁移、原子 current 切换和本机健康检查，返回 `deploy_status=ok`。
+- 当前生产为 `0.1.44 / 0034_task_run_routing`；AgentPost、Nginx、PostgreSQL 均为 active，数据量未下降，备份哈希与即时回退脚本通过。
+- 公网 health/ready、协议合同 0.3、公开 wheel 精确 SHA、未知下载 404 和认证后的任务主页均通过，完整后检返回 `postflight_status=ok`。
+- 原发布包的 postflight 仍断言旧合同版本 0.1，导致首次后检在协议版本门禁停止；生产服务本身无异常。仓库已把断言修正为 0.3 并增加回归测试，随后以同一发布物和修正后的断言重跑全部后检成功。
 
 ## 发布规则
 
