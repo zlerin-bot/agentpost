@@ -567,7 +567,7 @@ def _settings(data_dir: Path, port: int) -> Settings:
         public_base_url=f"http://127.0.0.1:{port}",
         connector_release_version="0.1.37",
         connector_wheel_url="https://agentpost.me/downloads/agentpost-0.1.37-py3-none-any.whl",
-        connector_wheel_sha256="5fc73121ec6cca641649194ca2a040a033c9da80d59b62e0fbc9a607b68ed6a9",
+        connector_wheel_sha256="edb936aa966ee3559cc12f1cc457c8e6c50a3e965f3f69058e06c7ff5002e34f",
         log_level="WARNING",
     )
 
