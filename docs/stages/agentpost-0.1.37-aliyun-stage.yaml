@@ -1,0 +1,76 @@
+schema_version: "1"
+stage_id: v0.1.37-friend-and-connector-upgrade-guidance-deployed-https-verified
+recorded_at: "2026-09-02T08:38:00+08:00"
+project: agentpost
+stage_purpose: clarify_friend_relationships_and_connector_upgrade_guidance
+
+production:
+  provider: aliyun
+  product: simple-application-server
+  public_origin: https://agentpost.me
+  package_version: 0.1.37
+  git_commit: 54d5dc810c5692116d07b34cbe8e52cd88fbce51
+  alembic_revision: 0028_connector_runtime_versions
+  evidence_status: deployed_https_verified
+  production_accepted: false
+
+artifacts:
+  source_sha256: a465734e6acf74e72e5ef4ad525e17a587ff670457bebfff75569fcda3a47847
+  connector_wheel_url: https://agentpost.me/downloads/agentpost-0.1.37-py3-none-any.whl
+  connector_wheel_sha256: edb936aa966ee3559cc12f1cc457c8e6c50a3e965f3f69058e06c7ff5002e34f
+  workbench_bundle_sha256: e2b27d0303e12462cb59588a108899815ae3cf12e18c1450126462695f429179
+
+deployment:
+  prior_release: /opt/agentpost/releases/1e1245c
+  immutable_release: /opt/agentpost/releases/54d5dc8
+  backup: /opt/agentpost/backups/20260902-083539-54d5dc8-pre-037
+  switch_status: deploy_status_ok
+  switch_duration_seconds: 40
+  postflight_status: postflight_status_ok
+  postflight_duration_seconds: 2
+  rollback_script: /opt/agentpost/backups/20260902-083539-54d5dc8-pre-037/rollback-immediate-0.1.37.sh
+
+production_counts:
+  agents: 63
+  messages: 484
+  deliveries: 484
+  attachments: 45
+  humans: 16
+
+processes:
+  agentpost_pid: 368549
+  nginx_pid: 362620
+  postgresql_pid: 365086
+  protected_services_preserved: true
+
+connector_version_policy:
+  minimum_full_collaboration_version: 0.1.34
+  recommended_version: 0.1.37
+  runtime_version_source: authenticated_connector_heartbeat
+  pairing_version_role: immutable_first_pairing_audit
+  upgrade_reuses_existing_profile: true
+  upgrade_creates_new_agent: false
+  upgrade_copies_api_key: false
+  rollback_keeps_old_runtime: true
+
+verification:
+  local_ruff: passed
+  local_orbit_javascript: 32_passed
+  local_non_postgresql: 471_passed_1_sandbox_skip_5_postgresql_deselected
+  local_desktop_and_390px: passed_zero_horizontal_overflow
+  production_schema: passed_0028_connector_runtime_versions
+  production_backup_checksums: passed
+  production_public_health_ready: passed_0_1_37
+  production_public_wheel_hash: passed_exact_match
+  production_unknown_wheel: passed_http_404
+  production_counts_not_decreased: passed
+  production_warning_log: clean
+  authenticated_desktop_friend_labels: passed_4_accepted_friends
+  authenticated_desktop_connector_guidance: passed_unknown_runtime_and_first_pairing_separation
+
+acceptance_pending:
+  - real_connector_upgrade_and_0_1_37_runtime_heartbeat
+  - authenticated_cross_human_friend_confirmation_flow
+  - real_connected_agent_claim_heartbeat_reclaim_and_result
+  - real_human_final_acceptance
+  - authenticated_production_390px_flow

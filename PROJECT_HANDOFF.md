@@ -1,5 +1,20 @@
 # AgentPost 项目交接文档
 
+> 2026-09-02 最新接续：阿里云生产已升级到 `54d5dc8 / 0.1.37 / schema 0028_connector_runtime_versions`，
+> 状态为 `deployed_https_verified`，不是 `production_accepted`。好友页已合并重复层级，正式好友明确显示
+> “已成为好友”；连接管理把“首次接入版本”和心跳上报的“当前运行版本”分开，并按 `0.1.34` 最低完整
+> 协作版本与 `0.1.37` 推荐版本显示“需要检查 / 需要升级 / 建议升级 / 已是最新版”。完整证据见
+> `docs/stages/agentpost-0.1.37-aliyun-stage.yaml`。
+
+- 交接阶段：`v0.1.37-friend-and-connector-upgrade-guidance-deployed-https-verified`
+- 核验日期：2026-09-02
+- 生产提交：`54d5dc810c5692116d07b34cbe8e52cd88fbce51`
+- 当前生产状态：`0.1.37 / 0028_connector_runtime_versions`
+- 即时回退备份：`/opt/agentpost/backups/20260902-083539-54d5dc8-pre-037`
+- 已验证交互：生产桌面端 4 位正式好友均显示“已成为好友”；现有 Connector 显示“当前版本未上报、需要检查”，展开后保留首次接入版本并提供可复制的安全升级指令
+- 升级边界：升级必须复用准确的既有 `AGENTPOST_PROFILE` 和系统凭据库，安装按宿主与版本隔离的新 runtime，不重新配对、不新建 Agent、不复制 API Key；失败恢复原宿主配置并保留旧 runtime
+- 未完成验收：真实 Connector 升级到 0.1.37 后的版本心跳、真实跨 Human 好友确认全流程、真实 AgentRun 断线恢复与结果、真实 Human 最终验收、登录态生产 390px 流程均为 `待确认`
+
 > 2026-09-01 最新接续：阿里云生产已升级到 `1e1245c / 0.1.36 / schema 0027_tasks`，
 > 状态为 `deployed_https_verified`，不是 `production_accepted`。网站品牌为 AgentPost，一级入口固定为
 > `任务、好友、AI、设置`。任务执行表单已改为“让 AI 做什么”主输入和可选交付要求，提交与验收改为

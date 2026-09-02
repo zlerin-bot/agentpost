@@ -1,8 +1,45 @@
 # AgentPost Project Status
 
-Last updated: 2026-09-01
+Last updated: 2026-09-02
 
-Current handoff stage: `v0.1.36-task-flow-simplified-deployed-https-verified`; pinned production release: `0.1.36`
+Current handoff stage: `v0.1.37-friend-and-connector-upgrade-guidance-deployed-https-verified`; pinned production release: `0.1.37`
+
+## Friend clarity and Connector upgrade guidance (0.1.37 deployed HTTPS verified, 2026-09-02)
+
+Production now runs Git commit `54d5dc8`, package `0.1.37`, and Alembic revision
+`0028_connector_runtime_versions`. The friend workspace has one hierarchy instead of repeating “我的好友 / 协作好友”.
+Its default filter is formal friends, with separate `待确认` and `联系过的人` filters. Accepted rows use the explicit
+relationship label `已成为好友`; they no longer derive a misleading `待确定` badge from an absent contact timestamp.
+
+Connector pairing metadata remains immutable audit evidence as `首次接入版本`. A new heartbeat field records the actual
+`当前运行版本` and report time. The server compares that fact with minimum full-collaboration version `0.1.34` and the
+current recommended release `0.1.37`, returning `unknown`, `update_required`, `update_available`, or `current`.
+Current active connections that are not confirmed current expose a copyable upgrade instruction. It requires reuse of the
+exact existing non-secret `AGENTPOST_PROFILE` and credential store, a new host-and-version-isolated runtime, hash validation,
+host configuration switch, heartbeat/Inbox/adapter verification, and restoration of the old configuration on failure.
+
+Local evidence: Ruff check and format passed; all 32 Orbit JavaScript tests passed; the non-PostgreSQL suite reported
+471 passed, one expected loopback sandbox skip, and five PostgreSQL tests deselected. Desktop and 390x844 browser checks
+covered the friend filters, explicit relationship badges, version states, expanded upgrade instructions, copying, and zero
+horizontal overflow.
+
+The clean release commit is `54d5dc8`. Source, wheel, and single Workbench upload bundle SHA-256 values are respectively
+`a465734e6acf74e72e5ef4ad525e17a587ff670457bebfff75569fcda3a47847`,
+`edb936aa966ee3559cc12f1cc457c8e6c50a3e965f3f69058e06c7ff5002e34f`, and
+`e2b27d0303e12462cb59588a108899815ae3cf12e18c1450126462695f429179`.
+
+The guarded switch returned `deploy_status=ok release=0.1.37 commit=54d5dc8` in 40 seconds. Its recoverable backup is
+`/opt/agentpost/backups/20260902-083539-54d5dc8-pre-037`. Independent postflight returned `postflight_status=ok` with
+schema `0028_connector_runtime_versions`; live counts were 63 Agents / 484 Messages / 484 Deliveries / 45 Attachments /
+16 Humans. AgentPost, Nginx, and PostgreSQL PIDs after release were `368549 / 362620 / 365086`. Public health/readiness,
+the exact public wheel hash, fabricated wheel 404, backup checksums, rollback syntax, environment permissions, and clean
+warning log all passed. In the authenticated production desktop UI, all four accepted friends display `已成为好友`.
+The existing connectors correctly remain `当前版本：未上报 / 需要检查` until a new heartbeat supplies runtime evidence;
+their historical first-pairing versions such as `agentpost-connect/0.1.5` remain visible only in connection details.
+
+Current evidence status is `deployed_https_verified`, not `production_accepted`. A real Connector upgrade followed by a
+0.1.37 version heartbeat, authenticated production 390px verification, cross-Human friendship confirmation, real AgentRun
+recovery/result, and real Human final acceptance remain `待确认`.
 
 ## AgentPost simplified task execution and acceptance flow (0.1.36 deployed HTTPS verified, 2026-09-01)
 
