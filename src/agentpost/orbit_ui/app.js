@@ -163,7 +163,9 @@ const elements = {
   projectActionResult: document.querySelector("#project-action-result"),
   projectMemberList: document.querySelector("#project-member-list"),
   taskMyAgentForm: document.querySelector("#task-my-agent-form"),
-  taskMyAgentSelect: document.querySelector("#task-my-agent-select"),
+  taskMyAgentOptions: document.querySelector("#task-my-agent-options"),
+  taskMyPrimaryAgent: document.querySelector("#task-my-primary-agent"),
+  taskAddAgent: document.querySelector("#task-add-agent"),
   taskMyAgentHelp: document.querySelector("#task-my-agent-help"),
   projectInvite: document.querySelector("#project-invite"),
   projectMemberInvite: document.querySelector("#project-member-invite"),
@@ -444,9 +446,7 @@ function friendById(friendId) {
 
 function ownedTaskAgents() {
   const agents = Array.isArray(state.dashboard?.agents) ? state.dashboard.agents : [];
-  return agents.filter(
-    (agent) => agent.access_source === "direct" && agent.role === "owner" && agent.status === "active",
-  );
+  return agents.filter((agent) => agent.role === "owner" && agent.status === "active");
 }
 
 function projectStatusLabel(project) {
@@ -737,6 +737,7 @@ function visibleTaskAssignments(project) {
   const latest = new Map();
   (project.assignments || [])
     .filter((assignment) => assignment.assignment_kind !== "result_sync")
+    .filter((assignment) => assignment.cancellation_reason !== "legacy_pre_0_1_44_backlog")
     .forEach((assignment) => {
       const source = assignment.source_activity_id || assignment.assignment_id;
       const key = [source, assignment.responsible_human_user_id, assignment.assignee_agent_id].join(":");
@@ -746,6 +747,38 @@ function visibleTaskAssignments(project) {
       }
     });
   return [...latest.values()];
+}
+
+function humanColorTone(humanUserId) {
+  return [...String(humanUserId || "")]
+    .reduce((value, character) => (value * 31 + character.charCodeAt(0)) % 6, 0);
+}
+
+function taskProgressSummary(assignment) {
+  const raw = String(assignment.result_summary || assignment.instruction || "").trim();
+  if (raw.length <= 320) {
+    return raw;
+  }
+  return `${raw.slice(0, 320).trimEnd()}…\n完整内容请在“任务记录”中查看。`;
+}
+
+function syncTaskPrimaryAgentOptions(preferredAgentId = "") {
+  const selected = Array.from(
+    elements.taskMyAgentOptions.querySelectorAll('input[name="task-my-agent"]:checked'),
+  );
+  const previous = preferredAgentId || elements.taskMyPrimaryAgent.value;
+  elements.taskMyPrimaryAgent.replaceChildren();
+  selected.forEach((input) => {
+    const option = document.createElement("option");
+    option.value = input.value;
+    option.textContent = input.dataset.agentName;
+    option.selected = String(input.value) === String(previous);
+    elements.taskMyPrimaryAgent.append(option);
+  });
+  if (selected.length && !elements.taskMyPrimaryAgent.value) {
+    elements.taskMyPrimaryAgent.value = selected[0].value;
+  }
+  elements.taskMyPrimaryAgent.disabled = !selected.length;
 }
 
 function taskStateAxesLabel(project) {
@@ -861,18 +894,35 @@ function renderProjectDetail() {
   const currentMember = project.members.find(
     (member) => String(member.human_user_id) === currentUserId,
   );
-  elements.taskMyAgentSelect.replaceChildren();
+  elements.taskMyAgentOptions.replaceChildren();
+  const selectedAgentIds = new Set((currentMember?.agents || []).map((agent) => String(agent.agent_id)));
   ownedTaskAgents().forEach((agent) => {
-    const option = document.createElement("option");
-    option.value = agent.id;
-    option.textContent = agentDisplayName(agent);
-    option.selected = String(currentMember?.primary_agent_id || "") === String(agent.id);
-    elements.taskMyAgentSelect.append(option);
+    const label = document.createElement("label");
+    label.className = "task-agent-option";
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.name = "task-my-agent";
+    input.value = agent.id;
+    input.dataset.agentName = agentDisplayName(agent);
+    input.checked = selectedAgentIds.has(String(agent.id));
+    input.addEventListener("change", () => syncTaskPrimaryAgentOptions());
+    const copy = document.createElement("span");
+    const name = document.createElement("strong");
+    name.textContent = agentDisplayName(agent);
+    const capability = document.createElement("small");
+    capability.textContent = Array.isArray(agent.capabilities) && agent.capabilities.length
+      ? agent.capabilities.join(" · ")
+      : "暂未声明能力";
+    copy.append(name, capability);
+    label.append(input, copy);
+    elements.taskMyAgentOptions.append(label);
   });
+  syncTaskPrimaryAgentOptions(currentMember?.primary_agent_id || "");
   elements.taskMyAgentForm.hidden = !currentMember || !ownedTaskAgents().length;
+  elements.taskAddAgent.hidden = !currentMember;
   elements.taskMyAgentHelp.textContent = currentMember?.agent_selection_source === "default"
-    ? "当前由你的默认 Agent 自动参与；你可以在这里改成更适合本任务的 Agent。"
-    : "当前使用你为这个任务明确选择的 Agent。";
+    ? "当前由默认 AI 自动参与；可以继续勾选其他自己的 AI，并指定主要 AI。"
+    : `当前有 ${selectedAgentIds.size} 个 AI 参与；新增选择会进入协同队列。`;
 
   elements.projectMemberList.replaceChildren();
   [...project.members].sort((left, right) => {
@@ -928,7 +978,8 @@ function renderProjectDetail() {
   elements.projectCollaborationList.replaceChildren();
   visibleAssignments.forEach((assignment) => {
     const row = document.createElement("article");
-    row.className = "project-collaboration-row";
+    const humanTone = humanColorTone(assignment.responsible_human_user_id);
+    row.className = `project-collaboration-row human-tone-${humanTone}`;
     const avatar = document.createElement("span");
     avatar.className = "project-progress-avatar";
     avatar.textContent = assignment.responsible_human_display_name.slice(0, 1);
@@ -938,6 +989,8 @@ function renderProjectDetail() {
     heading.className = "project-progress-heading";
     const name = document.createElement("strong");
     name.textContent = assignment.responsible_human_display_name;
+    const time = document.createElement("time");
+    time.textContent = dateText(assignment.updated_at || assignment.created_at);
     const status = document.createElement("span");
     const statusLabels = {
       queued: "等待 Agent 上线",
@@ -952,7 +1005,7 @@ function renderProjectDetail() {
     };
     status.textContent = statusLabels[assignment.run_status || assignment.status]
       || assignment.run_status || assignment.status;
-    heading.append(name, status);
+    heading.append(name, time, status);
     const agent = document.createElement("small");
     agent.textContent = "使用 AI：" + assignment.assignee_agent_display_name;
     const route = document.createElement("small");
@@ -969,7 +1022,7 @@ function renderProjectDetail() {
       + `优先级 ${priorityLabels[assignment.priority] || assignment.priority} · `
       + `${wakeLabels[assignment.wake_stage] || assignment.wake_stage}`;
     const summary = document.createElement("p");
-    summary.textContent = assignment.result_summary || assignment.instruction;
+    summary.textContent = taskProgressSummary(assignment);
     copy.append(heading, agent, route, summary);
     row.append(avatar, copy);
     elements.projectCollaborationList.append(row);
@@ -1406,8 +1459,15 @@ async function decideSelectedProjectInvitation(accept) {
 async function saveMyTaskAgent(event) {
   event.preventDefault();
   const project = state.selectedProject;
-  const agentId = elements.taskMyAgentSelect.value;
-  if (!project || !agentId) {
+  const agentIds = Array.from(
+    elements.taskMyAgentOptions.querySelectorAll('input[name="task-my-agent"]:checked'),
+  ).map((input) => input.value);
+  const primaryAgentId = elements.taskMyPrimaryAgent.value;
+  if (!project) {
+    return;
+  }
+  if (!agentIds.length || !primaryAgentId) {
+    elements.projectActionResult.textContent = "请至少选择一个参与 AI，并指定主要 AI。";
     return;
   }
   try {
@@ -1416,11 +1476,11 @@ async function saveMyTaskAgent(event) {
       {
         method: "PUT",
         headers: { "Content-Type": "application/json", "X-CSRF-Token": state.csrfToken },
-        body: JSON.stringify({ agent_ids: [agentId], primary_agent_id: agentId }),
+        body: JSON.stringify({ agent_ids: agentIds, primary_agent_id: primaryAgentId }),
       },
     );
     renderProjectDetail();
-    elements.projectActionResult.textContent = "参与 Agent 已更新，新 Agent 已进入协同队列。";
+    elements.projectActionResult.textContent = `已保存 ${agentIds.length} 个参与 AI；新加入的 AI 已进入协同队列。`;
   } catch (error) {
     elements.projectActionResult.textContent = error.message;
   }
@@ -1552,6 +1612,9 @@ function initializeCollaborationModules() {
   elements.projectInviteCancel.addEventListener("click", closeProjectInviteDialog);
   elements.taskAssignmentForm.addEventListener("submit", createTaskAssignment);
   elements.taskMyAgentForm.addEventListener("submit", saveMyTaskAgent);
+  elements.taskAddAgent.addEventListener("click", () => {
+    activateRoute("relay", "agents", { focusContent: true });
+  });
   elements.projectTaskIdCopy.addEventListener("click", async () => {
     const taskId = state.selectedProject?.task_id;
     if (!taskId) {

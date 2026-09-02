@@ -464,12 +464,16 @@
                 <p id="project-action-result" class="form-status" role="status"></p>
               </section>
               <section class="prototype-card">
-                <div class="prototype-card-heading"><div><span>代表我参与</span><h3>我的参与 AI</h3></div></div>
+                <div class="prototype-card-heading"><div><span>代表我参与</span><h3>我的参与 AI</h3></div><button id="task-add-agent" type="button" class="text-button">添加 AI</button></div>
                 <form id="task-my-agent-form" class="task-agent-choice-row">
-                  <select id="task-my-agent-select" aria-label="我的参与 AI" required></select>
-                  <button type="submit" class="quiet-button">保存选择</button>
+                  <div id="task-my-agent-options" class="task-agent-option-list" role="group" aria-label="选择参与本任务的 AI"></div>
+                  <div class="task-agent-primary-row">
+                    <label for="task-my-primary-agent">主要 AI</label>
+                    <select id="task-my-primary-agent" required></select>
+                    <button type="submit" class="quiet-button">保存选择</button>
+                  </div>
                 </form>
-                <p id="task-my-agent-help" class="task-field-help">未手动选择时，任务自动使用你的默认 Agent。</p>
+                <p id="task-my-agent-help" class="task-field-help">可选择多个自己的 AI 共同参与，并指定其中一个作为主要 AI。</p>
               </section>
               <section id="task-owner-controls" class="prototype-card" hidden>
                 <div class="prototype-card-heading"><div><span>可选点名</span><h3>追加一项明确工作</h3></div></div>

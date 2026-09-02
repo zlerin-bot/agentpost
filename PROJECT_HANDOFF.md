@@ -2,11 +2,11 @@
 
 ## 当前接续摘要
 
-- 交接阶段：`v0.1.44-targeted-runs-and-task-attachments-deployed`
-- 本地版本：`0.1.44 / 0034_task_run_routing`
+- 交接阶段：`v0.1.45-backlog-cleanup-and-multi-agent-local-candidate`
+- 本地版本：`0.1.45 / 0035_cancel_legacy_task_backlog`
 - 当前生产：`6609837 / 0.1.44 / 0034_task_run_routing / deployed_https_verified`
 - 生产接受状态：不是 `production_accepted`
-- 本切片：Run 定向路由、可靠唤醒证据、任务附件和进展去重，已部署并完成 HTTPS 后检
+- 本切片：清理 0.1.44 前无效自动 Run 积压、Human 进展时间/配色、多自有 AI 参与选择；本地完成，尚未部署
 
 ## 当前产品模型
 
@@ -21,6 +21,13 @@ AgentPost 的多人协作只发生在 Task 内。每个 Task 有一个稳定 `ta
 权威设计见 `docs/TASK_CORE_MODEL.md`；未来开发约束见 `AGENTS.md`。
 
 ## 本切片已经完成
+
+- 新增 0035 迁移：只取消 0.1.44 上线前仍未结束的自动 `participant_start`、`task_message`、`result_sync` Assignment/Run；保留原记录并写入 `legacy_pre_0_1_44_backlog`，不会删除审计历史或在回退时重新唤醒。
+- 当前状态轴、Assignment 总数和待处理数排除上述历史清理记录，避免无效积压继续污染 Human 的“当前进展”。
+- “当前进展”以 Human 为主体，为每条记录显示更新时间，并通过 Human ID 生成稳定的六组视觉色调；长内容在进展列截断并引导查看任务记录。
+- 修复“我的参与 AI”为空的前端过滤错误。Human 现在可以勾选最多 16 个自己的有效 AI、指定一个主要 AI并保存；新增 AI 可直接跳转到 AI 连接页。
+- 新增集成覆盖：同一 Human 的两个 AI 同时进入一个 Task、切换主 AI不重复建 Assignment，以及历史清理记录不进入当前状态计数。
+- 包、Python SDK、MCP、TypeScript Connector 和插件版本统一为 0.1.45；协议合同保持 0.3。
 
 - 删除旧运行时模型、数据关系、服务、API、权限派生和配置。
 - 删除 Human UI 中的旧入口、筛选、卡片、弹窗、时间线分支和样式。
@@ -47,8 +54,10 @@ AgentPost 的多人协作只发生在 Task 内。每个 Task 有一个稳定 `ta
 
 - `.venv/bin/ruff check .`：通过。
 - `.venv/bin/ruff format --check .`：通过。
-- Orbit 与 TypeScript JavaScript：40 passed。
-- `.venv/bin/pytest -m "not postgres" -q`：452 passed、1 expected skip、5 deselected。
+- Orbit 与 TypeScript JavaScript：45 passed；TypeScript compile 通过。
+- `.venv/bin/pytest -m "not postgres"`：454 passed、1 expected skip、5 deselected。
+- Alembic 迁移图只有一个 head：`0035_cancel_legacy_task_backlog`。
+- 认证桌面隔离环境已通过：两个 AI 勾选、主 AI切换、保存后成员显示、添加 AI 跳转、进展时间与 Human 配色，且无横向溢出。
 - 旧目录/频道关键字扫描：运行时 `src`、SDK、MCP、OpenClaw、插件和 Skill 无旧能力残留；迁移与反向门禁测试中保留必要名称。
 - 隔离演示种子已改为 Task API，不再依赖旧多人容器；认证后的桌面端与 390px 任务列表/详情均通过，页面无横向溢出，控制台无 warning/error。
 - 认证后的桌面和 390px 任务列表/详情无横向溢出、无 console error；Run 路由/唤醒标签与任务 ID 复制入口可见。真实任务附件卡因隔离种子没有物理附件，API/DOM 已覆盖但认证视觉验收仍为 `待确认`。
@@ -56,9 +65,11 @@ AgentPost 的多人协作只发生在 Task 内。每个 Task 有一个稳定 `ta
 
 ## 待完成
 
-1. 完成真实任务附件卡和连接详情的认证视觉验收。
-2. 完成真实用户跨设备验收；此前保持 `deployed_https_verified`，不得标记为 `production_accepted`。
-3. 不要纳入两个无关的未跟踪管理汇报文件。
+1. 在受保护 PostgreSQL 副本演练 0035，先核对拟取消行数，再验证迁移和回退结构；本地没有把 SQLite 结果冒充 PostgreSQL 证据。
+2. 完成 390px 下多 AI 选择器和 Human 进展配色的视觉验收。
+3. 完成真实任务附件卡和连接详情的认证视觉验收。
+4. 本切片尚未部署；生产仍是 0.1.44。部署后仍需真实用户跨设备验收，此前不得标记为 `production_accepted`。
+5. 不要纳入两个无关的未跟踪管理汇报文件。
 
 ## 0.1.44 生产发布证据
 

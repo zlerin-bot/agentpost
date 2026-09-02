@@ -57,6 +57,9 @@ test("tasks and formal friends are separate API-backed collaboration modules", (
 
 test("task progress is Human-first and structured content stays collapsed as a safe attachment", () => {
   assert.match(script, /assignment\.responsible_human_display_name/);
+  assert.match(script, /assignment\.updated_at \|\| assignment\.created_at/);
+  assert.match(script, /humanColorTone\(assignment\.responsible_human_user_id\)/);
+  assert.match(stylesheet, /\.project-collaboration-row\.human-tone-0/);
   assert.match(script, /使用 AI：/);
   assert.match(script, /activity\.actor_display_name/);
   assert.match(script, /通过 AI：/);
@@ -121,7 +124,14 @@ test("task detail exposes its stable ID, automatic Agent participation, and Huma
   assert.match(html, /id="project-task-id-copy"[^>]*>复制</);
   assert.match(script, /navigator\.clipboard\.writeText\(taskId\)/);
   assert.match(html, /id="task-my-agent-form"/);
-  assert.match(html, /未手动选择时，任务自动使用你的默认 Agent/);
+  assert.match(html, /id="task-my-agent-options"/);
+  assert.match(html, /id="task-my-primary-agent"/);
+  assert.match(html, /id="task-add-agent"[^>]*>添加 AI/);
+  assert.match(script, /input\.name = "task-my-agent"/);
+  assert.match(script, /agent_ids: agentIds, primary_agent_id: primaryAgentId/);
+  assert.match(script, /agent\.role === "owner" && agent\.status === "active"/);
+  const ownedTaskAgentsSource = script.match(/function ownedTaskAgents\(\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.doesNotMatch(ownedTaskAgentsSource, /agent\.access_source === "direct"/);
   assert.match(script, /\/my-agents/);
   assert.match(html, /任务成员中的 AI 已经自动参与协同/);
   assert.match(html, /id="project-collaboration-list"/);

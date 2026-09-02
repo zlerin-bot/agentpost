@@ -1,18 +1,20 @@
 # AgentPost Project Status
 
-Last updated: 2026-09-02
+Last updated: 2026-09-03
 
-Current handoff stage: `v0.1.44-targeted-runs-and-task-attachments-deployed`
+Current handoff stage: `v0.1.45-backlog-cleanup-and-multi-agent-local-candidate`
 
 ## Current local candidate
 
-- Version: `0.1.44`
-- Schema: `0034_task_run_routing`
+- Version: `0.1.45`
+- Schema: `0035_cancel_legacy_task_backlog`
 - Collaboration model: Task is the only multi-Human collaboration scope.
 - Human navigation: 任务、好友、AI、设置。
 - Task identity: one stable `task_id`, one main `thread_id`, with a Human-facing copy action.
 - Membership authority: `TaskMembership` only.
-- Agent participation: Human-selected Agents, or the Human default Agent when none is selected.
+- Agent participation: a Human can select one or more owned active Agents and designate one primary Agent; the Human default Agent remains the fallback when none was explicitly selected.
+- Legacy backlog: pre-0.1.44 automatic participant-start, task-message, and result-sync work that never reached a terminal state is cancelled with an explicit reason, retained for audit, and excluded from current progress/state totals.
+- Human progress: every AI progress card shows its update time and uses a stable per-Human color tone; long structured output remains in Task records/attachment cards instead of expanding the progress column.
 - Execution reliability: pending Run preview, task/assignment-targeted claim, lease, heartbeat, local-session wake evidence, idempotent result, and separate Human acceptance.
 - Execution pointers: each Run exposes its source activity/message, target Human/Agent, reply Thread, priority, and wake stage; body mentions never create implicit targeted assignments.
 - Task files: Agent task messages accept attachment IDs; active Task Agents can read those attachments while outsiders retain the existing not-found boundary.
@@ -32,11 +34,14 @@ configuration, and test paths.
 
 - Ruff check: passed.
 - Ruff format check: passed.
-- Orbit and TypeScript JavaScript: 40 passed.
-- Non-PostgreSQL Pytest: 452 passed, one expected loopback sandbox skip, five PostgreSQL tests deselected.
-- Fresh SQLite Alembic chain: blocked at the pre-existing 0019 constraint-alter limitation before reaching 0034.
+- Orbit and TypeScript JavaScript: 45 passed.
+- TypeScript compile: passed.
+- Non-PostgreSQL Pytest: 454 passed, one expected loopback sandbox skip, five PostgreSQL tests deselected.
+- Alembic graph: one head at `0035_cancel_legacy_task_backlog`.
+- Fresh SQLite Alembic chain: blocked at the pre-existing 0019 constraint-alter limitation before reaching 0035.
 - PostgreSQL 0030 → 0034 → 0030 → 0034 rehearsal and production upgrade: passed in the protected release switch.
 - Authenticated desktop and 390px Task list/detail: passed with zero horizontal overflow and no console errors; Run routing/wake labels and copyable Task ID were visible. A real task attachment card has API/DOM coverage but authenticated visual acceptance remains `待确认` because the isolated seed has no physical attachment.
+- Authenticated desktop 0.1.45 candidate: passed for two-Agent selection, primary-Agent switching, save/reload, add-Agent navigation, Human colors, timestamps, and zero horizontal overflow. The changed 390px layout and PostgreSQL 0035 data migration remain `待确认` before release.
 
 ## Production
 
@@ -51,5 +56,7 @@ configuration, and test paths.
 ## Next release gates
 
 1. Complete authenticated visual acceptance of a real Task attachment card and Connector runtime details.
-2. Complete real-user cross-device acceptance before changing the state to `production_accepted`.
-3. Keep the two unrelated untracked management-report files untouched.
+2. Rehearse the 0035 cleanup migration against a protected PostgreSQL copy and verify cancelled-row counts before release.
+3. Complete 390px acceptance for the multi-Agent selector and progress colors.
+4. Complete real-user cross-device acceptance before changing the state to `production_accepted`.
+5. Keep the two unrelated untracked management-report files untouched.

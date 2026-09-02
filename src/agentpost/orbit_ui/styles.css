@@ -5359,12 +5359,62 @@ footer {
 
 .task-agent-choice-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
-  align-items: center;
 }
 
-.task-agent-choice-row select {
+.task-agent-option-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+.task-agent-option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  border: 1px solid #e3e7ed;
+  border-radius: 11px;
+  padding: 9px 10px;
+  cursor: pointer;
+}
+
+.task-agent-option:has(input:checked) {
+  border-color: #a8c7fa;
+  background: #f8fbff;
+}
+
+.task-agent-option span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.task-agent-option strong {
+  color: #202124;
+  font-size: 0.72rem;
+}
+
+.task-agent-option small {
+  color: #80868b;
+  font-size: 0.62rem;
+  overflow-wrap: anywhere;
+}
+
+.task-agent-primary-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.task-agent-primary-row label {
+  color: #5f6368;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.task-agent-primary-row select {
   min-width: 0;
   border: 1px solid #dadce0;
   border-radius: 9px;
@@ -5385,11 +5435,32 @@ footer {
   border: 1px solid #e3e7ed;
   border-radius: 11px;
   padding: 10px 12px;
+  border-left: 4px solid var(--human-accent, #1a73e8);
+  background: var(--human-surface, #fff);
+}
+
+.project-collaboration-row.human-tone-0 { --human-accent: #1a73e8; --human-surface: #f8fbff; }
+.project-collaboration-row.human-tone-1 { --human-accent: #7b1fa2; --human-surface: #fcf8ff; }
+.project-collaboration-row.human-tone-2 { --human-accent: #137333; --human-surface: #f6fbf7; }
+.project-collaboration-row.human-tone-3 { --human-accent: #b06000; --human-surface: #fffaf3; }
+.project-collaboration-row.human-tone-4 { --human-accent: #c5221f; --human-surface: #fff8f7; }
+.project-collaboration-row.human-tone-5 { --human-accent: #007b83; --human-surface: #f4fbfc; }
+
+.project-collaboration-row .project-progress-avatar {
+  background: var(--human-accent, #1a73e8);
+  color: #fff;
 }
 
 .project-progress-heading strong {
   color: #202124;
   font-size: 0.74rem;
+  margin-right: auto;
+}
+
+.project-progress-heading time {
+  color: #80868b;
+  font-size: 0.62rem;
+  white-space: nowrap;
 }
 
 .project-progress-heading > span {
@@ -5508,6 +5579,11 @@ footer {
 
   .task-agent-choice-row {
     grid-template-columns: 1fr;
+  }
+
+  .task-agent-primary-row {
+    grid-template-columns: 1fr;
+    align-items: stretch;
   }
 
   .prototype-detail-heading,

@@ -550,8 +550,11 @@ def _task_state_axes(
     task: Task,
     assignments: list[TaskAssignmentResponse],
 ) -> TaskStateAxes:
+    effective_assignments = [
+        item for item in assignments if item.cancellation_reason != "legacy_pre_0_1_44_backlog"
+    ]
     run_counts = {"queued": 0, "active": 0, "waiting_human": 0, "terminal": 0}
-    for assignment in assignments:
+    for assignment in effective_assignments:
         status = assignment.run_status or assignment.status
         if status == "queued":
             run_counts["queued"] += 1
@@ -562,10 +565,12 @@ def _task_state_axes(
         else:
             run_counts["terminal"] += 1
 
-    result_states = {item.result_status for item in assignments if item.result_status}
+    result_states = {item.result_status for item in effective_assignments if item.result_status}
     if not result_states:
         result_status = "none"
-    elif len([item for item in assignments if item.result_status]) != len(assignments):
+    elif len([item for item in effective_assignments if item.result_status]) != len(
+        effective_assignments
+    ):
         result_status = "mixed"
     elif len(result_states) == 1:
         result_status = next(iter(result_states))
@@ -686,11 +691,13 @@ def _task_detail(session: Session, *, task: Task, viewer_membership: TaskMembers
             status=item.status,
             result_status=item.result_status,
             result_summary=item.result_summary,
+            cancellation_reason=item.cancellation_reason,
             run_status=(latest_run[item.id].status if item.id in latest_run else None),
             wake_stage=(
                 _run_wake_stage(latest_run[item.id]) if item.id in latest_run else "queued"
             ),  # type: ignore[arg-type]
             created_at=_as_utc(item.created_at),
+            updated_at=_as_utc(item.updated_at),
         )
         for item in assignment_rows
     ]
@@ -742,7 +749,12 @@ def _task_detail(session: Session, *, task: Task, viewer_membership: TaskMembers
     owner = session.get(HumanUser, task.owner_human_user_id)
     if owner is None:
         raise TaskNotFoundError
-    pending_count = sum(item.status not in {"completed", "cancelled"} for item in assignment_rows)
+    effective_assignment_rows = [
+        item for item in assignment_rows if item.cancellation_reason != "legacy_pre_0_1_44_backlog"
+    ]
+    pending_count = sum(
+        item.status not in {"completed", "cancelled"} for item in effective_assignment_rows
+    )
     return TaskDetail(
         task_id=task.id,
         thread_id=task.thread_id,
@@ -759,7 +771,7 @@ def _task_detail(session: Session, *, task: Task, viewer_membership: TaskMembers
         membership_status=viewer_membership.status,  # type: ignore[arg-type]
         active_member_count=sum(item.status == "active" for item, _ in membership_rows),
         invited_member_count=sum(item.status == "invited" for item, _ in membership_rows),
-        assignment_count=len(assignment_rows),
+        assignment_count=len(effective_assignment_rows),
         pending_assignment_count=pending_count,
         state_axes=_task_state_axes(task, assignments),
         final_summary=task.final_summary,

@@ -281,9 +281,11 @@ class TaskAssignmentResponse(TaskModel):
     status: str
     result_status: str | None
     result_summary: str | None
+    cancellation_reason: str | None
     run_status: str | None
     wake_stage: Literal["queued", "claimed", "mapped", "woken", "running", "finished"]
     created_at: datetime
+    updated_at: datetime
 
 
 class TaskActivityResponse(TaskModel):

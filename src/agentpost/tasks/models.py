@@ -247,6 +247,7 @@ class TaskAssignment(Base):
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     result_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
     result_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cancellation_reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )
@@ -303,6 +304,7 @@ class AgentRun(Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     checkpoint: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    cancellation_reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
     result_idempotency_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     result_request_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(

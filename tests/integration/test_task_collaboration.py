@@ -90,6 +90,79 @@ def _create_owned_agent(client: TestClient, *, human_id: str, handle: str) -> di
     return body
 
 
+def test_human_can_select_multiple_owned_agents_for_one_task(
+    settings: Settings, database: Database
+) -> None:
+    with TestClient(create_app(settings=_runtime(settings), database=database)) as client:
+        owner = _register(client, "multi-agent-owner")
+        first = _create_owned_agent(
+            client, human_id=str(owner["user"]["id"]), handle="multi-agent-first"
+        )
+        second = _create_owned_agent(
+            client, human_id=str(owner["user"]["id"]), handle="multi-agent-second"
+        )
+        csrf = _login(client, "multi-agent-owner")
+        first_id = first["agent"]["id"]
+        second_id = second["agent"]["id"]
+
+        created = client.post(
+            "/api/v1/tasks",
+            headers={"X-CSRF-Token": csrf},
+            json={
+                "title": "同一 Human 多 AI 协作",
+                "goal": "让两个自有 AI 在同一任务中协作",
+                "expected_output": "分别产生可追踪进展",
+                "agent_ids": [first_id, second_id],
+                "primary_agent_id": first_id,
+            },
+        )
+        assert created.status_code == 201, created.text
+        task_id = created.json()["task_id"]
+        member = created.json()["members"][0]
+        assert {agent["agent_id"] for agent in member["agents"]} == {first_id, second_id}
+        assert {agent["role"] for agent in member["agents"]} == {"primary", "support"}
+        assert len(created.json()["assignments"]) == 2
+
+        updated = client.put(
+            f"/api/v1/tasks/{task_id}/my-agents",
+            headers={"X-CSRF-Token": csrf},
+            json={
+                "agent_ids": [first_id, second_id],
+                "primary_agent_id": second_id,
+            },
+        )
+        assert updated.status_code == 200, updated.text
+        updated_member = updated.json()["members"][0]
+        assert updated_member["primary_agent_id"] == second_id
+        roles = {agent["agent_id"]: agent["role"] for agent in updated_member["agents"]}
+        assert roles == {first_id: "support", second_id: "primary"}
+        assert len(updated.json()["assignments"]) == 2
+
+        with database.session_factory() as session:
+            obsolete = session.scalar(
+                select(TaskAssignment).where(
+                    TaskAssignment.task_id == UUID(task_id),
+                    TaskAssignment.assignee_agent_id == UUID(first_id),
+                )
+            )
+            assert obsolete is not None
+            obsolete.status = "cancelled"
+            obsolete.cancellation_reason = "legacy_pre_0_1_44_backlog"
+            obsolete_run = session.scalar(
+                select(AgentRun).where(AgentRun.assignment_id == obsolete.id)
+            )
+            assert obsolete_run is not None
+            obsolete_run.status = "cancelled"
+            obsolete_run.cancellation_reason = "legacy_pre_0_1_44_backlog"
+            session.commit()
+
+        refreshed = client.get(f"/api/v1/tasks/{task_id}")
+        assert refreshed.status_code == 200, refreshed.text
+        assert refreshed.json()["assignment_count"] == 1
+        assert refreshed.json()["pending_assignment_count"] == 1
+        assert refreshed.json()["state_axes"]["run_counts"]["queued"] == 1
+
+
 def test_confirmed_friends_task_agent_selection_run_and_human_acceptance(
     settings: Settings, database: Database
 ) -> None:
