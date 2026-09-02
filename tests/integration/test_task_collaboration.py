@@ -489,6 +489,21 @@ def test_task_messages_use_legacy_inbox_and_native_run_without_breaking_old_conn
         assert native.json()["queued_run_count"] == 1
         assert native.json()["legacy_delivery_count"] == 0
 
+        owner_csrf = _login(client, "message-owner")
+        task_detail = client.get(
+            f"/api/v1/tasks/{task_id}",
+            headers={"X-CSRF-Token": owner_csrf},
+        )
+        assert task_detail.status_code == 200, task_detail.text
+        native_activity = next(
+            item
+            for item in task_detail.json()["activities"]
+            if item["metadata"].get("body") == "请继续协同"
+        )
+        assert native_activity["actor_display_name"] == "message-owner"
+        assert native_activity["actor_agent_display_name"] == "message-owner-ai"
+        assert native_activity["metadata"]["content_format"] == "markdown"
+
         with database.session_factory() as session:
             message_activities = list(
                 session.scalars(

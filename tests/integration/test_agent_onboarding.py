@@ -297,6 +297,110 @@ def test_zero_config_pairing_creates_owned_agent_and_preserves_offline_inbox(
         assert session.scalar(select(func.count()).select_from(Delivery)) == 1
 
 
+def test_outdated_connector_heartbeat_requests_upgrade_once_and_keeps_inbox_compatible(
+    settings: Settings,
+    database: Database,
+) -> None:
+    runtime = _runtime_settings(
+        settings,
+        connector_release_version="0.1.41",
+        connector_wheel_url=(
+            "https://agentpost.example/downloads/agentpost-0.1.41-py3-none-any.whl"
+        ),
+    )
+    with TestClient(create_app(settings=runtime, database=database)) as client:
+        pairing = _start_pairing(client, name="需要升级的 Codex")
+        human = _create_human(client, "upgrade-owner@example.com", "升级用户")
+        csrf = _login(client, human)
+        confirmation = _confirmation(client, human=human, csrf=csrf, pairing=pairing)
+        approved = _decide(
+            client,
+            pairing=pairing,
+            csrf=csrf,
+            confirmation=confirmation,
+            payload={"decision": "approved", "create_new_agent": True},
+            idempotency_key="approve-upgrade-test-connector",
+        )
+        assert approved.status_code == 200, approved.text
+        connector_id = approved.json()["connector"]["connector_id"]
+        token = client.post(
+            "/api/v1/connect/pairings/token",
+            json={"device_code": pairing["device_code"]},
+        )
+        assert token.status_code == 200, token.text
+        agent_key = token.json()["api_key"]
+
+        first = client.post(
+            "/api/v1/connect/heartbeat",
+            headers={"Authorization": f"Bearer {agent_key}"},
+            json={
+                "health_status": "healthy",
+                "client_version": "agentpost-connect/0.1.20",
+                "capabilities": [],
+            },
+        )
+        assert first.status_code == 200, first.text
+        directive = first.json()["upgrade"]
+        assert directive["action"] == "upgrade_required"
+        assert directive["target_version"] == "0.1.41"
+        assert directive["minimum_supported_version"] == "0.1.34"
+        assert "不要重新配对" in directive["prompt"]
+        assert first.headers["X-AgentPost-Upgrade-Action"] == "upgrade_required"
+        assert first.headers["X-AgentPost-Upgrade-Version"] == "0.1.41"
+
+        second = client.post(
+            "/api/v1/connect/heartbeat",
+            headers={"Authorization": f"Bearer {agent_key}"},
+            json={
+                "health_status": "healthy",
+                "client_version": "agentpost-connect/0.1.20",
+                "capabilities": [],
+            },
+        )
+        assert second.status_code == 200, second.text
+        assert (
+            second.json()["upgrade"]["notification_message_id"]
+            == directive["notification_message_id"]
+        )
+
+        inbox = client.get(
+            "/api/v1/inbox",
+            headers={"Authorization": f"Bearer {agent_key}"},
+        )
+        assert inbox.status_code == 200, inbox.text
+        upgrade_messages = [
+            item
+            for item in inbox.json()["items"]
+            if item["metadata"].get("agentpost_connector_upgrade")
+        ]
+        assert len(upgrade_messages) == 1
+        assert upgrade_messages[0]["message_id"] == directive["notification_message_id"]
+        assert upgrade_messages[0]["metadata"]["agentpost_connector_id"] == connector_id
+        assert "不要重新配对" in upgrade_messages[0]["content"]["body"]
+
+        upgraded = client.post(
+            "/api/v1/connect/heartbeat",
+            headers={"Authorization": f"Bearer {agent_key}"},
+            json={
+                "health_status": "healthy",
+                "client_version": "agentpost-connect/0.1.41",
+                "capabilities": ["task_context_read"],
+            },
+        )
+        assert upgraded.status_code == 200, upgraded.text
+        assert upgraded.json()["upgrade"] is None
+
+    with database.session_factory() as session:
+        connector = session.scalar(
+            select(ConnectorInstance).where(ConnectorInstance.connector_id == connector_id)
+        )
+        assert connector is not None
+        assert connector.upgrade_target_version == "0.1.41"
+        assert connector.upgrade_status == "completed"
+        assert connector.upgrade_requested_at is not None
+        assert connector.upgrade_completed_at is not None
+
+
 def test_automatic_new_agent_pairing_requires_no_address_or_profile_parameters(
     settings: Settings,
     database: Database,

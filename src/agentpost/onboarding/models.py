@@ -23,6 +23,10 @@ class ConnectorInstance(Base):
             "health_status IN ('unknown', 'healthy', 'degraded', 'error')",
             name="ck_connector_instances_health_status",
         ),
+        CheckConstraint(
+            "upgrade_status IS NULL OR upgrade_status IN ('requested', 'completed')",
+            name="ck_connector_instances_upgrade_status",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
@@ -48,6 +52,15 @@ class ConnectorInstance(Base):
         DateTime(timezone=True), nullable=True
     )
     runtime_capabilities: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    upgrade_target_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    upgrade_status: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    upgrade_requested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    upgrade_completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    upgrade_notification_message_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="active", index=True)
     health_status: Mapped[str] = mapped_column(
         String(16), nullable=False, default="unknown", index=True

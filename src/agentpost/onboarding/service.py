@@ -7,13 +7,13 @@ import math
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from agentpost.config import Settings
+from agentpost.config import CONNECTOR_MINIMUM_SUPPORTED_VERSION, Settings
 from agentpost.control.human_security import consume_human_confirmation
 from agentpost.control.models import AgentOwnership, HumanUser
 from agentpost.identity.addressing import (
@@ -24,7 +24,7 @@ from agentpost.identity.addressing import (
 from agentpost.identity.api_keys import api_key_prefix, digest_api_key, generate_api_key
 from agentpost.identity.handles import available_handle_suggestions
 from agentpost.identity.models import Agent, AgentApiKey, utc_now
-from agentpost.messaging.models import AuditLog
+from agentpost.messaging.models import AuditLog, Delivery, Message
 from agentpost.onboarding.connectivity import connector_connection_state
 from agentpost.onboarding.crypto import (
     canonicalize_user_code,
@@ -44,6 +44,7 @@ from agentpost.onboarding.schemas import (
     ConnectorCredentialRotationResponse,
     ConnectorHeartbeatCreate,
     ConnectorHeartbeatResponse,
+    ConnectorUpgradeDirective,
     OrbitConnector,
     PairingAgentResponse,
     PairingConnectorResponse,
@@ -981,12 +982,124 @@ def record_connector_heartbeat(
         connector.runtime_version = payload.client_version
         connector.runtime_version_reported_at = now
     connector.runtime_capabilities = payload.capabilities
+    upgrade = _connector_upgrade_directive(
+        session,
+        settings=settings,
+        connector=connector,
+        agent=agent,
+        now=now,
+    )
     session.commit()
     return ConnectorHeartbeatResponse(
         connector=_connector_response(connector),
         agent=_agent_response(agent),
         server_time=now,
         recommended_interval_seconds=settings.connector_heartbeat_interval_seconds,
+        upgrade=upgrade,
+    )
+
+
+def _connector_upgrade_directive(
+    session: Session,
+    *,
+    settings: Settings,
+    connector: ConnectorInstance,
+    agent: Agent,
+    now: datetime,
+) -> ConnectorUpgradeDirective | None:
+    version_status, reason = _connector_version_status(
+        connector.runtime_version,
+        recommended_version=settings.connector_release_version,
+        minimum_supported_version=CONNECTOR_MINIMUM_SUPPORTED_VERSION,
+    )
+    if version_status in {"unknown", "current"}:
+        if version_status == "current" and connector.upgrade_target_version is not None:
+            connector.upgrade_status = "completed"
+            connector.upgrade_completed_at = now
+        return None
+
+    target_version = settings.connector_release_version
+    prompt = _connector_upgrade_prompt(
+        connector.connector_type,
+        public_base_url=settings.public_base_url,
+        recommended_version=target_version,
+    )
+    level = "required" if version_status == "update_required" else "recommended"
+    if (
+        connector.upgrade_target_version != target_version
+        or connector.upgrade_notification_message_id is None
+    ):
+        message_id = f"msg_{uuid4().hex}"
+        subject = "AgentPost 连接需要升级" if level == "required" else "AgentPost 连接有可用更新"
+        message = Message(
+            id=message_id,
+            sender_agent_id=agent.id,
+            subject=subject,
+            content_format="text",
+            content_body=prompt,
+            message_type="notification",
+            priority="high" if level == "required" else "normal",
+            thread_id=uuid4(),
+            reply_to_message_id=None,
+            requires_ack=True,
+            task_payload=None,
+            result_payload=None,
+            message_metadata={
+                "agentpost_connector_upgrade": True,
+                "agentpost_connector_id": connector.connector_id,
+                "agentpost_upgrade_target_version": target_version,
+                "agentpost_upgrade_level": level,
+            },
+            accepted_at=now,
+            created_at=now,
+            expires_at=None,
+        )
+        session.add_all(
+            [
+                message,
+                Delivery(
+                    message=message,
+                    recipient_agent_id=agent.id,
+                    delivery_status="delivered",
+                    delivery_attempts=1,
+                    last_attempt_at=now,
+                    delivered_at=now,
+                    created_at=now,
+                ),
+                AuditLog(
+                    actor_agent_id=agent.id,
+                    action="connector.upgrade_requested",
+                    target_type="connector",
+                    target_id=connector.connector_id,
+                    outcome="success",
+                    request_id=f"connector-upgrade:{connector.connector_id}:{target_version}",
+                    audit_metadata={
+                        "target_version": target_version,
+                        "level": level,
+                        "notification_message_id": message_id,
+                    },
+                    created_at=now,
+                ),
+            ]
+        )
+        connector.upgrade_target_version = target_version
+        connector.upgrade_status = "requested"
+        connector.upgrade_requested_at = now
+        connector.upgrade_completed_at = None
+        connector.upgrade_notification_message_id = message_id
+
+    requested_at = connector.upgrade_requested_at or now
+    notification_message_id = connector.upgrade_notification_message_id
+    if notification_message_id is None:  # Defensive; the branch above always assigns it.
+        raise RuntimeError("upgrade directive notification was not created")
+    return ConnectorUpgradeDirective(
+        action="upgrade_required" if level == "required" else "upgrade_recommended",
+        target_version=target_version,
+        minimum_supported_version=CONNECTOR_MINIMUM_SUPPORTED_VERSION,
+        reason=reason,
+        prompt=prompt,
+        requested_at=requested_at,
+        notification_message_id=notification_message_id,
     )
 
 

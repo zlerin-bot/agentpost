@@ -334,6 +334,9 @@ def connector_heartbeat(
     except (ConnectorNotFoundError, ConnectorInvalidStateError) as exc:
         raise _pairing_invalid_state("connector_not_current") from exc
     response.headers["Cache-Control"] = "no-store"
+    if result.upgrade is not None:
+        response.headers["X-AgentPost-Upgrade-Action"] = result.upgrade.action
+        response.headers["X-AgentPost-Upgrade-Version"] = result.upgrade.target_version
     return result
 
 

@@ -53,6 +53,18 @@ class ConnectorState(BaseModel):
     credential_rotated_at: datetime | None = None
 
 
+class ConnectorUpgradeDirective(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    action: Literal["upgrade_required", "upgrade_recommended"]
+    target_version: str
+    minimum_supported_version: str
+    reason: str
+    prompt: str
+    requested_at: datetime
+    notification_message_id: str
+
+
 class ConnectorHeartbeat(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -61,6 +73,7 @@ class ConnectorHeartbeat(BaseModel):
     current: bool
     server_time: datetime
     recommended_interval_seconds: int = Field(ge=10, le=300)
+    upgrade: ConnectorUpgradeDirective | None = None
 
 
 class ConnectorCredentialRotation(BaseModel):

@@ -32,6 +32,10 @@ RESERVED_METADATA_KEYS = frozenset(
         "agentpost_task_id",
         "agentpost_task_activity_id",
         "agentpost_task_title",
+        "agentpost_connector_upgrade",
+        "agentpost_connector_id",
+        "agentpost_upgrade_target_version",
+        "agentpost_upgrade_level",
     }
 )
 

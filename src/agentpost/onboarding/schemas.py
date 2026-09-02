@@ -301,12 +301,23 @@ class ConnectorHeartbeatCreate(OnboardingModel):
         return cleaned
 
 
+class ConnectorUpgradeDirective(OnboardingModel):
+    action: Literal["upgrade_required", "upgrade_recommended"]
+    target_version: str
+    minimum_supported_version: str
+    reason: str
+    prompt: str
+    requested_at: datetime
+    notification_message_id: str
+
+
 class ConnectorHeartbeatResponse(OnboardingModel):
     connector: PairingConnectorResponse
     agent: PairingAgentResponse
     current: Literal[True] = True
     server_time: datetime
     recommended_interval_seconds: int
+    upgrade: ConnectorUpgradeDirective | None = None
 
 
 class ConnectorCredentialRotationResponse(OnboardingModel):

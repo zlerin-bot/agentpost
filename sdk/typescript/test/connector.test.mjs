@@ -272,6 +272,42 @@ test("task title resolution uses the authenticated Agent endpoint", async () => 
   });
 });
 
+test("heartbeat reports the packaged runtime version and exposes upgrade directives", async () => {
+  let heartbeatBody;
+  const fetchImpl = async (target, init) => {
+    assert.equal(new URL(target).pathname, "/api/v1/connect/heartbeat");
+    heartbeatBody = JSON.parse(init.body);
+    return jsonResponse(200, {
+      ...heartbeat(),
+      upgrade: {
+        action: "upgrade_recommended",
+        target_version: "0.1.42",
+        minimum_supported_version: "0.1.34",
+        reason: "有新版本",
+        prompt: "请安全升级",
+        requested_at: now,
+        notification_message_id: "msg_upgrade",
+      },
+    });
+  };
+  const client = new AgentPostClient({
+    server: "https://agentpost.me",
+    apiKey: oldKey,
+    fetch: fetchImpl,
+  });
+
+  const result = await client.heartbeat();
+
+  assert.equal(heartbeatBody.client_version, "agentpost-connect/0.1.41");
+  assert.deepEqual(heartbeatBody.capabilities, [
+    "task_context_read",
+    "task_message_send",
+    "durable_task_run",
+  ]);
+  assert.equal(result.upgrade.action, "upgrade_recommended");
+  assert.equal(result.upgrade.notification_message_id, "msg_upgrade");
+});
+
 test("task context and task messages use the participating task endpoints", async () => {
   const taskId = "50000000-0000-0000-0000-000000000005";
   const requests = [];

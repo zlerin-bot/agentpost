@@ -74,6 +74,18 @@ export type TaskMessageResult = {
     replayed: boolean;
     security_label: "external_agent_content" | string;
 };
+export type ConnectorUpgradeDirective = {
+    action: "upgrade_required" | "upgrade_recommended";
+    target_version: string;
+    minimum_supported_version: string;
+    reason: string;
+    prompt: string;
+    requested_at: string;
+    notification_message_id: string;
+};
+export type ConnectorHeartbeat = JsonObject & {
+    upgrade: ConnectorUpgradeDirective | null;
+};
 export declare class AgentPostError extends Error {
     readonly code: string;
     readonly statusCode?: number;
@@ -152,7 +164,7 @@ export declare class AgentPostClient {
         format?: "text" | "markdown" | "json";
         idempotencyKey?: string;
     }): Promise<TaskMessageResult>;
-    heartbeat(healthStatus?: "healthy" | "degraded" | "error", lastErrorCode?: string): Promise<JsonObject>;
+    heartbeat(healthStatus?: "healthy" | "degraded" | "error", lastErrorCode?: string): Promise<ConnectorHeartbeat>;
     rotateCredential(): Promise<{
         connector_id: string;
         agent: JsonObject;

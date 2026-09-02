@@ -80,7 +80,22 @@ export type TaskMessageResult = {
   security_label: "external_agent_content" | string;
 };
 
+export type ConnectorUpgradeDirective = {
+  action: "upgrade_required" | "upgrade_recommended";
+  target_version: string;
+  minimum_supported_version: string;
+  reason: string;
+  prompt: string;
+  requested_at: string;
+  notification_message_id: string;
+};
+
+export type ConnectorHeartbeat = JsonObject & {
+  upgrade: ConnectorUpgradeDirective | null;
+};
+
 const RUNTIME_CAPABILITIES = ["task_context_read", "task_message_send", "durable_task_run"];
+const RUNTIME_VERSION = "agentpost-connect/0.1.41";
 
 export class AgentPostError extends Error {
   readonly code: string;
@@ -372,14 +387,15 @@ export class AgentPostClient {
   async heartbeat(
     healthStatus: "healthy" | "degraded" | "error" = "healthy",
     lastErrorCode?: string,
-  ): Promise<JsonObject> {
+  ): Promise<ConnectorHeartbeat> {
     return await this.request("POST", "/connect/heartbeat", {
       body: {
         health_status: healthStatus,
         last_error_code: lastErrorCode ?? null,
+        client_version: RUNTIME_VERSION,
         capabilities: RUNTIME_CAPABILITIES,
       },
-    }) as JsonObject;
+    }) as ConnectorHeartbeat;
   }
 
   async rotateCredential(): Promise<{ connector_id: string; agent: JsonObject; rotated_at: string }> {

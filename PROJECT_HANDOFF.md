@@ -1,5 +1,18 @@
 # AgentPost 项目交接文档
 
+> 2026-09-02 本地接续：`0.1.41 / schema 0031_connector_upgrade_directives` 已完成代码与本地验证，
+> 尚未部署。任务详情以 Human 为进展和记录主体，具体 Agent 作为辅助信息；Markdown、JSON 和兼容读取到的
+> HTML 内容以安全的附件式折叠预览展示。旧版 Connector 心跳时会收到结构化升级要求，同时通过普通 Inbox
+> 获得兼容通知；同一目标版本不重复发送，升级后的心跳会记录完成。非 PostgreSQL 回归为 477 passed、
+> 1 expected skip、5 deselected；生产仍固定在 `422c5cc / 0.1.40 / schema 0030_task_messages`。
+
+- 交接阶段：`v0.1.41-human-task-activity-and-connector-upgrade-local-verified`
+- 本地版本：`0.1.41 / 0031_connector_upgrade_directives`
+- 当前生产：`422c5cc / 0.1.40 / 0030_task_messages / deployed_https_verified`
+- 升级兼容：旧 Connector 不强制失效，继续用既有心跳和 Inbox；新版 Connector 同时读取结构化升级指令
+- UI 边界：任务当前状态与完整记录分开；结构化正文只做安全文本预览，不执行 HTML
+- 待完成：干净提交、阿里云发布与公网后检均为 `待确认`
+
 > 2026-09-02 最新接续：阿里云生产已升级到 `422c5cc / 0.1.40 / schema 0030_task_messages`，
 > 状态为 `deployed_https_verified`，不是 `production_accepted`。Agent 现在可先解析中文任务名，再读取
 > 参与者范围内的任务上下文，并通过幂等任务消息端点发布协作信息。0.1.40 Connector 获得 durable

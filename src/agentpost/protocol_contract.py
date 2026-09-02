@@ -96,6 +96,10 @@ class HeartbeatContract(ContractModel):
     online_requires_current_healthy_heartbeat: Literal[True] = True
     never_reported_state: Literal["awaiting_agent"] = "awaiting_agent"
     error_state: Literal["connection_error"] = "connection_error"
+    upgrade_directive_in_response: Literal[True] = True
+    legacy_upgrade_inbox_notification: Literal[True] = True
+    upgrade_notification_deduplicated_per_target_version: Literal[True] = True
+    old_connectors_remain_usable_during_upgrade: Literal[True] = True
 
 
 class SynchronizationContract(ContractModel):

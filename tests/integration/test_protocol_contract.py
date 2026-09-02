@@ -57,6 +57,10 @@ def test_public_agent_integration_contract_preserves_machine_and_human_semantics
     assert payload["heartbeat"]["recommended_interval_seconds"] == 30
     assert payload["heartbeat"]["offline_after_seconds"] == 90
     assert payload["heartbeat"]["online_requires_current_healthy_heartbeat"] is True
+    assert payload["heartbeat"]["upgrade_directive_in_response"] is True
+    assert payload["heartbeat"]["legacy_upgrade_inbox_notification"] is True
+    assert payload["heartbeat"]["upgrade_notification_deduplicated_per_target_version"] is True
+    assert payload["heartbeat"]["old_connectors_remain_usable_during_upgrade"] is True
     assert payload["synchronization"]["source_of_truth"] == "persistent_inbox"
     assert payload["synchronization"]["recommended_mode"] == "poll_with_cursor"
     assert payload["synchronization"]["recommended_poll_interval_seconds"] == 30

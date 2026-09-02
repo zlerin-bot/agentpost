@@ -5597,38 +5597,142 @@ footer {
 
 .project-activity-row {
   display: grid;
-  grid-template-columns: 10px minmax(0, 1fr);
+  grid-template-columns: 36px minmax(0, 1fr);
   align-items: start;
-  gap: 10px;
-  padding: 7px 2px;
+  gap: 9px;
+  border: 1px solid #e3e7ed;
+  border-radius: 12px;
+  background: #fff;
+  padding: 10px;
 }
 
-.project-activity-marker {
-  width: 8px;
-  height: 8px;
-  margin-top: 5px;
-  border-radius: 50%;
-  background: #1a73e8;
-  box-shadow: 0 0 0 4px #e8f0fe;
+.project-activity-avatar,
+.project-progress-avatar {
+  display: inline-grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 11px;
+  background: #e8f0fe;
+  color: #185abc;
+  font-size: 0.7rem;
+  font-weight: 800;
 }
 
-.project-activity-row > div {
+.project-activity-avatar.actor-platform {
+  background: #f3e8fd;
+  color: #7627bb;
+}
+
+.project-activity-copy,
+.project-progress-copy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.project-activity-heading,
+.project-progress-heading {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 10px;
 }
 
-.project-activity-row strong {
-  color: #3c4043;
-  font-size: 0.72rem;
-  font-weight: 600;
+.project-activity-heading strong {
+  color: #202124;
+  font-size: 0.73rem;
+  font-weight: 750;
 }
 
-.project-activity-row small {
+.project-activity-heading time,
+.project-activity-agent,
+.project-progress-copy > small {
   color: #80868b;
   font-size: 0.63rem;
+}
+
+.project-activity-heading time {
   white-space: nowrap;
+}
+
+.project-activity-action,
+.task-activity-text-body {
+  margin: 0;
+  color: #3c4043;
+  font-size: 0.69rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.task-activity-attachment {
+  margin-top: 3px;
+  border: 1px solid #d7e3f4;
+  border-radius: 10px;
+  background: #f8fbff;
+  overflow: hidden;
+}
+
+.task-activity-attachment summary {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 8px 9px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.task-activity-attachment summary::-webkit-details-marker {
+  display: none;
+}
+
+.task-activity-attachment-icon {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 8px;
+  background: #e8f0fe;
+  color: #185abc;
+  font-size: 0.62rem;
+  font-weight: 800;
+}
+
+.task-activity-attachment summary > span:last-child {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.task-activity-attachment summary strong,
+.task-activity-attachment summary small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-activity-attachment summary strong {
+  color: #202124;
+  font-size: 0.68rem;
+}
+
+.task-activity-attachment summary small {
+  color: #70757a;
+  font-size: 0.6rem;
+}
+
+.task-activity-attachment-preview {
+  max-height: 320px;
+  margin: 0;
+  border-top: 1px solid #d7e3f4;
+  background: #fff;
+  color: #3c4043;
+  font: 0.64rem/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow: auto;
+  padding: 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .friend-hero {
@@ -5793,25 +5897,19 @@ footer {
 
 .project-collaboration-row {
   display: grid;
-  gap: 7px;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 9px;
   border: 1px solid #e3e7ed;
   border-radius: 11px;
   padding: 10px 12px;
 }
 
-.project-collaboration-row > div {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.project-collaboration-row strong {
+.project-progress-heading strong {
   color: #202124;
   font-size: 0.74rem;
 }
 
-.project-collaboration-row span {
+.project-progress-heading > span {
   flex: 0 0 auto;
   border-radius: 999px;
   background: #e8f0fe;
@@ -5820,7 +5918,7 @@ footer {
   font-size: 0.62rem;
 }
 
-.project-collaboration-row p {
+.project-progress-copy p {
   margin: 0;
   color: #5f6368;
   font-size: 0.68rem;
@@ -5994,8 +6092,7 @@ footer {
   }
 
   .project-activity-row > div {
-    display: grid;
-    gap: 3px;
+    min-width: 0;
   }
 
   .friend-detail-avatar {

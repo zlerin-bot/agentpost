@@ -530,6 +530,9 @@ def _task_detail(session: Session, *, task: Task, viewer_membership: TaskMembers
         .where(TaskAgentParticipant.task_id == task.id, TaskAgentParticipant.active.is_(True))
     ).all()
     agents = {agent.id: agent for _, agent in agent_rows}
+    human_id_by_agent = {
+        participant.agent_id: participant.human_user_id for participant, _ in agent_rows
+    }
     agents_by_human: dict[UUID, list[AgentSummary]] = {human_id: [] for human_id in human_ids}
     for participant, agent in agent_rows:
         agents_by_human.setdefault(participant.human_user_id, []).append(
@@ -613,10 +616,17 @@ def _task_detail(session: Session, *, task: Task, viewer_membership: TaskMembers
     activities = []
     for item in activity_rows:
         actor_name = None
+        actor_agent_name = None
         if item.actor_human_user_id in humans:
             actor_name = humans[item.actor_human_user_id].display_name
         elif item.actor_agent_id in activity_agents:
-            actor_name = activity_agents[item.actor_agent_id].display_name
+            actor_agent_name = activity_agents[item.actor_agent_id].display_name
+            actor_human_id = human_id_by_agent.get(item.actor_agent_id)
+            actor_name = (
+                humans[actor_human_id].display_name if actor_human_id in humans else "Human 待确认"
+            )
+        elif item.actor_type == "platform":
+            actor_name = "AgentPost"
         target_name = (
             humans[item.target_human_user_id].display_name
             if item.target_human_user_id in humans
@@ -628,6 +638,7 @@ def _task_detail(session: Session, *, task: Task, viewer_membership: TaskMembers
                 kind=item.activity_type,
                 actor_type=item.actor_type,  # type: ignore[arg-type]
                 actor_display_name=actor_name,
+                actor_agent_display_name=actor_agent_name,
                 target_display_name=target_name,
                 metadata=item.activity_metadata,
                 security_label=item.security_label,  # type: ignore[arg-type]

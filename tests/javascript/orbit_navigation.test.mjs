@@ -46,10 +46,27 @@ test("tasks and formal friends are separate API-backed collaboration modules", (
   assert.match(script, /activateRoute\("friends", "directory"/);
   assert.doesNotMatch(`${html}\n${script}`, /本地体验|本地演示|交互原型|不连接生产|演示项目/);
   assert.doesNotMatch(html, /id="project-create-friend"|首位协作好友/);
-  assert.match(html, /执行与验收/);
+  assert.match(html, /Human 协作状态/);
+  assert.match(html, /AI 当前进展/);
+  assert.match(html, /完整过程/);
+  assert.match(html, /任务记录/);
   assert.match(html, /选择参与的 AI（至少一个）/);
   assert.doesNotMatch(script, /DEMO_FRIENDS|demoProjects|confirmDemoAcceptance|inviteDemoFriend/);
   assert.doesNotMatch(`${html}\n${script}`, /李月|张冠群|崔孝林|胡曦元|zhangziliang|panyongtong/);
+});
+
+test("task progress is Human-first and structured content stays collapsed as a safe attachment", () => {
+  assert.match(script, /assignment\.responsible_human_display_name/);
+  assert.match(script, /使用 AI：/);
+  assert.match(script, /activity\.actor_display_name/);
+  assert.match(script, /通过 AI：/);
+  assert.match(script, /createTaskActivityAttachment/);
+  assert.match(script, /\["markdown", "json", "html"\]\.includes\(format\)/);
+  assert.match(script, /document\.createElement\("details"\)/);
+  assert.match(script, /preview\.textContent/);
+  assert.doesNotMatch(script, /task-activity-attachment-preview[\s\S]{0,500}innerHTML/);
+  assert.match(stylesheet, /\.task-activity-attachment/);
+  assert.match(stylesheet, /\.project-activity-avatar/);
 });
 
 test("friends use one clear hierarchy and explicit relationship states", () => {
@@ -106,7 +123,7 @@ test("task detail exposes its stable ID, automatic Agent participation, and Huma
   assert.match(script, /等待 Agent 上线/);
   assert.match(script, /邮件通知已安排发送/);
   assert.match(script, /invited_member_count/);
-  assert.match(script, /task_message: actor \+ "发布了任务协作消息"/);
+  assert.match(script, /task_message: "发布了任务协作消息"/);
   assert.match(script, /activity\.metadata\?\.body/);
 });
 

@@ -2,7 +2,26 @@
 
 Last updated: 2026-09-02
 
-Current handoff stage: `v0.1.40-backward-compatible-task-messaging-deployed-https-verified`; pinned production release: `0.1.40`
+Current handoff stage: `v0.1.41-human-task-activity-and-connector-upgrade-local-verified`; pinned production release: `0.1.40`
+
+## Human-first task activity and active Connector upgrade (0.1.41 local verified, 2026-09-02)
+
+The Task detail now separates `AI 当前进展` from the chronological `任务记录`. Both surfaces lead with the owning
+Human identity and keep the specific Agent as secondary context. Markdown, JSON, and legacy HTML-shaped task activity
+content stays collapsed behind a safe attachment-style preview and is inserted only through text nodes.
+
+Connector heartbeats now return a structured upgrade directive when the reported runtime is older than the recommended
+or minimum supported release. To keep old Connector versions useful, the server also writes one ordinary Inbox
+notification per Connector and target version. Repeated heartbeats do not create duplicate notices, and a heartbeat from
+the target version records the upgrade as completed. Existing identity and Inbox compatibility remain unchanged.
+
+Local evidence: Ruff check and format passed; TypeScript SDK reported 7 passed; Orbit JavaScript reported 34 passed; the
+non-PostgreSQL suite reported 477 passed, one expected loopback sandbox skip, and five PostgreSQL tests deselected. The
+isolated Orbit demo passed desktop and 390px checks; the 390px document width equalled the viewport width with no
+horizontal overflow. Alembic head is `0031_connector_upgrade_directives`.
+
+This slice is committed locally only. It has not been uploaded or switched on Alibaba Cloud; production remains
+`0.1.40 / 0030_task_messages / deployed_https_verified`.
 
 ## Backward-compatible task messaging (0.1.40 deployed HTTPS verified, 2026-09-02)
 

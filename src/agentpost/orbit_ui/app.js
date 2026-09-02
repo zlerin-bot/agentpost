@@ -744,45 +744,72 @@ function renderProjectBrowser() {
 }
 
 function activityText(activity) {
-  const actor = activity.actor_display_name || "系统";
   const target = activity.target_display_name || "成员";
   const labels = {
-    created: actor + "创建了任务",
-    task_created: actor + "创建了任务",
-    member_invited: actor + "邀请" + target + "加入任务",
-    member_added: actor + "已将" + target + "加入任务",
-    member_joined: target + "已加入任务",
-    member_declined: target + "拒绝了任务邀请",
-    assignment_created: actor + "创建了 AI 执行单元",
-    agent_joined_collaboration: target + "的 Agent 已进入协同队列",
-    member_agents_selected: target + "更新了参与 Agent",
+    created: "创建了任务",
+    task_created: "创建了任务",
+    member_invited: "邀请 " + target + " 加入任务",
+    member_added: "将 " + target + " 加入任务",
+    member_joined: "加入了任务",
+    member_declined: "拒绝了任务邀请",
+    assignment_created: "创建了 AI 执行单元",
+    agent_joined_collaboration: "参与 AI 已进入协同队列",
+    member_agents_selected: "更新了参与 AI",
     member_email_sent: "已向" + target + "的注册邮箱发送任务通知",
     member_email_failed: target + "的邮件通知发送失败，任务成员关系不受影响",
-    run_leased: actor + "已领取任务并准备协同",
-    run_progress: actor + "正在协同处理任务",
-    run_waiting_human: actor + "正在等待 Human 决策",
-    assignment_result: actor + "提交了协同结果",
-    run_claimed: actor + "开始执行",
-    run_updated: actor + "更新了执行进度",
-    result_submitted: actor + "提交了执行结果",
-    final_submitted: actor + "提交任务等待验收",
-    accepted: actor + "验收通过",
-    changes_requested: actor + "要求修改",
-    paused: actor + "暂停了任务",
-    resumed: actor + "恢复了任务",
-    archived: actor + "归档了任务",
-    restored: actor + "恢复了任务",
-    task_message: actor + "发布了任务协作消息",
+    run_leased: "已领取任务并准备协同",
+    run_progress: "正在协同处理任务",
+    run_waiting_human: "正在等待 Human 决策",
+    assignment_result: "提交了协同结果",
+    run_claimed: "开始执行",
+    run_updated: "更新了执行进度",
+    result_submitted: "提交了执行结果",
+    final_submitted: "提交任务等待验收",
+    accepted: "验收通过",
+    changes_requested: "要求修改",
+    paused: "暂停了任务",
+    resumed: "恢复了任务",
+    archived: "归档了任务",
+    restored: "恢复了任务",
+    task_message: "发布了任务协作消息",
   };
   if (activity.kind === "agent_delivery") {
-    return actor + "通过 " + (activity.agent_display_name || "Agent")
-      + " 提交了交付物：" + (activity.subject || "未命名交付物");
+    return "提交了交付物：" + (activity.subject || "未命名交付物");
   }
   if (activity.kind === "agent_update") {
-    return actor + "通过 " + (activity.agent_display_name || "Agent")
-      + " 更新了任务：" + (activity.subject || "未命名更新");
+    return "更新了任务：" + (activity.subject || "未命名更新");
   }
   return labels[activity.kind] || "任务状态已更新";
+}
+
+function taskActivityFilename(activity, format) {
+  const extensions = { markdown: "md", json: "json", html: "html" };
+  const extension = extensions[format] || "txt";
+  const subject = String(activity.metadata?.subject || "协作内容").trim() || "协作内容";
+  return subject.toLowerCase().endsWith(`.${extension}`) ? subject : `${subject}.${extension}`;
+}
+
+function createTaskActivityAttachment(activity, format, body) {
+  const details = document.createElement("details");
+  details.className = `task-activity-attachment format-${format}`;
+  const summary = document.createElement("summary");
+  const icon = document.createElement("span");
+  icon.className = "task-activity-attachment-icon";
+  icon.textContent = format === "json" ? "{}" : "⌑";
+  const copy = document.createElement("span");
+  const name = document.createElement("strong");
+  name.textContent = taskActivityFilename(activity, format);
+  const hint = document.createElement("small");
+  hint.textContent = `${format.toUpperCase()} 附件 · 点击查看`;
+  copy.append(name, hint);
+  summary.append(icon, copy);
+  const preview = document.createElement("pre");
+  preview.className = "task-activity-attachment-preview";
+  preview.textContent = format === "json" && typeof body !== "string"
+    ? JSON.stringify(body, null, 2)
+    : String(body ?? "");
+  details.append(summary, preview);
+  return details;
 }
 
 function renderProjectDetail() {
@@ -935,10 +962,15 @@ function renderProjectDetail() {
   (project.assignments || []).forEach((assignment) => {
     const row = document.createElement("article");
     row.className = "project-collaboration-row";
+    const avatar = document.createElement("span");
+    avatar.className = "project-progress-avatar";
+    avatar.textContent = assignment.responsible_human_display_name.slice(0, 1);
+    const copy = document.createElement("div");
+    copy.className = "project-progress-copy";
     const heading = document.createElement("div");
+    heading.className = "project-progress-heading";
     const name = document.createElement("strong");
-    name.textContent = assignment.responsible_human_display_name + " 的 "
-      + assignment.assignee_agent_display_name;
+    name.textContent = assignment.responsible_human_display_name;
     const status = document.createElement("span");
     const statusLabels = {
       queued: "等待 Agent 上线",
@@ -954,9 +986,12 @@ function renderProjectDetail() {
     status.textContent = statusLabels[assignment.run_status || assignment.status]
       || assignment.run_status || assignment.status;
     heading.append(name, status);
+    const agent = document.createElement("small");
+    agent.textContent = "使用 AI：" + assignment.assignee_agent_display_name;
     const summary = document.createElement("p");
     summary.textContent = assignment.result_summary || assignment.instruction;
-    row.append(heading, summary);
+    copy.append(heading, agent, summary);
+    row.append(avatar, copy);
     elements.projectCollaborationList.append(row);
   });
   if (!(project.assignments || []).length) {
@@ -968,25 +1003,45 @@ function renderProjectDetail() {
 
   elements.projectActivityList.replaceChildren();
   project.activities.forEach((activity) => {
-    const row = document.createElement("div");
+    const row = document.createElement("article");
     row.className = "project-activity-row";
-    const marker = document.createElement("span");
-    marker.className = "project-activity-marker";
+    const avatar = document.createElement("span");
+    avatar.className = `project-activity-avatar actor-${activity.actor_type}`;
+    avatar.textContent = (activity.actor_display_name || "系").slice(0, 1);
     const copy = document.createElement("div");
-    const textNode = document.createElement("strong");
-    textNode.textContent = activityText(activity);
-    const time = document.createElement("small");
+    copy.className = "project-activity-copy";
+    const heading = document.createElement("div");
+    heading.className = "project-activity-heading";
+    const actor = document.createElement("strong");
+    actor.textContent = activity.actor_display_name || "AgentPost";
+    const time = document.createElement("time");
     time.textContent = dateText(activity.created_at);
+    heading.append(actor, time);
+    const textNode = document.createElement("p");
+    textNode.className = "project-activity-action";
+    textNode.textContent = activityText(activity);
+    copy.append(heading);
+    if (activity.actor_agent_display_name) {
+      const agent = document.createElement("small");
+      agent.className = "project-activity-agent";
+      agent.textContent = "通过 AI：" + activity.actor_agent_display_name;
+      copy.append(agent);
+    }
     copy.append(textNode);
     if (activity.kind === "task_message" && activity.metadata?.body !== undefined) {
-      const body = document.createElement("p");
-      body.textContent = typeof activity.metadata.body === "string"
-        ? activity.metadata.body
-        : JSON.stringify(activity.metadata.body);
-      copy.append(body);
+      const format = String(activity.metadata.content_format || "text").toLowerCase();
+      if (["markdown", "json", "html"].includes(format)) {
+        copy.append(createTaskActivityAttachment(activity, format, activity.metadata.body));
+      } else {
+        const body = document.createElement("p");
+        body.className = "task-activity-text-body";
+        body.textContent = typeof activity.metadata.body === "string"
+          ? activity.metadata.body
+          : JSON.stringify(activity.metadata.body);
+        copy.append(body);
+      }
     }
-    copy.append(time);
-    row.append(marker, copy);
+    row.append(avatar, copy);
     elements.projectActivityList.append(row);
   });
   if (!project.activities.length) {

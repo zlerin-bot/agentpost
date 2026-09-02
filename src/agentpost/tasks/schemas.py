@@ -263,6 +263,7 @@ class TaskActivityResponse(TaskModel):
     kind: str
     actor_type: Literal["human", "agent", "platform"]
     actor_display_name: str | None
+    actor_agent_display_name: str | None = None
     target_display_name: str | None
     metadata: dict[str, Any]
     security_label: Literal["platform_event", "external_agent_content"]
