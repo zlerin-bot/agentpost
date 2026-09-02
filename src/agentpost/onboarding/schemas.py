@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Literal
 from uuid import UUID
 
@@ -93,7 +93,10 @@ class PairingConnectorResponse(OnboardingModel):
     display_name: str
     device_name: str | None
     client_version: str | None
+    installed_version: str | None = None
+    configured_version: str | None = None
     runtime_version: str | None = None
+    runtime_session_started_at: datetime | None = None
     runtime_version_reported_at: datetime | None = None
     runtime_capabilities: list[str] = Field(default_factory=list)
     status: Literal["active", "replaced", "revoked"]
@@ -244,6 +247,7 @@ class OrbitConnector(PairingConnectorResponse):
     recommended_version: str
     minimum_supported_version: str
     version_status: Literal["current", "update_available", "update_required", "unknown"]
+    reconnect_required: bool = False
     upgrade_reason: str
     upgrade_prompt: str | None = None
 
@@ -267,6 +271,9 @@ class ConnectorConfirmationCreate(OnboardingModel):
 class ConnectorHeartbeatCreate(OnboardingModel):
     health_status: Literal["healthy", "degraded", "error"] = "healthy"
     client_version: str | None = Field(default=None, max_length=100)
+    installed_version: str | None = Field(default=None, max_length=100)
+    configured_version: str | None = Field(default=None, max_length=100)
+    runtime_session_started_at: datetime | None = None
     capabilities: list[str] = Field(default_factory=list, max_length=64)
     last_error_code: str | None = Field(
         default=None,
@@ -283,12 +290,21 @@ class ConnectorHeartbeatCreate(OnboardingModel):
             raise ValueError("error heartbeat requires last_error_code")
         return self
 
-    @field_validator("client_version")
+    @field_validator("client_version", "installed_version", "configured_version")
     @classmethod
     def clean_client_version(cls, value: str | None) -> str | None:
         if value is None:
             return None
         return value.strip() or None
+
+    @field_validator("runtime_session_started_at")
+    @classmethod
+    def normalize_runtime_session_started_at(cls, value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            raise ValueError("runtime_session_started_at must include a timezone")
+        return value.astimezone(UTC)
 
     @field_validator("capabilities")
     @classmethod

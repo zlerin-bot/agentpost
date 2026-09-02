@@ -1834,6 +1834,17 @@ summary:focus-visible {
   white-space: pre-wrap;
 }
 
+.connector-reconnect-notice {
+  margin: 0;
+  border-left: 3px solid var(--amber);
+  border-radius: 8px;
+  background: rgba(255, 188, 92, 0.08);
+  color: var(--text-soft);
+  padding: 10px 12px;
+  font-size: 0.7rem;
+  line-height: 1.55;
+}
+
 .connector-actions {
   align-items: center;
 }
@@ -4822,7 +4833,7 @@ footer {
 
 .prototype-metrics {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -4843,6 +4854,11 @@ footer {
 .prototype-metrics strong {
   color: #202124;
   font-size: 1rem;
+}
+
+#project-state-axes {
+  font-size: 0.74rem;
+  line-height: 1.45;
 }
 
 .prototype-two-column {

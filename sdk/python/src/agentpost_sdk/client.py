@@ -7,7 +7,7 @@ import time
 import webbrowser
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, BinaryIO
@@ -45,6 +45,7 @@ if TYPE_CHECKING:
 
 _BODY_FORMATS = {"text", "markdown", "json"}
 _RUNTIME_CAPABILITIES = ["task_context_read", "task_message_send", "durable_task_run"]
+_RUNTIME_SESSION_STARTED_AT = datetime.now(UTC)
 
 
 def _runtime_client_version() -> str | None:
@@ -310,17 +311,28 @@ class _ConnectorResource:
         *,
         health_status: str = "healthy",
         last_error_code: str | None = None,
+        installed_version: str | None = None,
+        configured_version: str | None = None,
+        runtime_version: str | None = None,
+        runtime_session_started_at: datetime | None = None,
+        capabilities: list[str] | None = None,
     ):
         from agentpost_sdk.onboarding import ConnectorHeartbeat
 
+        actual_runtime_version = runtime_version or _runtime_client_version()
         data = self._owner._request(
             "POST",
             "/connect/heartbeat",
             json={
                 "health_status": health_status,
                 "last_error_code": last_error_code,
-                "client_version": _runtime_client_version(),
-                "capabilities": _RUNTIME_CAPABILITIES,
+                "client_version": actual_runtime_version,
+                "installed_version": installed_version or actual_runtime_version,
+                "configured_version": configured_version or actual_runtime_version,
+                "runtime_session_started_at": (
+                    runtime_session_started_at or _RUNTIME_SESSION_STARTED_AT
+                ).isoformat(),
+                "capabilities": capabilities or _RUNTIME_CAPABILITIES,
             },
         )
         try:
@@ -384,8 +396,12 @@ class _TaskRunsResource:
         lease_token: str,
         status: str,
         summary: str,
+        checkpoint: Mapping[str, Any] | None = None,
         output: Mapping[str, Any] | None = None,
     ) -> None:
+        if checkpoint is not None and output is not None:
+            raise ConfigurationError("use checkpoint or legacy output, not both")
+        resolved_checkpoint = checkpoint if checkpoint is not None else output
         self._owner._request(
             "POST",
             f"/task-runs/{run_id}/result",
@@ -393,7 +409,7 @@ class _TaskRunsResource:
                 "lease_token": lease_token,
                 "status": status,
                 "summary": summary,
-                "output": dict(output or {}),
+                "checkpoint": dict(resolved_checkpoint or {}),
             },
         )
 

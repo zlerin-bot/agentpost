@@ -83,8 +83,13 @@ test("friends use one clear hierarchy and explicit relationship states", () => {
 });
 
 test("connection management separates first pairing from reported runtime version", () => {
-  assert.match(script, /\["当前版本", connector\.runtime_version \|\| "未上报"\]/);
+  assert.match(script, /\["实际运行版本", connector\.runtime_version \|\| "未上报"\]/);
   assert.match(script, /\["首次接入版本", connector\.client_version\]/);
+  assert.match(script, /\["已安装版本", connector\.installed_version\]/);
+  assert.match(script, /\["配置目标版本", connector\.configured_version\]/);
+  assert.match(script, /\["当前会话启动", dateText\(connector\.runtime_session_started_at\)\]/);
+  assert.match(script, /\["实际加载能力", \(connector\.runtime_capabilities \|\| \[\]\)\.join\("、"\) \|\| "未上报"\]/);
+  assert.match(script, /connector\.reconnect_required/);
   assert.match(script, /\["最低完整协作版本", connector\.minimum_supported_version\]/);
   assert.match(script, /update_required: "需要升级"/);
   assert.match(script, /navigator\.clipboard\.writeText\(connector\.upgrade_prompt\)/);

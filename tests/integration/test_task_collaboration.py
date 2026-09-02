@@ -215,6 +215,7 @@ def test_confirmed_friends_task_agent_selection_run_and_human_acceptance(
                 "lease_token": owner_run["lease_token"],
                 "status": "completed",
                 "summary": "已整理目标、材料与协同边界",
+                "output": {"legacy_connector": True},
             },
         )
         assert owner_result.status_code == 204, owner_result.text
@@ -305,6 +306,8 @@ def test_confirmed_friends_task_agent_selection_run_and_human_acceptance(
             assignment["result_status"] == "completed"
             for assignment in detail.json()["assignments"]
         )
+        assert detail.json()["state_axes"]["agent_result_status"] == "completed"
+        assert detail.json()["state_axes"]["human_acceptance_status"] == "not_ready"
         submitted = client.post(
             f"/api/v1/tasks/{task_id}/submit",
             headers={"X-CSRF-Token": owner_csrf},
@@ -312,12 +315,51 @@ def test_confirmed_friends_task_agent_selection_run_and_human_acceptance(
         )
         assert submitted.status_code == 200, submitted.text
         assert submitted.json()["status"] == "awaiting_acceptance"
+        assert submitted.json()["state_axes"]["submission_status"] == "awaiting_acceptance"
+        assert submitted.json()["state_axes"]["human_acceptance_status"] == "pending"
         missing_change_note = client.post(
             f"/api/v1/tasks/{task_id}/acceptance",
             headers={"X-CSRF-Token": owner_csrf},
             json={"decision": "request_changes"},
         )
         assert missing_change_note.status_code == 422, missing_change_note.text
+        changes = client.post(
+            f"/api/v1/tasks/{task_id}/acceptance",
+            headers={"X-CSRF-Token": owner_csrf},
+            json={"decision": "request_changes", "note": "补充风险处置时限"},
+        )
+        assert changes.status_code == 200, changes.text
+        assert changes.json()["revision"] == 2
+        assert changes.json()["state_axes"]["submission_status"] == "changes_requested"
+        assert changes.json()["state_axes"]["human_acceptance_status"] == "changes_requested"
+        assert changes.json()["state_axes"]["run_counts"]["queued"] == 2
+        assert changes.json()["state_axes"]["agent_result_status"] == "mixed"
+
+        for agent in (owner_agent, member_agent):
+            revision_run = client.post(
+                "/api/v1/task-runs/claim",
+                headers={"Authorization": f"Bearer {agent['api_key']}"},
+            )
+            assert revision_run.status_code == 200, revision_run.text
+            revision_run_body = revision_run.json()
+            assert "补充风险处置时限" in revision_run_body["instruction"]
+            revision_result = client.post(
+                f"/api/v1/task-runs/{revision_run_body['run_id']}/result",
+                headers={"Authorization": f"Bearer {agent['api_key']}"},
+                json={
+                    "lease_token": revision_run_body["lease_token"],
+                    "status": "completed",
+                    "summary": "已按修改意见补充",
+                },
+            )
+            assert revision_result.status_code == 204, revision_result.text
+
+        resubmitted = client.post(
+            f"/api/v1/tasks/{task_id}/submit",
+            headers={"X-CSRF-Token": owner_csrf},
+            json={"summary": "最终客户方案已补充风险处置时限"},
+        )
+        assert resubmitted.status_code == 200, resubmitted.text
         completed = client.post(
             f"/api/v1/tasks/{task_id}/acceptance",
             headers={"X-CSRF-Token": owner_csrf},
@@ -325,6 +367,7 @@ def test_confirmed_friends_task_agent_selection_run_and_human_acceptance(
         )
         assert completed.status_code == 200, completed.text
         assert completed.json()["status"] == "completed"
+        assert completed.json()["state_axes"]["human_acceptance_status"] == "accepted"
 
 
 def test_task_messages_use_legacy_inbox_and_native_run_without_breaking_old_connectors(
@@ -399,7 +442,7 @@ def test_task_messages_use_legacy_inbox_and_native_run_without_breaking_old_conn
                 "Authorization": f"Bearer {owner_agent['api_key']}",
                 "Idempotency-Key": "legacy-task-message",
             },
-            json={"subject": "兼容测试", "content_format": "text", "body": "请确认收到"},
+            json={"subject": "兼容测试", "format": "text", "body": "请确认收到"},
         )
         assert legacy.status_code == 201, legacy.text
         assert legacy.json()["legacy_delivery_count"] == 1

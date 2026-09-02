@@ -47,7 +47,12 @@ class ConnectorInstance(Base):
     display_name: Mapped[str] = mapped_column(String(200), nullable=False)
     device_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     client_version: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    installed_version: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    configured_version: Mapped[str | None] = mapped_column(String(100), nullable=True)
     runtime_version: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    runtime_session_started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     runtime_version_reported_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

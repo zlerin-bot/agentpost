@@ -948,3 +948,17 @@ def test_task_run_claim_heartbeat_and_result_are_explicit() -> None:
     assert completed is None
     assert json.loads(requests[1].content)["checkpoint"] == {"step": 2}
     assert json.loads(requests[2].content)["status"] == "completed"
+    assert json.loads(requests[2].content)["checkpoint"] == {"artifact": "report"}
+
+
+def test_task_run_result_rejects_new_and_legacy_checkpoint_together() -> None:
+    with make_client(lambda request: httpx.Response(204, request=request)) as client:
+        with pytest.raises(ConfigurationError, match="checkpoint or legacy output"):
+            client.task_runs.complete(
+                "run-1",
+                lease_token="x" * 24,
+                status="completed",
+                summary="done",
+                checkpoint={"new": True},
+                output={"legacy": True},
+            )

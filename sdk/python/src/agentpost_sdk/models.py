@@ -177,6 +177,7 @@ class TaskContext(APIModel):
     expected_output: str
     status: str
     owner_display_name: str
+    state_axes: dict[str, Any] = Field(default_factory=dict)
     members: list[dict[str, Any]] = Field(default_factory=list)
     assignments: list[dict[str, Any]] = Field(default_factory=list)
     activities: list[dict[str, Any]] = Field(default_factory=list)

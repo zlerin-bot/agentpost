@@ -173,7 +173,7 @@ def test_orbit_site_is_branded_and_does_not_persist_credentials(
     assert auth_config.json()["protocol_contract_url"] == (
         "http://127.0.0.1:8000/api/v1/protocol/contract"
     )
-    assert auth_config.json()["protocol_contract_version"] == "0.1"
+    assert auth_config.json()["protocol_contract_version"] == "0.2"
     combined = f"{orbit.text}\n{script.text}".casefold()
     assert "localstorage" not in combined
     assert "sessionstorage" not in combined
@@ -576,7 +576,7 @@ def test_auth_config_exposes_release_platforms_per_host(
         "wheel_url": "https://agentpost.me/downloads/agentpost-0.1.1-py3-none-any.whl",
         "wheel_sha256": "a" * 64,
     }
-    assert response.json()["protocol_contract_version"] == "0.1"
+    assert response.json()["protocol_contract_version"] == "0.2"
 
 
 def test_human_identity_uses_a_separate_one_time_key_and_admin_boundary(

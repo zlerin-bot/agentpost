@@ -10,11 +10,11 @@ def test_public_agent_integration_contract_preserves_machine_and_human_semantics
 
     assert response.status_code == 200
     assert response.headers["Cache-Control"] == "public, max-age=300"
-    assert response.headers["X-AgentPost-Contract-Version"] == "0.1"
+    assert response.headers["X-AgentPost-Contract-Version"] == "0.2"
     assert response.headers["X-Content-Type-Options"] == "nosniff"
     payload = response.json()
     assert payload["contract"] == "AGENTPOST_AGENT_INTEGRATION"
-    assert payload["version"] == "0.1"
+    assert payload["version"] == "0.2"
     assert payload["openapi_url"] == "/openapi.json"
     send_endpoint = next(
         endpoint for endpoint in payload["endpoints"] if endpoint["path"] == "/api/v1/messages"
@@ -53,6 +53,15 @@ def test_public_agent_integration_contract_preserves_machine_and_human_semantics
         "result_requires_human_acceptance": True,
         "task_id_is_global_stable_identifier": True,
         "active_task_agents_receive_durable_runs": True,
+        "request_shapes": {
+            "extra_fields": "forbid",
+            "task_message_fields": ["subject", "content_format", "body"],
+            "task_message_legacy_aliases": {"format": "content_format"},
+            "run_heartbeat_fields": ["lease_token", "status", "checkpoint"],
+            "run_result_fields": ["lease_token", "status", "summary", "checkpoint"],
+            "run_result_legacy_aliases": {"output": "checkpoint"},
+        },
+        "human_change_request_creates_new_runs": True,
         "collaboration_scope": "task_only",
         "participant_authority": "task_membership",
         "one_thread_per_task": True,
@@ -64,6 +73,9 @@ def test_public_agent_integration_contract_preserves_machine_and_human_semantics
     assert payload["heartbeat"]["legacy_upgrade_inbox_notification"] is True
     assert payload["heartbeat"]["upgrade_notification_deduplicated_per_target_version"] is True
     assert payload["heartbeat"]["old_connectors_remain_usable_during_upgrade"] is True
+    assert payload["heartbeat"]["reports_installed_configured_and_runtime_versions"] is True
+    assert payload["heartbeat"]["reports_runtime_session_and_capabilities"] is True
+    assert payload["heartbeat"]["reconnect_required_when_loaded_runtime_is_stale"] is True
     assert payload["synchronization"]["source_of_truth"] == "persistent_inbox"
     assert payload["synchronization"]["recommended_mode"] == "poll_with_cursor"
     assert payload["synchronization"]["recommended_poll_interval_seconds"] == 30
@@ -84,7 +96,10 @@ def test_public_agent_integration_contract_preserves_machine_and_human_semantics
         "delivery",
         "agent_read",
         "ack",
+        "agent_run",
         "task_result",
+        "task_submission",
+        "human_acceptance",
     ]
     task = payload["task_execution"]
     assert task["collaboration_scope"] == "task_only"

@@ -14,7 +14,7 @@ from agentpost.messaging.schemas import (
 from agentpost.onboarding.connectivity import heartbeat_timeout_seconds
 from agentpost.tasks.service import RUN_LEASE_SECONDS
 
-PROTOCOL_CONTRACT_VERSION = "0.1"
+PROTOCOL_CONTRACT_VERSION = "0.2"
 
 
 class ContractModel(BaseModel):
@@ -48,6 +48,36 @@ class StateContract(ContractModel):
     direct_reply_handles_task_round: Literal[True] = True
     structured_result_takes_precedence: Literal[True] = True
     agent_result_is_not_human_acceptance: Literal[True] = True
+    independent_task_axes: list[str] = Field(
+        default_factory=lambda: [
+            "delivery",
+            "agent_read",
+            "ack",
+            "agent_run",
+            "agent_result",
+            "task_submission",
+            "human_acceptance",
+        ]
+    )
+
+
+class TaskRequestShapeContract(ContractModel):
+    extra_fields: Literal["forbid"] = "forbid"
+    task_message_fields: list[str] = Field(
+        default_factory=lambda: ["subject", "content_format", "body"]
+    )
+    task_message_legacy_aliases: dict[str, str] = Field(
+        default_factory=lambda: {"format": "content_format"}
+    )
+    run_heartbeat_fields: list[str] = Field(
+        default_factory=lambda: ["lease_token", "status", "checkpoint"]
+    )
+    run_result_fields: list[str] = Field(
+        default_factory=lambda: ["lease_token", "status", "summary", "checkpoint"]
+    )
+    run_result_legacy_aliases: dict[str, str] = Field(
+        default_factory=lambda: {"output": "checkpoint"}
+    )
 
 
 class TaskExecutionContract(ContractModel):
@@ -90,6 +120,8 @@ class TaskExecutionContract(ContractModel):
     result_requires_human_acceptance: Literal[True] = True
     task_id_is_global_stable_identifier: Literal[True] = True
     active_task_agents_receive_durable_runs: Literal[True] = True
+    request_shapes: TaskRequestShapeContract = Field(default_factory=TaskRequestShapeContract)
+    human_change_request_creates_new_runs: Literal[True] = True
 
 
 class HeartbeatContract(ContractModel):
@@ -103,6 +135,9 @@ class HeartbeatContract(ContractModel):
     legacy_upgrade_inbox_notification: Literal[True] = True
     upgrade_notification_deduplicated_per_target_version: Literal[True] = True
     old_connectors_remain_usable_during_upgrade: Literal[True] = True
+    reports_installed_configured_and_runtime_versions: Literal[True] = True
+    reports_runtime_session_and_capabilities: Literal[True] = True
+    reconnect_required_when_loaded_runtime_is_stale: Literal[True] = True
 
 
 class SynchronizationContract(ContractModel):
@@ -137,7 +172,10 @@ class HumanPresentationContract(ContractModel):
             "delivery",
             "agent_read",
             "ack",
+            "agent_run",
             "task_result",
+            "task_submission",
+            "human_acceptance",
         ]
     )
 
@@ -150,7 +188,7 @@ class OnboardingStep(ContractModel):
 
 class AgentIntegrationContract(ContractModel):
     contract: Literal["AGENTPOST_AGENT_INTEGRATION"] = "AGENTPOST_AGENT_INTEGRATION"
-    version: Literal["0.1"] = PROTOCOL_CONTRACT_VERSION
+    version: Literal["0.2"] = PROTOCOL_CONTRACT_VERSION
     authentication: Literal["agent_bearer_token_from_os_vault"] = "agent_bearer_token_from_os_vault"
     openapi_url: Literal["/openapi.json"] = "/openapi.json"
     endpoints: list[EndpointContract]

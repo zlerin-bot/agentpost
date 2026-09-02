@@ -386,7 +386,7 @@ def register_tools(mcp: Any, create_client: ClientFactory) -> None:
         lease_token: Annotated[str, Field(min_length=20, max_length=500)],
         status: Literal["completed", "partial", "failed", "cancelled"],
         summary: Annotated[str, Field(min_length=1, max_length=20000)],
-        output: Mapping[str, JsonValue] | None = None,
+        checkpoint: Mapping[str, JsonValue] | None = None,
     ) -> CallToolResult:
         try:
             with create_client() as client:
@@ -395,7 +395,7 @@ def register_tools(mcp: Any, create_client: ClientFactory) -> None:
                     lease_token=lease_token,
                     status=status,
                     summary=summary,
-                    output=output,
+                    checkpoint=checkpoint,
                 )
             return success({"run_id": str(run_id), "status": status}, external=False)
         except Exception as exc:

@@ -4,7 +4,15 @@ from datetime import UTC, datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator, model_validator
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    Field,
+    JsonValue,
+    field_validator,
+    model_validator,
+)
 
 from agentpost.messaging.schemas import ContentCreate
 
@@ -112,7 +120,10 @@ class AgentTaskResolution(TaskModel):
 
 class AgentTaskMessageCreate(TaskModel):
     subject: str = Field(default="", max_length=500)
-    content_format: Literal["text", "markdown", "json"] = "text"
+    content_format: Literal["text", "markdown", "json"] = Field(
+        default="text",
+        validation_alias=AliasChoices("content_format", "format"),
+    )
     body: JsonValue
 
     @model_validator(mode="after")
@@ -270,6 +281,27 @@ class TaskActivityResponse(TaskModel):
     created_at: datetime
 
 
+class TaskRunStateCounts(TaskModel):
+    queued: int = 0
+    active: int = 0
+    waiting_human: int = 0
+    terminal: int = 0
+
+
+class TaskStateAxes(TaskModel):
+    task_status: str
+    run_counts: TaskRunStateCounts
+    agent_result_status: Literal["none", "completed", "partial", "failed", "cancelled", "mixed"]
+    submission_status: Literal[
+        "not_submitted", "awaiting_acceptance", "changes_requested", "accepted", "cancelled"
+    ]
+    human_acceptance_status: Literal[
+        "not_ready", "pending", "accepted", "changes_requested", "cancelled"
+    ]
+    submitted_at: datetime | None = None
+    accepted_at: datetime | None = None
+
+
 class TaskSummary(TaskModel):
     task_id: UUID
     thread_id: UUID
@@ -288,6 +320,7 @@ class TaskSummary(TaskModel):
     invited_member_count: int
     assignment_count: int
     pending_assignment_count: int
+    state_axes: TaskStateAxes
     final_summary: str | None
     created_at: datetime
     updated_at: datetime
@@ -335,4 +368,7 @@ class AgentRunResult(TaskModel):
     lease_token: str = Field(min_length=20, max_length=500)
     status: Literal["completed", "partial", "failed", "cancelled"]
     summary: str = Field(min_length=1, max_length=20_000)
-    checkpoint: dict[str, Any] = Field(default_factory=dict)
+    checkpoint: dict[str, Any] = Field(
+        default_factory=dict,
+        validation_alias=AliasChoices("checkpoint", "output"),
+    )

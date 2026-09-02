@@ -49,6 +49,8 @@ from agentpost.tasks.schemas import (
     TaskDetail,
     TaskFinalSubmission,
     TaskMember,
+    TaskRunStateCounts,
+    TaskStateAxes,
     TaskSummary,
 )
 
@@ -512,6 +514,59 @@ def _queue_collaboration_assignment(
     return assignment
 
 
+def _task_state_axes(
+    task: Task,
+    assignments: list[TaskAssignmentResponse],
+) -> TaskStateAxes:
+    run_counts = {"queued": 0, "active": 0, "waiting_human": 0, "terminal": 0}
+    for assignment in assignments:
+        status = assignment.run_status or assignment.status
+        if status == "queued":
+            run_counts["queued"] += 1
+        elif status in {"leased", "starting", "running"}:
+            run_counts["active"] += 1
+        elif status == "waiting_human":
+            run_counts["waiting_human"] += 1
+        else:
+            run_counts["terminal"] += 1
+
+    result_states = {item.result_status for item in assignments if item.result_status}
+    if not result_states:
+        result_status = "none"
+    elif len([item for item in assignments if item.result_status]) != len(assignments):
+        result_status = "mixed"
+    elif len(result_states) == 1:
+        result_status = next(iter(result_states))
+    else:
+        result_status = "mixed"
+
+    if task.accepted_at is not None:
+        submission_status = "accepted"
+        acceptance_status = "accepted"
+    elif task.status == "awaiting_acceptance":
+        submission_status = "awaiting_acceptance"
+        acceptance_status = "pending"
+    elif task.status in {"cancelled", "archived"}:
+        submission_status = "cancelled"
+        acceptance_status = "cancelled"
+    elif task.revision > 1 and task.submitted_at is None:
+        submission_status = "changes_requested"
+        acceptance_status = "changes_requested"
+    else:
+        submission_status = "not_submitted"
+        acceptance_status = "not_ready"
+
+    return TaskStateAxes(
+        task_status=task.status,
+        run_counts=TaskRunStateCounts(**run_counts),
+        agent_result_status=result_status,  # type: ignore[arg-type]
+        submission_status=submission_status,  # type: ignore[arg-type]
+        human_acceptance_status=acceptance_status,  # type: ignore[arg-type]
+        submitted_at=_as_utc(task.submitted_at),
+        accepted_at=_as_utc(task.accepted_at),
+    )
+
+
 def _task_detail(session: Session, *, task: Task, viewer_membership: TaskMembership) -> TaskDetail:
     membership_rows = session.execute(
         select(TaskMembership, HumanUser)
@@ -667,6 +722,7 @@ def _task_detail(session: Session, *, task: Task, viewer_membership: TaskMembers
         invited_member_count=sum(item.status == "invited" for item, _ in membership_rows),
         assignment_count=len(assignment_rows),
         pending_assignment_count=pending_count,
+        state_axes=_task_state_axes(task, assignments),
         final_summary=task.final_summary,
         created_at=_as_utc(task.created_at),
         updated_at=_as_utc(task.updated_at),
@@ -1760,7 +1816,7 @@ def decide_task_acceptance(
         task.final_summary = None
         task.submitted_at = None
     task.updated_at = now
-    _add_activity(
+    decision_activity = _add_activity(
         session,
         task_id=task.id,
         kind="accepted" if payload.decision == "accept" else "changes_requested",
@@ -1768,6 +1824,30 @@ def decide_task_acceptance(
         actor_human_id=user.id,
         metadata={"note": payload.note} if payload.note else {},
     )
+    if payload.decision == "request_changes":
+        session.flush()
+        participants = list(
+            session.scalars(
+                select(TaskAgentParticipant).where(
+                    TaskAgentParticipant.task_id == task.id,
+                    TaskAgentParticipant.active.is_(True),
+                )
+            )
+        )
+        for participant in participants:
+            _queue_collaboration_assignment(
+                session,
+                task=task,
+                human_id=participant.human_user_id,
+                agent_id=participant.agent_id,
+                created_by_human_id=user.id,
+                assignment_kind="result_sync",
+                trigger_activity_id=decision_activity.id,
+                instruction=(
+                    "Human 已要求修改任务结果。请读取完整任务上下文和历史结果，"
+                    f"按以下意见完成新一轮修改：\n\n{payload.note}"
+                ),
+            )
     add_human_action_audit(
         session,
         human_user_id=user.id,

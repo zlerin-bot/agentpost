@@ -159,6 +159,7 @@ const elements = {
   projectOwner: document.querySelector("#project-owner"),
   projectMemberCount: document.querySelector("#project-member-count"),
   projectDue: document.querySelector("#project-due"),
+  projectStateAxes: document.querySelector("#project-state-axes"),
   projectActionResult: document.querySelector("#project-action-result"),
   projectMemberList: document.querySelector("#project-member-list"),
   taskMyAgentForm: document.querySelector("#task-my-agent-form"),
@@ -732,6 +733,35 @@ function createTaskActivityAttachment(activity, format, body) {
   return details;
 }
 
+function taskStateAxesLabel(project) {
+  const axes = project.state_axes;
+  if (!axes) {
+    return "状态待同步";
+  }
+  const counts = axes.run_counts || {};
+  const runParts = [];
+  if (counts.queued) runParts.push(`${counts.queued} 待领取`);
+  if (counts.active) runParts.push(`${counts.active} 执行中`);
+  if (counts.waiting_human) runParts.push(`${counts.waiting_human} 等待 Human`);
+  if (!runParts.length) runParts.push("执行单元已结束");
+  const resultLabels = {
+    none: "尚无 Agent 结果",
+    completed: "Agent 结果完成",
+    partial: "Agent 部分完成",
+    failed: "Agent 执行失败",
+    cancelled: "Agent 执行取消",
+    mixed: "Agent 结果不一致",
+  };
+  const acceptanceLabels = {
+    not_ready: "尚未提交",
+    pending: "等待 Human 验收",
+    accepted: "Human 已验收",
+    changes_requested: "Human 要求修改",
+    cancelled: "验收已取消",
+  };
+  return `${runParts.join("、")} · ${resultLabels[axes.agent_result_status] || "结果待同步"} · ${acceptanceLabels[axes.human_acceptance_status] || "验收待同步"}`;
+}
+
 function renderProjectDetail() {
   const project = state.selectedProjectId === state.selectedProject?.task_id
     ? state.selectedProject
@@ -760,6 +790,7 @@ function renderProjectDetail() {
   elements.projectMemberCount.textContent = project.active_member_count + " 人"
     + (project.invited_member_count ? " · " + project.invited_member_count + " 人待确认" : "");
   elements.projectDue.textContent = dateOnlyText(project.due_at);
+  elements.projectStateAxes.textContent = taskStateAxesLabel(project);
   elements.projectInvite.hidden = !ownerAccess;
   elements.projectMemberInvite.hidden = !ownerAccess;
   elements.projectInvite.disabled = project.status === "archived";
@@ -2577,7 +2608,7 @@ function connectorCard(connector, historical = false) {
   [
     ["Agent 类型", connector.connector_type],
     ["设备", connector.device_name],
-    ["当前版本", connector.runtime_version || "未上报"],
+    ["实际运行版本", connector.runtime_version || "未上报"],
     ["升级建议", connectorVersionLabel(connector.version_status)],
     ["初始连接时间", dateText(connector.activated_at)],
     ["最近连接时间", dateText(connector.last_heartbeat_at)],
@@ -2601,8 +2632,12 @@ function connectorCard(connector, historical = false) {
   [
     ["规范地址", connector.agent?.address],
     ["首次接入版本", connector.client_version],
+    ["已安装版本", connector.installed_version],
+    ["配置目标版本", connector.configured_version],
     ["当前运行版本", connector.runtime_version],
+    ["当前会话启动", dateText(connector.runtime_session_started_at)],
     ["版本上报时间", dateText(connector.runtime_version_reported_at)],
+    ["实际加载能力", (connector.runtime_capabilities || []).join("、") || "未上报"],
     ["推荐版本", connector.recommended_version],
     ["最低完整协作版本", connector.minimum_supported_version],
   ].forEach(([label, value]) => {
@@ -2616,6 +2651,13 @@ function connectorCard(connector, historical = false) {
   });
   technicalDetails.append(technicalSummary, technicalFacts);
   card.append(technicalDetails);
+
+  if (connector.reconnect_required) {
+    const reconnectNotice = document.createElement("p");
+    reconnectNotice.className = "connector-reconnect-notice";
+    reconnectNotice.textContent = "新版本已安装或已配置，但当前会话仍在运行旧版本；请重新连接后再确认升级完成。";
+    card.append(reconnectNotice);
+  }
 
   if (
     connector.is_current

@@ -194,7 +194,10 @@ def _connector_response(connector: ConnectorInstance) -> PairingConnectorRespons
         display_name=connector.display_name,
         device_name=connector.device_name,
         client_version=connector.client_version,
+        installed_version=connector.installed_version,
+        configured_version=connector.configured_version,
         runtime_version=connector.runtime_version,
+        runtime_session_started_at=connector.runtime_session_started_at,
         runtime_version_reported_at=connector.runtime_version_reported_at,
         runtime_capabilities=connector.runtime_capabilities,
         status=connector.status,
@@ -784,6 +787,10 @@ def list_human_connectors(
                 recommended_version=recommended_version,
                 minimum_supported_version=minimum_supported_version,
                 version_status=version_status,
+                reconnect_required=_connector_reconnect_required(
+                    connector,
+                    recommended_version=recommended_version,
+                ),
                 upgrade_reason=upgrade_reason,
                 upgrade_prompt=upgrade_prompt,
             )
@@ -822,6 +829,22 @@ def _connector_version_status(
     if current < recommended:
         return "update_available", "当前连接仍可使用，升级后可获得最新功能和修复。"
     return "current", "当前运行版本已经符合最新推荐版本。"
+
+
+def _connector_reconnect_required(
+    connector: ConnectorInstance,
+    *,
+    recommended_version: str,
+) -> bool:
+    recommended = _connector_version_tuple(recommended_version)
+    runtime = _connector_version_tuple(connector.runtime_version)
+    installed = _connector_version_tuple(connector.installed_version)
+    configured = _connector_version_tuple(connector.configured_version)
+    target_is_ready = any(
+        candidate is not None and recommended is not None and candidate >= recommended
+        for candidate in (installed, configured)
+    )
+    return target_is_ready and (runtime is None or runtime < recommended)
 
 
 def _connector_upgrade_prompt(
@@ -978,6 +1001,12 @@ def record_connector_heartbeat(
     connector.last_error_code = payload.last_error_code
     connector.last_error_at = now if payload.last_error_code is not None else None
     agent.last_seen_at = now
+    if payload.installed_version is not None:
+        connector.installed_version = payload.installed_version
+    if payload.configured_version is not None:
+        connector.configured_version = payload.configured_version
+    if payload.runtime_session_started_at is not None:
+        connector.runtime_session_started_at = payload.runtime_session_started_at
     if payload.client_version is not None:
         connector.runtime_version = payload.client_version
         connector.runtime_version_reported_at = now

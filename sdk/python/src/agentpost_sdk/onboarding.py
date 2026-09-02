@@ -45,7 +45,10 @@ class ConnectorState(BaseModel):
     status: Literal["active", "replaced", "revoked"]
     health_status: Literal["unknown", "healthy", "degraded", "error"]
     client_version: str | None = None
+    installed_version: str | None = None
+    configured_version: str | None = None
     runtime_version: str | None = None
+    runtime_session_started_at: datetime | None = None
     runtime_version_reported_at: datetime | None = None
     runtime_capabilities: list[str] = Field(default_factory=list)
     last_heartbeat_at: datetime | None = None
