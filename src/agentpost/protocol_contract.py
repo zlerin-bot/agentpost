@@ -143,6 +143,9 @@ class TaskExecutionContract(ContractModel):
     task_messages_create_acknowledgement_runs: Literal[False] = False
     agent_results_create_sync_runs: Literal[False] = False
     explicit_human_work_creates_runs: Literal[True] = True
+    waiting_human_checkpoint_visible_to_human: Literal[True] = True
+    human_response_requeues_same_assignment: Literal[True] = True
+    successor_run_exposes_human_response_checkpoint: Literal[True] = True
     request_shapes: TaskRequestShapeContract = Field(default_factory=TaskRequestShapeContract)
     human_change_request_creates_new_runs: Literal[True] = True
 

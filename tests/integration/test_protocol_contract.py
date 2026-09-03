@@ -64,6 +64,9 @@ def test_public_agent_integration_contract_preserves_machine_and_human_semantics
         "task_messages_create_acknowledgement_runs": False,
         "agent_results_create_sync_runs": False,
         "explicit_human_work_creates_runs": True,
+        "waiting_human_checkpoint_visible_to_human": True,
+        "human_response_requeues_same_assignment": True,
+        "successor_run_exposes_human_response_checkpoint": True,
         "request_shapes": {
             "extra_fields": "forbid",
             "task_message_fields": [

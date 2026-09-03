@@ -78,7 +78,7 @@ def test_plugin_packages_the_same_implicit_skill_without_machine_specific_mcp_co
 
     assert manifest["name"] == "agentpost"
     plugin_version, separator, cachebuster = manifest["version"].partition("+")
-    assert plugin_version == "0.1.47"
+    assert plugin_version == "0.1.48"
     assert separator == "+"
     assert cachebuster.startswith("codex.")
     assert manifest["skills"] == "./skills/"
@@ -107,6 +107,20 @@ def test_production_example_publishes_every_host_on_three_platforms() -> None:
         "MANUS",
     ):
         assert f"AGENTPOST_{host_variable}_SETUP_PLATFORMS={expected}" in production_env
+
+
+def test_production_example_connector_artifact_matches_release_version() -> None:
+    production_env = (REPOSITORY_ROOT / ".env.production.example").read_text(encoding="utf-8")
+    values = dict(
+        line.split("=", 1)
+        for line in production_env.splitlines()
+        if line.startswith("AGENTPOST_CONNECTOR_") and "=" in line
+    )
+
+    assert values["AGENTPOST_CONNECTOR_RELEASE_VERSION"] == "0.1.48"
+    assert values["AGENTPOST_CONNECTOR_WHEEL_URL"].endswith("/agentpost-0.1.48-py3-none-any.whl")
+    assert len(values["AGENTPOST_CONNECTOR_WHEEL_SHA256"]) == 64
+    int(values["AGENTPOST_CONNECTOR_WHEEL_SHA256"], 16)
 
 
 def test_bootstrap_imports_with_the_system_python_used_by_the_copyable_prompt() -> None:

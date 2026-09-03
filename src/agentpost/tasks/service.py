@@ -53,6 +53,7 @@ from agentpost.tasks.schemas import (
     TaskDetail,
     TaskFinalSubmission,
     TaskMember,
+    TaskRunHumanResponse,
     TaskRunStateCounts,
     TaskStateAxes,
     TaskSummary,
@@ -94,6 +95,10 @@ class AgentRunLeaseError(Exception):
 
 
 class TaskMessageIdempotencyConflictError(Exception):
+    pass
+
+
+class TaskHumanResponseForbiddenError(Exception):
     pass
 
 
@@ -551,7 +556,10 @@ def _task_state_axes(
     assignments: list[TaskAssignmentResponse],
 ) -> TaskStateAxes:
     effective_assignments = [
-        item for item in assignments if item.cancellation_reason != "legacy_pre_0_1_44_backlog"
+        item
+        for item in assignments
+        if item.assignment_kind not in {"task_message", "result_sync"}
+        and item.cancellation_reason != "legacy_pre_0_1_44_backlog"
     ]
     run_counts = {"queued": 0, "active": 0, "waiting_human": 0, "terminal": 0}
     for assignment in effective_assignments:
@@ -762,6 +770,10 @@ def _task_detail(session: Session, *, task: Task, viewer_membership: TaskMembers
             result_summary=item.result_summary,
             cancellation_reason=item.cancellation_reason,
             run_status=(latest_run[item.id].status if item.id in latest_run else None),
+            run_checkpoint=(latest_run[item.id].checkpoint if item.id in latest_run else {}),
+            run_last_heartbeat_at=(
+                _as_utc(latest_run[item.id].last_heartbeat_at) if item.id in latest_run else None
+            ),
             wake_stage=(
                 _run_wake_stage(latest_run[item.id]) if item.id in latest_run else "queued"
             ),  # type: ignore[arg-type]
@@ -819,7 +831,10 @@ def _task_detail(session: Session, *, task: Task, viewer_membership: TaskMembers
     if owner is None:
         raise TaskNotFoundError
     effective_assignment_rows = [
-        item for item in assignment_rows if item.cancellation_reason != "legacy_pre_0_1_44_backlog"
+        item
+        for item in assignment_rows
+        if item.assignment_kind not in {"task_message", "result_sync"}
+        and item.cancellation_reason != "legacy_pre_0_1_44_backlog"
     ]
     pending_count = sum(
         item.status not in {"completed", "cancelled"} for item in effective_assignment_rows
@@ -1861,6 +1876,9 @@ def create_assignment(
     source_activity.activity_metadata = {
         **source_activity.activity_metadata,
         "assignment_id": str(assignment.id),
+        "instruction": assignment.instruction,
+        "expected_output": assignment.expected_output,
+        "priority": assignment.priority,
     }
     add_human_action_audit(
         session,
@@ -1873,6 +1891,92 @@ def create_assignment(
         request_id=request_id,
     )
     task.updated_at = utc_now()
+    session.commit()
+    return _task_detail(session, task=task, viewer_membership=membership)
+
+
+def respond_to_waiting_agent_run(
+    session: Session,
+    *,
+    user: HumanUser,
+    task_id: UUID,
+    assignment_id: UUID,
+    payload: TaskRunHumanResponse,
+    human_session_id: UUID | None,
+    request_id: str,
+) -> TaskDetail:
+    task, membership = _task_context(session, task_id=task_id, user=user, lock=True)
+    if membership.status != "active" or task.status != "active":
+        raise TaskStateConflictError
+    assignment = session.scalar(
+        select(TaskAssignment)
+        .where(TaskAssignment.id == assignment_id, TaskAssignment.task_id == task_id)
+        .with_for_update()
+    )
+    if assignment is None:
+        raise TaskNotFoundError
+    if user.id not in {task.owner_human_user_id, assignment.responsible_human_user_id}:
+        raise TaskHumanResponseForbiddenError
+    run = session.scalar(
+        select(AgentRun)
+        .where(AgentRun.assignment_id == assignment.id)
+        .order_by(AgentRun.attempt.desc())
+        .with_for_update()
+        .limit(1)
+    )
+    if run is None or run.status != "waiting_human" or assignment.status != "waiting_human":
+        raise TaskStateConflictError
+
+    now = utc_now()
+    previous_checkpoint = run.checkpoint if isinstance(run.checkpoint, dict) else {}
+    run.status = "interrupted"
+    run.finished_at = now
+    run.lease_expires_at = None
+    run.lease_token_digest = None
+    run.cancellation_reason = "human_response_superseded"
+    successor = AgentRun(
+        assignment_id=assignment.id,
+        agent_id=assignment.assignee_agent_id,
+        attempt=run.attempt + 1,
+        checkpoint={
+            "previous_checkpoint": previous_checkpoint,
+            "human_response": payload.response,
+            "responded_by_human_user_id": str(user.id),
+            "responded_at": now.isoformat(),
+        },
+    )
+    session.add(successor)
+    assignment.status = "queued"
+    assignment.updated_at = now
+    activity = _add_activity(
+        session,
+        task_id=task.id,
+        kind="human_run_response",
+        actor_type="human",
+        actor_human_id=user.id,
+        target_human_id=assignment.responsible_human_user_id,
+        metadata={
+            "assignment_id": str(assignment.id),
+            "previous_run_id": str(run.id),
+            "response": payload.response,
+        },
+    )
+    session.flush()
+    activity.activity_metadata = {
+        **activity.activity_metadata,
+        "successor_run_id": str(successor.id),
+    }
+    add_human_action_audit(
+        session,
+        human_user_id=user.id,
+        human_session_id=human_session_id,
+        action="task.run_human_response",
+        target_type="task_assignment",
+        target_id=str(assignment.id),
+        outcome="success",
+        request_id=request_id,
+    )
+    task.updated_at = now
     session.commit()
     return _task_detail(session, task=task, viewer_membership=membership)
 
@@ -2171,6 +2275,7 @@ def list_pending_agent_runs(
             reply_thread_id=task.thread_id,
             priority=assignment.priority,  # type: ignore[arg-type]
             attempt=run.attempt,
+            checkpoint=run.checkpoint,
             created_at=_as_utc(run.created_at),
         )
         for run, assignment, task in rows
@@ -2262,6 +2367,7 @@ def claim_agent_run(
         expected_output=assignment.expected_output,
         due_at=_as_utc(assignment.due_at),
         attempt=run.attempt,
+        checkpoint=run.checkpoint,
         participant_agent_ids=participant_agent_ids,
         collaboration_updates=collaboration_updates,
         wake_stage="claimed",
@@ -2328,6 +2434,7 @@ def update_agent_run(
                 "run_id": str(run.id),
                 "status": payload.status,
                 "wake_status": payload.wake_status,
+                "checkpoint": payload.checkpoint,
             },
         )
     session.commit()
@@ -2353,6 +2460,7 @@ def update_agent_run(
         expected_output=assignment.expected_output,
         due_at=_as_utc(assignment.due_at),
         attempt=run.attempt,
+        checkpoint=run.checkpoint,
         participant_agent_ids=participant_agent_ids,
         collaboration_updates=collaboration_updates,
         wake_stage=_run_wake_stage(run),  # type: ignore[arg-type]

@@ -5076,6 +5076,12 @@ footer {
 
 .project-activity-card {
   padding-bottom: 12px;
+  scroll-margin-top: 96px;
+}
+
+.project-activity-card:focus {
+  outline: 3px solid rgba(26, 115, 232, 0.22);
+  outline-offset: 3px;
 }
 
 .project-activity-row {
@@ -5087,6 +5093,12 @@ footer {
   border-radius: 12px;
   background: #fff;
   padding: 10px;
+}
+
+.project-activity-row:target {
+  border-color: #1a73e8;
+  box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.14);
+  scroll-margin-top: 96px;
 }
 
 .project-activity-avatar,
@@ -5478,6 +5490,83 @@ footer {
   font-size: 0.68rem;
   line-height: 1.55;
   white-space: pre-wrap;
+}
+
+.project-progress-heartbeat {
+  color: #5f6368 !important;
+}
+
+.task-record-link {
+  justify-self: start;
+  color: #185abc;
+  font-size: 0.67rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.task-record-link:hover,
+.task-record-link:focus-visible {
+  text-decoration: underline;
+}
+
+.task-human-response-form {
+  display: grid;
+  gap: 8px;
+  margin-top: 6px;
+  border-top: 1px solid #d7e3f4;
+  padding-top: 9px;
+}
+
+.task-human-response-form label {
+  display: grid;
+  gap: 5px;
+  color: #3c4043;
+  font-size: 0.67rem;
+  font-weight: 700;
+}
+
+.task-human-response-form textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid #c5cad1;
+  border-radius: 9px;
+  background: #fff;
+  padding: 8px 9px;
+  color: #202124;
+  font: inherit;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.task-human-response-form .primary-action {
+  justify-self: start;
+}
+
+.task-activity-human-request {
+  border-left: 3px solid #b06000;
+  background: #fff8e1;
+  padding: 7px 9px;
+}
+
+.task-legacy-activity,
+.task-run-activity {
+  border: 1px dashed #c5cad1;
+  border-radius: 11px;
+  background: #f8f9fa;
+  padding: 9px;
+}
+
+.task-legacy-activity > summary,
+.task-run-activity > summary {
+  cursor: pointer;
+  color: #5f6368;
+  font-size: 0.69rem;
+  font-weight: 700;
+}
+
+.task-legacy-activity > .project-activity-list,
+.task-run-activity > .project-activity-list {
+  margin-top: 9px;
 }
 
 .project-invite-options {

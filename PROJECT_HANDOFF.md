@@ -2,11 +2,11 @@
 
 ## 当前接续摘要
 
-- 交接阶段：`v0.1.47-task-provenance-deployed`
-- 本地版本：`0.1.47 / 0036_cancel_auto_ack_runs`
+- 交接阶段：`v0.1.48-waiting-human-local-verified`
+- 本地版本：`0.1.48 / 0036_cancel_auto_ack_runs`
 - 当前生产：`0fabd78 / 0.1.47 / 0036_cancel_auto_ack_runs / deployed_https_verified`
 - 生产接受状态：不是 `production_accepted`
-- 本切片：修正任务消息的发布来源、发起方/接收方/执行方显示，取消普通共享消息和结果的自动应答 Run；已部署并完成 HTTPS 后检
+- 本切片：补齐 waiting_human 的问题展示、Human 回复和同 Assignment 可靠重入队；统一任务 AI 名称，拆分状态变化与心跳时间，折叠历史执行噪声，并为长进展增加任务记录定位链接；本地已验证，尚未部署
 
 ## 当前产品模型
 
@@ -22,6 +22,12 @@ AgentPost 的多人协作只发生在 Task 内。每个 Task 有一个稳定 `ta
 
 ## 本切片已经完成
 
+- Agent 的 waiting_human checkpoint 进入 Human 任务详情和完整记录；任务负责人或该工作责任 Human 可直接回复。回复会使旧租约失效，并在同一 Assignment 下创建 successor Run，Human 回复通过 checkpoint 交给 Agent。
+- 空白回复返回校验错误、重复回复返回状态冲突、旧租约不能继续写入；pending preview 和 claim 均携带 successor checkpoint。
+- 进展卡分别显示状态变化时间和当前执行尝试的心跳；等待 Human 不再错误显示“尚未反馈”，回复后明确显示“等待 AI 重新领取”。
+- Task 状态轴彻底排除历史 `task_message` / `result_sync` Assignment；“mixed”改为“部分执行单元已有结果”，不再暗示 Agent 结论冲突。
+- 任务内 AI 统一使用 Agent display name；同一 Assignment 的执行生命周期折叠为一组，旧自动协同折叠到“0.1.47 前的历史自动协同”。
+- 长进展提供“查看完整任务记录”链接，自动展开并定位对应记录；新建工作和 Agent Result 的完整正文写入并显示在任务记录中。
 - 普通 Task 消息只写入共享上下文，不再为每个参与 AI 创建 `task_message` Run；Agent Result 也不再自动向其他参与 AI 派生 `result_sync` Run。需要特定 Human/AI 执行或回复时，必须使用明确工作或修改要求。
 - Agent 发布任务或消息时记录 `human_delegated` / `agent_autonomous` 来源；Human 页面据此显示“Human 委托 AI 发布”“Human 的 AI 主动发布”，历史缺少来源的记录显示为“Human 通过 AI 发布”。
 - 当前进展显示发起 Human → 负责 Human → 执行 AI，区分工作要求与 AI 反馈；`task_message` / `result_sync` 自动噪声不再作为当前工作卡显示。
@@ -58,6 +64,8 @@ AgentPost 的多人协作只发生在 Task 内。每个 Task 有一个稳定 `ta
 
 ## 本地验证证据
 
+- 0.1.48 `.venv/bin/pytest -m "not postgres"`：456 passed、1 expected skip、5 deselected；全部 JavaScript 37 passed、TypeScript Connector 8 passed并完成编译；Ruff、format、JavaScript syntax 通过；本地 wheel SHA-256 为 `cc80b8816b808e9dd963c6dc0065d05f1d52eb7a4bd639265b8b6d04e3d1d211`。
+- 0.1.48 隔离认证浏览器闭环通过：waiting_human 问题可见，Human 回复后同 Assignment 变为待领取，页面显示回复内容；桌面和 390px 无横向溢出。
 - 0.1.47 `.venv/bin/pytest -m "not postgres"`：455 passed、1 expected skip、5 deselected；TypeScript compile 和 JavaScript：45 passed；Ruff、format、wheel 构建和 `git diff --check` 通过。
 - 0.1.46 `.venv/bin/pytest -m "not postgres"`：455 passed、1 expected skip、5 deselected；聚焦 Python/MCP/SDK：57 passed；0036 迁移：2 passed。
 - 0.1.46 `.venv/bin/ruff check .`、`.venv/bin/ruff format --check .`、TypeScript compile、全部 JavaScript 49 tests 和 `git diff --check` 均通过。
@@ -77,9 +85,10 @@ AgentPost 的多人协作只发生在 Task 内。每个 Task 有一个稳定 `ta
 
 ## 待完成
 
-1. 完成真实任务附件卡和连接详情的认证视觉验收。
-2. 完成真实用户跨设备验收；此前不得标记为 `production_accepted`。
-3. 不要纳入两个无关的未跟踪管理汇报文件。
+1. 从明确提交构建并部署 0.1.48，在真实“测试任务”验证 waiting_human 回复和任务记录定位链接。
+2. 完成真实任务附件卡和连接详情的认证视觉验收。
+3. 完成真实用户跨设备验收；此前不得标记为 `production_accepted`。
+4. 不要纳入两个无关的未跟踪管理汇报文件。
 
 ## 0.1.47 生产发布证据
 

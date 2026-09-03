@@ -7,7 +7,7 @@ Last updated: 2026-09-02
 `local_verified`、`deployed_https_verified` 与 `production_accepted` 是不同门禁。任何未运行或缺少
 真实环境证据的项目必须标记为 `待确认`、`partial` 或 `no_evidence`。
 
-## Current baseline — 0.1.47
+## Current baseline — 0.1.48
 
 - Task 是唯一多人协作容器；一个 Task 对应一个稳定 ID 和一条主 Thread。
 - Friendship 是双向 Human 关系，只负责识别和邀请 Task 成员。
@@ -22,6 +22,8 @@ Last updated: 2026-09-02
 - Task 消息支持受权限保护的附件；进展按 Human 显示并折叠历史同步噪声。
 - Task 消息只共享上下文，不自动制造全员确认 Run；明确工作和修改要求才进入可靠执行队列。
 - 发布来源区分 Human 直接、Human 委托 Agent、Agent 主动和平台动作，工作卡明确显示发起者与执行方。
+- waiting_human checkpoint 对 Human 可见并可回复；回复使旧租约失效，同一 Assignment 携带 Human 回复重新入队。
+- 进展区拆分状态变化与心跳时间，长内容可定位到任务记录，执行过程与旧自动协同按组折叠。
 - 协议合同 0.3 固化任务消息、Run 路由和唤醒字段，并兼容旧 `format` / `output` 请求。
 
 ## Phase 1 — Task 闭环生产验收

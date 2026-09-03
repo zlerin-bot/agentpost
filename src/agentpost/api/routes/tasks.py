@@ -31,6 +31,7 @@ from agentpost.tasks.schemas import (
     TaskFinalSubmission,
     TaskInvitationDecision,
     TaskMembersInvite,
+    TaskRunHumanResponse,
     TaskStatusUpdate,
     TaskSummary,
 )
@@ -40,6 +41,7 @@ from agentpost.tasks.service import (
     FriendshipConflictError,
     FriendshipNotFoundError,
     TaskAgentSelectionError,
+    TaskHumanResponseForbiddenError,
     TaskMessageIdempotencyConflictError,
     TaskNotFoundError,
     TaskOwnerRequiredError,
@@ -63,6 +65,7 @@ from agentpost.tasks.service import (
     remove_friendship,
     request_friendship,
     resolve_task_for_agent,
+    respond_to_waiting_agent_run,
     select_task_agents,
     send_task_message_by_agent,
     submit_task,
@@ -86,6 +89,16 @@ def _forbidden() -> HTTPException:
     return HTTPException(
         status_code=403,
         detail={"code": "task_owner_required", "message": "Task owner access is required"},
+    )
+
+
+def _human_response_forbidden() -> HTTPException:
+    return HTTPException(
+        status_code=403,
+        detail={
+            "code": "task_human_response_forbidden",
+            "message": "Only the task owner or responsible Human can answer this AI",
+        },
     )
 
 
@@ -442,6 +455,38 @@ def create_task_assignment(
         raise _not_found("agent_not_found") from exc
     except TaskStateConflictError as exc:
         raise _conflict() from exc
+
+
+@router.post(
+    "/tasks/{task_id}/assignments/{assignment_id}/human-response",
+    response_model=TaskDetail,
+)
+def answer_waiting_agent_run(
+    task_id: UUID,
+    assignment_id: UUID,
+    payload: TaskRunHumanResponse,
+    request: Request,
+    current_human: CurrentHumanDep,
+    session: SessionDep,
+    csrf: HumanCsrfDep,
+) -> TaskDetail:
+    del csrf
+    try:
+        return respond_to_waiting_agent_run(
+            session,
+            user=current_human,
+            task_id=task_id,
+            assignment_id=assignment_id,
+            payload=payload,
+            human_session_id=human_session_id_from_request(request),
+            request_id=request.state.request_id,
+        )
+    except TaskNotFoundError as exc:
+        raise _not_found() from exc
+    except TaskHumanResponseForbiddenError as exc:
+        raise _human_response_forbidden() from exc
+    except TaskStateConflictError as exc:
+        raise _conflict("task_run_not_waiting_human") from exc
 
 
 @router.post("/tasks/{task_id}/status", response_model=TaskDetail)

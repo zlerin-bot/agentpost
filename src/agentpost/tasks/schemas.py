@@ -292,6 +292,8 @@ class TaskAssignmentResponse(TaskModel):
     result_summary: str | None
     cancellation_reason: str | None
     run_status: str | None
+    run_checkpoint: dict[str, Any] = Field(default_factory=dict)
+    run_last_heartbeat_at: datetime | None = None
     wake_stage: Literal["queued", "claimed", "mapped", "woken", "running", "finished"]
     created_at: datetime
     updated_at: datetime
@@ -387,6 +389,7 @@ class AgentRunClaim(TaskModel):
     expected_output: str
     due_at: datetime | None
     attempt: int
+    checkpoint: dict[str, Any] = Field(default_factory=dict)
     participant_agent_ids: list[UUID]
     collaboration_updates: list[AgentCollaborationUpdate]
     wake_stage: Literal["claimed", "mapped", "woken", "running"]
@@ -413,6 +416,7 @@ class AgentRunPending(TaskModel):
     reply_thread_id: UUID
     priority: Literal["low", "normal", "high", "urgent"]
     attempt: int
+    checkpoint: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
     wake_stage: Literal["queued"] = "queued"
 
@@ -434,6 +438,18 @@ class AgentRunUpdate(TaskModel):
         if self.wake_status is not None and not self.local_session_id:
             raise ValueError("local_session_id is required when reporting wake_status")
         return self
+
+
+class TaskRunHumanResponse(TaskModel):
+    response: str = Field(min_length=1, max_length=10_000)
+
+    @field_validator("response")
+    @classmethod
+    def clean_response(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("response cannot be blank")
+        return cleaned
 
 
 class AgentRunResult(TaskModel):

@@ -237,6 +237,28 @@ def _seed(settings: Settings) -> None:
             ),
             201,
         )
+        claimed_task_run = _require(
+            client.post(
+                "/api/v1/task-runs/claim",
+                headers=_agent_headers(personal),
+                json={"task_id": task["task_id"]},
+            ),
+            200,
+        )
+        _require(
+            client.post(
+                f"/api/v1/task-runs/{claimed_task_run['run_id']}/heartbeat",
+                headers=_agent_headers(personal),
+                json={
+                    "lease_token": claimed_task_run["lease_token"],
+                    "status": "waiting_human",
+                    "checkpoint": {"question": "请确认本轮研究是否需要同时覆盖海外公开资料。"},
+                    "wake_status": "woken",
+                    "local_session_id": "demo-research-session",
+                },
+            ),
+            200,
+        )
 
         _require(
             client.post(
@@ -501,8 +523,8 @@ def _settings(data_dir: Path, port: int) -> Settings:
         email_delivery_mode="test",
         rate_limit_enabled=False,
         public_base_url=f"http://127.0.0.1:{port}",
-        connector_release_version="0.1.47",
-        connector_wheel_url="https://agentpost.me/downloads/agentpost-0.1.47-py3-none-any.whl",
+        connector_release_version="0.1.48",
+        connector_wheel_url="https://agentpost.me/downloads/agentpost-0.1.48-py3-none-any.whl",
         connector_wheel_sha256="083a94fc79acc3bb0d8d1b6cd2bae76107c00cf560e46bb10a5bd9b7e96f70bf",
         log_level="WARNING",
     )

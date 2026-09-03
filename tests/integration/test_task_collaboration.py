@@ -737,6 +737,12 @@ def test_task_messages_use_legacy_inbox_and_native_run_without_breaking_old_conn
         assert directed_assignment["source_actor_human_display_name"] == "message-owner"
         assert directed_assignment["source_actor_agent_display_name"] is None
         assert directed_assignment["source_kind"] == "assignment_created"
+        directed_activity = next(
+            item
+            for item in directed.json()["activities"]
+            if item["activity_id"] == directed_assignment["source_activity_id"]
+        )
+        assert directed_activity["metadata"]["instruction"] == "请完成定向验证"
 
         claimed = client.post(
             "/api/v1/task-runs/claim",
@@ -744,6 +750,99 @@ def test_task_messages_use_legacy_inbox_and_native_run_without_breaking_old_conn
             json={"assignment_id": directed_assignment["assignment_id"]},
         )
         assert claimed.status_code == 200, claimed.text
+        waiting = client.post(
+            f"/api/v1/task-runs/{claimed.json()['run_id']}/heartbeat",
+            headers={"Authorization": f"Bearer {member_agent['api_key']}"},
+            json={
+                "lease_token": claimed.json()["lease_token"],
+                "status": "waiting_human",
+                "checkpoint": {"question": "请 Human 确认测试范围"},
+                "wake_status": "woken",
+                "local_session_id": "task-session-1",
+            },
+        )
+        assert waiting.status_code == 200, waiting.text
+        waiting_detail = client.get(
+            f"/api/v1/tasks/{task_id}",
+            headers={"X-CSRF-Token": owner_csrf},
+        )
+        waiting_assignment = next(
+            item
+            for item in waiting_detail.json()["assignments"]
+            if item["assignment_id"] == directed_assignment["assignment_id"]
+        )
+        assert waiting_assignment["run_status"] == "waiting_human"
+        assert waiting_assignment["run_checkpoint"] == {"question": "请 Human 确认测试范围"}
+        assert waiting_assignment["run_last_heartbeat_at"] is not None
+        waiting_activity = next(
+            item
+            for item in waiting_detail.json()["activities"]
+            if item["kind"] == "run_waiting_human"
+            and item["metadata"]["assignment_id"] == directed_assignment["assignment_id"]
+        )
+        assert waiting_activity["metadata"]["checkpoint"] == {"question": "请 Human 确认测试范围"}
+
+        blank_answer = client.post(
+            f"/api/v1/tasks/{task_id}/assignments/"
+            f"{directed_assignment['assignment_id']}/human-response",
+            headers={"X-CSRF-Token": owner_csrf},
+            json={"response": "   "},
+        )
+        assert blank_answer.status_code == 422, blank_answer.text
+        answered = client.post(
+            f"/api/v1/tasks/{task_id}/assignments/"
+            f"{directed_assignment['assignment_id']}/human-response",
+            headers={"X-CSRF-Token": owner_csrf},
+            json={"response": "覆盖新版和旧版 Connector，并继续执行"},
+        )
+        assert answered.status_code == 200, answered.text
+        answered_assignment = next(
+            item
+            for item in answered.json()["assignments"]
+            if item["assignment_id"] == directed_assignment["assignment_id"]
+        )
+        assert answered_assignment["run_status"] == "queued"
+        assert answered_assignment["run_checkpoint"]["human_response"] == (
+            "覆盖新版和旧版 Connector，并继续执行"
+        )
+        duplicate_answer = client.post(
+            f"/api/v1/tasks/{task_id}/assignments/"
+            f"{directed_assignment['assignment_id']}/human-response",
+            headers={"X-CSRF-Token": owner_csrf},
+            json={"response": "重复提交不应创建第三次执行"},
+        )
+        assert duplicate_answer.status_code == 409, duplicate_answer.text
+        stale_lease = client.post(
+            f"/api/v1/task-runs/{claimed.json()['run_id']}/heartbeat",
+            headers={"Authorization": f"Bearer {member_agent['api_key']}"},
+            json={
+                "lease_token": claimed.json()["lease_token"],
+                "status": "running",
+                "checkpoint": {"stale": True},
+            },
+        )
+        assert stale_lease.status_code == 404, stale_lease.text
+        pending_after_answer = client.get(
+            f"/api/v1/task-runs/pending?task_id={task_id}",
+            headers={"Authorization": f"Bearer {member_agent['api_key']}"},
+        )
+        successor = next(
+            item
+            for item in pending_after_answer.json()["items"]
+            if item["assignment_id"] == directed_assignment["assignment_id"]
+        )
+        assert successor["attempt"] == 2
+        assert successor["checkpoint"]["human_response"] == ("覆盖新版和旧版 Connector，并继续执行")
+        claimed = client.post(
+            "/api/v1/task-runs/claim",
+            headers={"Authorization": f"Bearer {member_agent['api_key']}"},
+            json={"assignment_id": directed_assignment["assignment_id"]},
+        )
+        assert claimed.status_code == 200, claimed.text
+        assert claimed.json()["attempt"] == 2
+        assert claimed.json()["checkpoint"]["human_response"] == (
+            "覆盖新版和旧版 Connector，并继续执行"
+        )
         completed = client.post(
             f"/api/v1/task-runs/{claimed.json()['run_id']}/result",
             headers={"Authorization": f"Bearer {member_agent['api_key']}"},
