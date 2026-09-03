@@ -102,7 +102,7 @@ def failure(exc: Exception, *, operation: str) -> CallToolResult:
         )
     elif isinstance(exc, TransportError):
         extra: dict[str, Any] = {}
-        if operation in {"send", "reply"}:
+        if operation in {"send", "send_task_message", "reply"}:
             extra["acceptance_unknown"] = True
             if exc.idempotency_key:
                 extra["idempotency_key"] = exc.idempotency_key

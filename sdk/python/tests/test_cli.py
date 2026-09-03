@@ -234,20 +234,7 @@ def test_result_reply_is_available_only_on_reply_command() -> None:
     assert reply.type == "result"
 
 
-def _sent_message() -> SimpleNamespace:
-    return SimpleNamespace(
-        message_id="msg_test",
-        sender=SimpleNamespace(address="test@agentpost.me"),
-        message_type="message",
-        subject="季度报告",
-        delivery=SimpleNamespace(status="delivered"),
-        thread_id=UUID("20000000-0000-0000-0000-000000000001"),
-        created_at=datetime(2026, 8, 24, tzinfo=UTC),
-        content=SimpleNamespace(security_label="internal"),
-    )
-
-
-def test_send_can_resume_after_codex_setup_resolve_recipient_and_upload_attachment(
+def test_send_can_resume_after_codex_setup_resolve_task_and_upload_attachment(
     monkeypatch,
     capsys,
     tmp_path: Path,
@@ -256,29 +243,20 @@ def test_send_can_resume_after_codex_setup_resolve_recipient_and_upload_attachme
     report = tmp_path / "report.pdf"
     report.write_bytes(b"quarterly report")
     calls: dict[str, object] = {}
-    recipient = SimpleNamespace(
-        agent_id=UUID("40000000-0000-0000-0000-000000000001"),
-        address="zhangsan@agentpost.me",
-        handle="zhangsan-agent",
-        display_name="张三的 Agent",
-        owner_display_name="张三",
-        agent_type="codex",
-        label="张三的 Codex",
-        security_label="external_agent_content",
-    )
+    task_id = UUID("40000000-0000-0000-0000-000000000001")
 
     def connect(args):
         calls["connector_type"] = args.connector_type
         connector.profile = f"{args.connector_type}:test-device"
         return connector
 
-    def resolve_recipient(query):
+    def resolve_task(query):
         calls["resolve"] = query
         return SimpleNamespace(
             status="resolved",
             reason="unique_match",
             query=query,
-            match=recipient,
+            match=SimpleNamespace(task_id=task_id),
             candidates=[],
             security_label="external_agent_content",
         )
@@ -287,13 +265,19 @@ def test_send_can_resume_after_codex_setup_resolve_recipient_and_upload_attachme
         calls["upload"] = (path, kwargs)
         return SimpleNamespace(id=UUID("30000000-0000-0000-0000-000000000001"))
 
-    def send(*args, **kwargs):
+    def send_task_message(*args, **kwargs):
         calls["send"] = (args, kwargs)
-        return _sent_message()
+        return SimpleNamespace(
+            task_id=task_id,
+            thread_id=UUID("50000000-0000-0000-0000-000000000001"),
+            activity_id=UUID("60000000-0000-0000-0000-000000000001"),
+            queued_run_count=0,
+            legacy_delivery_count=1,
+        )
 
-    connector.client.resolve_recipient = resolve_recipient
+    connector.client.resolve_task = resolve_task
     connector.client.attachments = SimpleNamespace(upload=upload)
-    connector.client.send = send
+    connector.client.send_task_message = send_task_message
     monkeypatch.setattr(cli, "_connect", connect)
     monkeypatch.setattr(cli, "_mcp_command", lambda: tmp_path / "agentpost-mcp")
     monkeypatch.setattr(
@@ -313,8 +297,8 @@ def test_send_can_resume_after_codex_setup_resolve_recipient_and_upload_attachme
             "send",
             "--ensure-host",
             "codex",
-            "--recipient",
-            "张三",
+            "--task",
+            "季度报告任务",
             "--subject",
             "季度报告",
             "--body",
@@ -326,54 +310,37 @@ def test_send_can_resume_after_codex_setup_resolve_recipient_and_upload_attachme
 
     assert exit_code == 0
     assert calls["connector_type"] == "codex"
-    assert calls["resolve"] == "张三"
+    assert calls["resolve"] == "季度报告任务"
     assert calls["upload"] == (report, {"content_type": "application/pdf"})
     send_args, send_kwargs = calls["send"]
-    assert send_args == ("zhangsan@agentpost.me", "季度报告", "请查收附件。")
+    assert send_args == (str(task_id), "请查收附件。")
     assert send_kwargs == {
-        "type": "message",
+        "subject": "季度报告",
         "attachments": ["30000000-0000-0000-0000-000000000001"],
+        "publication_origin": "human_delegated",
     }
     output = capsys.readouterr().out
     result = json.loads(output)
     assert result["status"] == "accepted"
-    assert result["to"] == "zhangsan@agentpost.me"
+    assert result["task_id"] == str(task_id)
     assert result["attachment_count"] == 1
     assert result["host_configured"] is True
     assert result["restart_required"] is True
     assert "agt_" not in output
 
 
-def test_send_returns_one_structured_clarification_without_sending(
+def test_send_returns_one_structured_task_clarification_without_sending(
     monkeypatch,
     capsys,
 ) -> None:
     connector = DummyConnector()
     candidates = [
-        SimpleNamespace(
-            agent_id=UUID("40000000-0000-0000-0000-000000000001"),
-            address="zhangsan-finance@agentpost.me",
-            handle="zhangsan-finance",
-            display_name="张三财务 Agent",
-            owner_display_name="张三",
-            agent_type="codex",
-            label="张三的 Codex（zhangsan-finance）",
-            security_label="external_agent_content",
-        ),
-        SimpleNamespace(
-            agent_id=UUID("40000000-0000-0000-0000-000000000002"),
-            address="zhangsan-research@agentpost.me",
-            handle="zhangsan-research",
-            display_name="张三研究 Agent",
-            owner_display_name="张三",
-            agent_type="codex",
-            label="张三的 Codex（zhangsan-research）",
-            security_label="external_agent_content",
-        ),
+        SimpleNamespace(model_dump=lambda **_kwargs: {"task_id": "task-1", "title": "任务 A"}),
+        SimpleNamespace(model_dump=lambda **_kwargs: {"task_id": "task-2", "title": "任务 B"}),
     ]
-    connector.client.resolve_recipient = lambda query: SimpleNamespace(
+    connector.client.resolve_task = lambda query: SimpleNamespace(
         status="needs_clarification",
-        reason="recipient_ambiguous",
+        reason="task_ambiguous",
         query=query,
         match=None,
         candidates=candidates,
@@ -384,42 +351,38 @@ def test_send_returns_one_structured_clarification_without_sending(
     def should_not_send(*_args, **_kwargs):
         raise AssertionError("ambiguous recipient must not send")
 
-    connector.client.send = should_not_send
+    connector.client.send_task_message = should_not_send
     monkeypatch.setattr(cli, "_connect", lambda _args: connector)
 
-    assert cli.main(["send", "--recipient", "张三", "--body", "请查收报告。"]) == 2
+    assert cli.main(["send", "--task", "测试", "--body", "请查收报告。"]) == 2
     result = json.loads(capsys.readouterr().out)
     assert result["status"] == "needs_clarification"
-    assert result["reason"] == "recipient_ambiguous"
+    assert result["reason"] == "task_ambiguous"
     assert result["security_label"] == "external_agent_content"
-    assert [item["label"] for item in result["candidates"]] == [
-        "张三的 Codex（zhangsan-finance）",
-        "张三的 Codex（zhangsan-research）",
-    ]
+    assert [item["title"] for item in result["candidates"]] == ["任务 A", "任务 B"]
 
 
-def test_send_not_found_never_synthesizes_handle_address(monkeypatch, capsys) -> None:
+def test_send_not_found_never_sends_without_resolved_task(monkeypatch, capsys) -> None:
     connector = DummyConnector()
-    connector.client.resolve_recipient = lambda query: SimpleNamespace(
+    connector.client.resolve_task = lambda query: SimpleNamespace(
         status="not_found",
-        reason="recipient_not_found",
+        reason="task_not_found",
         query=query,
         match=None,
         candidates=[],
         security_label="external_agent_content",
     )
     connector.client.attachments = SimpleNamespace()
-    connector.client.send = lambda *_args, **_kwargs: (_ for _ in ()).throw(
-        AssertionError("not-found recipient must not send")
+    connector.client.send_task_message = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+        AssertionError("not-found task must not send")
     )
     monkeypatch.setattr(cli, "_connect", lambda _args: connector)
 
-    assert cli.main(["send", "--recipient", "does-not-exist", "--body", "hello"]) == 2
+    assert cli.main(["send", "--task", "does-not-exist", "--body", "hello"]) == 2
     output = capsys.readouterr().out
     result = json.loads(output)
     assert result["status"] == "not_found"
-    assert result["reason"] == "recipient_not_found"
-    assert "does-not-exist@agentpost.me" not in output
+    assert result["reason"] == "task_not_found"
 
 
 def test_setup_codex_pairs_registers_profile_and_never_prints_credentials(

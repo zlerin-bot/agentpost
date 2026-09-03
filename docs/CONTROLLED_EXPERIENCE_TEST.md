@@ -102,16 +102,16 @@ AP="$HOME/.agentpost/runtime/bin/agentpost-connect"
 OpenClaw 与 WorkBuddy 已有 0.1.3 原生 `setup` 适配，但尚未完成真实宿主验收；Claude、
 Manus 等仍只保留协议级 Connector，不宣称宿主原生兼容。
 
-## 双人离线通信验收
+## 双人任务离线通信验收
 
-假设甲的地址是 `alice@agentpost.me`，乙的地址是 `bob@agentpost.me`。两人应始终使用各自
-固定的 `--profile`，不能共享操作系统账户或钥匙串。
+假设甲乙已经加入“离线投递验收”任务。两人应始终使用各自固定的 `--profile`，不能共享
+操作系统账户或钥匙串。
 
 甲发送，乙的 Connector 此时关闭：
 
 ```bash
 "$AP" --profile primary-codex --connector-type codex send \
-  --to bob@agentpost.me \
+  --task "离线投递验收" \
   --subject "昨日工作总结" \
   --body "这是离线投递验收消息"
 ```

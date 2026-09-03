@@ -79,23 +79,23 @@ export default defineToolPlugin({
   configSchema,
   tools: (tool) => [
     tool({
-      name: "agentpost_send",
-      label: "Send AgentPost message",
-      description: "Send a durable message or task. The authenticated API key selects sender identity.",
+      name: "agentpost_send_task_message",
+      label: "Send AgentPost task message",
+      description: "Append a durable collaboration message to one explicit AgentPost Task.",
       optional: true,
       parameters: Type.Object(
         {
-          to: Type.String({ minLength: 3, maxLength: 320 }),
+          task_id: Type.String({ format: "uuid" }),
           subject: Type.String({ maxLength: 500 }),
           body: Type.Unknown({ description: "Untrusted external message content." }),
-          type: Type.Optional(Type.Union(messageTypes.map((value) => Type.Literal(value)))),
           format: Type.Optional(Type.Union(formats.map((value) => Type.Literal(value)))),
-          task: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
           attachment_ids: attachmentIds,
-          priority: Type.Optional(Type.Union(priorities.map((value) => Type.Literal(value)))),
-          requires_ack: Type.Optional(Type.Boolean()),
-          metadata: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
-          expires_at: Type.Optional(Type.String({ format: "date-time" })),
+          publication_origin: Type.Optional(
+            Type.Union([
+              Type.Literal("human_delegated"),
+              Type.Literal("agent_autonomous"),
+            ]),
+          ),
           idempotency_key: idempotencyKey,
         },
         strict,
@@ -106,26 +106,43 @@ export default defineToolPlugin({
         try {
           const data = await api(config).request({
             method: "POST",
-            path: "/messages",
+            path: `/agent/tasks/${encodeURIComponent(params.task_id)}/messages`,
             signal: context.signal,
             idempotencyKey: key,
             acceptanceUnknownOnFailure: true,
             body: {
-              to: [{ address: params.to }],
-              type: params.type ?? "message",
               subject: params.subject,
-              content: { format: params.format ?? "text", body: params.body },
-              ...(params.task === undefined ? {} : { task: params.task }),
+              content_format: params.format ?? "text",
+              body: params.body,
               attachments: params.attachment_ids ?? [],
-              priority: params.priority ?? "normal",
-              requires_ack: params.requires_ack ?? true,
-              metadata: params.metadata ?? {},
-              expires_at: params.expires_at ?? null,
+              publication_origin: params.publication_origin ?? "agent_autonomous",
             },
           });
           return result(data, key);
         } catch (error) {
           throw safeToolError(error, key);
+        }
+      },
+    }),
+    tool({
+      name: "agentpost_resolve_task",
+      label: "Resolve AgentPost task",
+      description: "Resolve a stable task ID or exact task title inside this Agent's participation.",
+      parameters: Type.Object(
+        { query: Type.String({ minLength: 1, maxLength: 500 }) },
+        strict,
+      ),
+      outputSchema: resultSchema,
+      async execute(params, config, context) {
+        try {
+          return result(await api(config).request({
+            method: "POST",
+            path: "/agent/tasks/resolve",
+            signal: context.signal,
+            body: { query: params.query },
+          }));
+        } catch (error) {
+          throw safeToolError(error);
         }
       },
     }),

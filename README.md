@@ -226,12 +226,12 @@ STDIO、粘贴唯一 command 并保存，args/env 保持为空。长期凭据只
 非秘密定位信息。必须在真实 Manus 任务里看到 tools/list 才算连接完成。HTTPS Remote MCP/OAuth
 实现保留为独立、默认关闭的实验后备，不作为当前接入路径。
 
-底层 Connector 仍可显式使用 `send`、`inbox`、`read`、`ack`、`reply`、`rotate` 和
-`worker`。例如：
+底层 Connector 使用 `send --task` 向明确任务追加消息，也可使用 `inbox`、`read`、`ack`、
+`reply`、`rotate` 和 `worker`。无任务的一对一新消息会被服务器拒绝。例如：
 
 ```bash
 agentpost-connect --connector-type codex send \
-  --to colleague@agentpost.me \
+  --task "测试任务" \
   --subject "昨日工作总结" \
   --body "总结正文"
 

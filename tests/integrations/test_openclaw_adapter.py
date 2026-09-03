@@ -15,7 +15,8 @@ CLIENT_PATH = PLUGIN_ROOT / "src" / "client.ts"
 DIST_CLIENT_PATH = PLUGIN_ROOT / "dist" / "client.js"
 
 EXPECTED_TOOLS = {
-    "agentpost_send",
+    "agentpost_send_task_message",
+    "agentpost_resolve_task",
     "agentpost_inbox",
     "agentpost_read",
     "agentpost_reply",
@@ -65,7 +66,7 @@ def test_openclaw_plugin_has_native_manifest_and_package_contract() -> None:
     assert "baseurl" in serialized_manifest.replace("_", "")
 
 
-def test_plugin_is_a_native_tool_plugin_with_exact_nine_tools() -> None:
+def test_plugin_is_a_native_tool_plugin_with_exact_seven_tools() -> None:
     source = _source(INDEX_PATH)
     assert 'from "openclaw/plugin-sdk/tool-plugin"' in source
     assert "defineToolPlugin" in source
@@ -73,7 +74,7 @@ def test_plugin_is_a_native_tool_plugin_with_exact_nine_tools() -> None:
     assert _tool_names(source) == EXPECTED_TOOLS
 
     registrations = re.findall(r"\btool\s*\(\s*\{", source)
-    assert len(registrations) == 6
+    assert len(registrations) == 7
     assert len(re.findall(r"optional\s*:\s*true", source)) == 3
     manifest = _json(MANIFEST_PATH)
     optional_tools = {
@@ -82,7 +83,7 @@ def test_plugin_is_a_native_tool_plugin_with_exact_nine_tools() -> None:
         if metadata.get("optional") is True
     }
     assert optional_tools == {
-        "agentpost_send",
+        "agentpost_send_task_message",
         "agentpost_reply",
         "agentpost_ack",
     }
@@ -103,7 +104,7 @@ def test_model_tool_schemas_cannot_choose_transport_or_credentials() -> None:
     # Admin-only configuration may appear in the plugin factory, so inspect the
     # schema declarations rather than banning these strings from the whole file.
     tool_regions = re.findall(r"\btool\s*\(\s*\{(.*?)(?=\n\s*\}\),)", source, flags=re.DOTALL)
-    assert len(tool_regions) == 6
+    assert len(tool_regions) == 7
     for region in tool_regions:
         schema = region.partition("async execute")[0]
         assert "parameters:" in schema
@@ -113,7 +114,8 @@ def test_model_tool_schemas_cannot_choose_transport_or_credentials() -> None:
 def test_six_tools_map_to_protocol_routes_without_read_side_effects() -> None:
     source = _source(INDEX_PATH) + "\n" + _source(CLIENT_PATH)
     compact = re.sub(r"\s+", "", source)
-    assert 'method:"POST",path:"/messages"' in compact
+    assert "path:`/agent/tasks/${" in compact
+    assert 'path:"/agent/tasks/resolve"' in compact
     assert 'path:"/inbox"' in compact
     assert "path:`/messages/${" in compact
     assert 'path:"/directory/search"' in compact
@@ -126,9 +128,7 @@ def test_six_tools_map_to_protocol_routes_without_read_side_effects() -> None:
 
 def test_message_type_and_directory_semantics_match_the_server_contract() -> None:
     source = _source(INDEX_PATH)
-    send_types = source.partition("const messageTypes =")[2].partition("] as const;")[0]
     reply_types = source.partition("const replyMessageTypes =")[2].partition(";")[0]
-    assert '"result"' not in send_types
     assert '"result"' in reply_types
 
     directory_region = source.partition('name: "agentpost_search_agents"')[2]

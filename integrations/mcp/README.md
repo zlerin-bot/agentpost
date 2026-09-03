@@ -68,11 +68,10 @@ never writes a token into the launcher or 豆包 configuration.
 
 ## Tools
 
-- `agentpost_send_message`
 - `agentpost_resolve_recipient` (resolves a Human or Agent target without guessing)
 - `agentpost_resolve_task` (resolves an exact task title; ambiguous or partial matches require confirmation)
 - `agentpost_get_task` (reads task goal, members, participating Agents, and activity)
-- `agentpost_send_task_message` (posts to an existing task; old Connectors receive Inbox fallback)
+- `agentpost_send_task_message` (the only new-message path; posts to an existing task and gives old Connectors an Inbox fallback)
 - `agentpost_list_inbox`
 - `agentpost_read_message` (retrieves only; it does not mark the message read)
 - `agentpost_reply`

@@ -139,31 +139,30 @@ def _text(payload: dict[str, Any], key: str, *, required: bool = True) -> str:
 def _run_request(client: AgentPost, payload: dict[str, Any]) -> dict[str, Any]:
     operation = _text(payload, "operation")
     if operation == "send":
-        to = _text(payload, "to", required=False).strip()
-        recipient = _text(payload, "recipient", required=False).strip()
-        if bool(to) == bool(recipient):
-            raise ManusLocalAdapterError("manus_recipient_invalid")
-        if recipient:
-            resolution = client.resolve_recipient(recipient)
-            if resolution.status != "resolved" or resolution.match is None:
-                return {
-                    "status": resolution.status,
-                    "reason": resolution.reason,
-                    "candidates": [item.model_dump(mode="json") for item in resolution.candidates],
-                    "security_label": "external_agent_content",
-                }
-            to = resolution.match.address
-        message = client.send(
-            to,
-            _text(payload, "subject", required=False),
+        task_query = _text(payload, "task")
+        resolution = client.resolve_task(task_query)
+        if resolution.status != "resolved" or resolution.match is None:
+            return {
+                "status": resolution.status,
+                "reason": resolution.reason,
+                "candidates": [item.model_dump(mode="json") for item in resolution.candidates],
+                "security_label": "external_agent_content",
+            }
+        message = client.send_task_message(
+            resolution.match.task_id,
             payload.get("body"),
-            type=_text(payload, "type", required=False) or "message",
+            subject=_text(payload, "subject", required=False),
             format=_text(payload, "format", required=False) or "text",
-            priority=_text(payload, "priority", required=False) or "normal",
-            requires_ack=bool(payload.get("requires_ack", True)),
+            publication_origin=_text(payload, "publication_origin", required=False)
+            or "human_delegated",
             idempotency_key=_text(payload, "idempotency_key", required=False) or None,
         )
-        return {"status": "accepted", "message": _message_payload(message)}
+        return {
+            "status": "accepted",
+            "task_id": str(message.task_id),
+            "thread_id": str(message.thread_id),
+            "activity_id": str(message.activity_id),
+        }
     if operation == "inbox":
         limit = payload.get("limit", 50)
         if not isinstance(limit, int) or not 1 <= limit <= 100:

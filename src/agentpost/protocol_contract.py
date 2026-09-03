@@ -14,7 +14,7 @@ from agentpost.messaging.schemas import (
 from agentpost.onboarding.connectivity import heartbeat_timeout_seconds
 from agentpost.tasks.service import RUN_LEASE_SECONDS
 
-PROTOCOL_CONTRACT_VERSION = "0.3"
+PROTOCOL_CONTRACT_VERSION = "0.4"
 
 
 class ContractModel(BaseModel):
@@ -48,6 +48,7 @@ class StateContract(ContractModel):
     direct_reply_handles_task_round: Literal[True] = True
     structured_result_takes_precedence: Literal[True] = True
     agent_result_is_not_human_acceptance: Literal[True] = True
+    client_created_direct_messages_allowed: Literal[False] = False
     independent_task_axes: list[str] = Field(
         default_factory=lambda: [
             "delivery",
@@ -96,6 +97,8 @@ class TaskExecutionContract(ContractModel):
     collaboration_scope: Literal["task_only"] = "task_only"
     participant_authority: Literal["task_membership"] = "task_membership"
     one_thread_per_task: Literal[True] = True
+    task_context_required_for_agent_send: Literal[True] = True
+    legacy_inbox_reply_requires_task_bridge: Literal[True] = True
     create_endpoint: Literal["/api/v1/agent/tasks"] = "/api/v1/agent/tasks"
     create_requires_idempotency_key: Literal[True] = True
     resolve_endpoint: Literal["/api/v1/agent/tasks/resolve"] = "/api/v1/agent/tasks/resolve"
@@ -214,7 +217,7 @@ class OnboardingStep(ContractModel):
 
 class AgentIntegrationContract(ContractModel):
     contract: Literal["AGENTPOST_AGENT_INTEGRATION"] = "AGENTPOST_AGENT_INTEGRATION"
-    version: Literal["0.3"] = PROTOCOL_CONTRACT_VERSION
+    version: Literal["0.4"] = PROTOCOL_CONTRACT_VERSION
     authentication: Literal["agent_bearer_token_from_os_vault"] = "agent_bearer_token_from_os_vault"
     openapi_url: Literal["/openapi.json"] = "/openapi.json"
     endpoints: list[EndpointContract]
@@ -232,13 +235,6 @@ def build_agent_integration_contract(settings: Settings) -> AgentIntegrationCont
     return AgentIntegrationContract(
         endpoints=[
             EndpointContract(
-                method="POST",
-                path="/api/v1/messages",
-                purpose="send a new message or task",
-                changes_state=True,
-                required_headers=["Idempotency-Key"],
-            ),
-            EndpointContract(
                 method="GET",
                 path="/api/v1/inbox",
                 purpose="read the durable Inbox with cursor pagination",
@@ -247,7 +243,7 @@ def build_agent_integration_contract(settings: Settings) -> AgentIntegrationCont
             EndpointContract(
                 method="POST",
                 path="/api/v1/messages/{message_id}/reply",
-                purpose="reply in the same durable Thread",
+                purpose="legacy Connector reply to a server-generated Task bridge message",
                 changes_state=True,
                 required_headers=["Idempotency-Key"],
             ),

@@ -2,11 +2,11 @@
 
 ## 当前接续摘要
 
-- 交接阶段：`v0.1.48-waiting-human-deployed`
-- 本地版本：`0.1.48 / 0036_cancel_auto_ack_runs`
+- 交接阶段：`v0.1.49-task-scoped-agent-messages-local`
+- 本地版本：`0.1.49 / 0036_cancel_auto_ack_runs`
 - 当前生产：`36855ff / 0.1.48 / 0036_cancel_auto_ack_runs / deployed_https_verified`
 - 生产接受状态：不是 `production_accepted`
-- 本切片：补齐 waiting_human 的问题展示、Human 回复和同 Assignment 可靠重入队；统一任务 AI 名称，拆分状态变化与心跳时间，折叠历史执行噪声，并为长进展增加任务记录定位链接；已部署并完成 HTTPS 后检
+- 本切片：Agent 发出的新消息必须明确 Task；无任务直发由开发/生产服务器拒绝，新版 MCP、CLI、OpenClaw 与 Manus 只提供任务消息路径；机器协议合同升级为 0.4；本地验证中，尚未部署
 
 ## 当前产品模型
 
@@ -15,8 +15,9 @@ AgentPost 的多人协作只发生在 Task 内。每个 Task 有一个稳定 `ta
 均可读取上下文并参与，具体执行通过 Agent Run 的队列、租约、心跳和幂等完成机制协调。Human 验收与消息
 送达、Agent read、ACK、Run 完成和 Agent Result 分别保存。
 
-好友是双向 Human 关系，只用于识别和任务邀请。私信是一对一传输与旧 Connector 兼容能力，不是共享协作
-范围。任何后续多人能力必须扩展 Task，不能再建立平行容器、另一套成员角色或共享通信规则。
+好友是双向 Human 关系，只用于识别和任务邀请。Agent 新消息必须明确归属 Task；服务端拒绝无任务的一对一
+新消息。旧 Connector 只保留服务端任务桥接通知及其读取、ACK、任务内回复。任何后续协作能力必须扩展
+Task，不能再建立平行容器、另一套成员角色或共享通信规则。
 
 权威设计见 `docs/TASK_CORE_MODEL.md`；未来开发约束见 `AGENTS.md`。
 
@@ -64,6 +65,7 @@ AgentPost 的多人协作只发生在 Task 内。每个 Task 有一个稳定 `ta
 
 ## 本地验证证据
 
+- 0.1.49 `.venv/bin/pytest -m "not postgres"`：457 passed、1 expected skip、5 deselected；浏览器 JavaScript 37 passed、TypeScript Connector 8 passed并完成编译、OpenClaw adapter 4 passed；Ruff、format、JavaScript syntax、wheel 构建和 `git diff --check` 通过；本地 wheel SHA-256 为 `5acf653829825e23abc83d1fc970110eb29a9b621dcb98987a66d59ff6b2fd3c`。
 - 0.1.48 `.venv/bin/pytest -m "not postgres"`：456 passed、1 expected skip、5 deselected；全部 JavaScript 37 passed、TypeScript Connector 8 passed并完成编译；Ruff、format、JavaScript syntax 通过；本地 wheel SHA-256 为 `cc80b8816b808e9dd963c6dc0065d05f1d52eb7a4bd639265b8b6d04e3d1d211`。
 - 0.1.48 隔离认证浏览器闭环通过：waiting_human 问题可见，Human 回复后同 Assignment 变为待领取，页面显示回复内容；桌面和 390px 无横向溢出。
 - 0.1.47 `.venv/bin/pytest -m "not postgres"`：455 passed、1 expected skip、5 deselected；TypeScript compile 和 JavaScript：45 passed；Ruff、format、wheel 构建和 `git diff --check` 通过。

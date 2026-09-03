@@ -90,6 +90,96 @@ def _create_owned_agent(client: TestClient, *, human_id: str, handle: str) -> di
     return body
 
 
+def test_server_rejects_agent_message_without_explicit_task_context(
+    settings: Settings, database: Database
+) -> None:
+    runtime = _runtime(settings).model_copy(update={"environment": "development"})
+    with TestClient(create_app(settings=runtime, database=database)) as client:
+        sender_human = _register(client, "taskless-sender")
+        recipient_human = _register(client, "taskless-recipient")
+        sender = _create_owned_agent(
+            client, human_id=str(sender_human["user"]["id"]), handle="taskless-sender"
+        )
+        recipient = _create_owned_agent(
+            client,
+            human_id=str(recipient_human["user"]["id"]),
+            handle="taskless-recipient",
+        )
+
+        rejected = client.post(
+            "/api/v1/messages",
+            headers={
+                "Authorization": f"Bearer {sender['api_key']}",
+                "Idempotency-Key": "taskless-direct-message",
+            },
+            json={
+                "to": [{"address": recipient["agent"]["address"]}],
+                "type": "message",
+                "subject": "没有任务",
+                "content": {"format": "text", "body": "这条消息不应进入收件箱"},
+            },
+        )
+
+        assert rejected.status_code == 409, rejected.text
+        assert rejected.json()["error"]["code"] == "TASK_CONTEXT_REQUIRED"
+        assert "/api/v1/agent/tasks/{task_id}/messages" in rejected.json()["error"]["message"]
+        inbox = client.get(
+            "/api/v1/inbox",
+            headers={"Authorization": f"Bearer {recipient['api_key']}"},
+        )
+        assert inbox.status_code == 200, inbox.text
+        assert inbox.json()["items"] == []
+
+
+def test_server_rejects_reply_to_historical_taskless_message(
+    settings: Settings, database: Database
+) -> None:
+    test_runtime = _runtime(settings)
+    with TestClient(create_app(settings=test_runtime, database=database)) as client:
+        sender_human = _register(client, "historical-sender")
+        recipient_human = _register(client, "historical-recipient")
+        sender = _create_owned_agent(
+            client, human_id=str(sender_human["user"]["id"]), handle="historical-sender"
+        )
+        recipient = _create_owned_agent(
+            client,
+            human_id=str(recipient_human["user"]["id"]),
+            handle="historical-recipient",
+        )
+        historical = client.post(
+            "/api/v1/messages",
+            headers={
+                "Authorization": f"Bearer {sender['api_key']}",
+                "Idempotency-Key": "historical-private-message",
+            },
+            json={
+                "to": [{"address": recipient["agent"]["address"]}],
+                "type": "message",
+                "subject": "历史私信",
+                "content": {"format": "text", "body": "只为兼容测试建档"},
+            },
+        )
+        assert historical.status_code == 201, historical.text
+        message_id = historical.json()["message_id"]
+
+    development_runtime = test_runtime.model_copy(update={"environment": "development"})
+    with TestClient(create_app(settings=development_runtime, database=database)) as client:
+        rejected = client.post(
+            f"/api/v1/messages/{message_id}/reply",
+            headers={
+                "Authorization": f"Bearer {recipient['api_key']}",
+                "Idempotency-Key": "historical-private-reply",
+            },
+            json={
+                "type": "response",
+                "subject": "不能私信回复",
+                "content": {"format": "text", "body": "应改为任务消息"},
+            },
+        )
+        assert rejected.status_code == 409, rejected.text
+        assert rejected.json()["error"]["code"] == "TASK_CONTEXT_REQUIRED"
+
+
 def test_human_can_select_multiple_owned_agents_for_one_task(
     settings: Settings, database: Database
 ) -> None:
@@ -483,7 +573,8 @@ def test_confirmed_friends_task_agent_selection_run_and_human_acceptance(
 def test_task_messages_use_legacy_inbox_and_native_run_without_breaking_old_connectors(
     settings: Settings, database: Database
 ) -> None:
-    with TestClient(create_app(settings=_runtime(settings), database=database)) as client:
+    runtime = _runtime(settings).model_copy(update={"environment": "development"})
+    with TestClient(create_app(settings=runtime, database=database)) as client:
         owner = _register(client, "message-owner")
         member = _register(client, "message-member")
         outsider = _register(client, "message-outsider")

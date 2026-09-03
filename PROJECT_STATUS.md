@@ -2,11 +2,11 @@
 
 Last updated: 2026-09-03
 
-Current handoff stage: `v0.1.48-waiting-human-deployed`
+Current handoff stage: `v0.1.49-task-scoped-agent-messages-local`
 
 ## Current local candidate
 
-- Version: `0.1.48`
+- Version: `0.1.49`
 - Schema: `0036_cancel_auto_ack_runs`
 - Collaboration model: Task is the only multi-Human collaboration scope.
 - Human navigation: 任务、好友、AI、设置。
@@ -28,7 +28,7 @@ Current handoff stage: `v0.1.48-waiting-human-deployed`
 - Change requests: every active participant Agent receives a new durable Run; previous results remain immutable history.
 - Connector truth: installed, configured, and actually loaded runtime versions, session start, and capabilities are reported separately; stale loaded sessions require reconnect.
 - Protocol compatibility: canonical Task message and Run result fields are `content_format` and `checkpoint`; legacy `format` and `output` remain accepted.
-- Private messaging: retained only as one-to-one transport and old-Connector compatibility.
+- Client-created taskless Agent messaging: rejected with `task_context_required`; old-Connector compatibility is limited to server-generated Task bridge delivery, read, ACK, and Task-linked reply.
 - Canonical design: `docs/TASK_CORE_MODEL.md` and `AGENTS.md`.
 
 Removed from runtime and future rules: the former parallel multi-user container, group-channel transport, invitation and
@@ -39,9 +39,9 @@ configuration, and test paths.
 
 - Ruff check: passed.
 - Ruff format check: passed.
-- Orbit and TypeScript JavaScript: 45 passed.
+- Browser JavaScript: 37 passed; TypeScript Connector: 8 passed; OpenClaw adapter: 4 passed.
 - TypeScript compile: passed.
-- Non-PostgreSQL Pytest: 456 passed, one expected loopback sandbox skip, five PostgreSQL tests deselected.
+- Non-PostgreSQL Pytest: 457 passed, one expected loopback sandbox skip, five PostgreSQL tests deselected.
 - Alembic graph: one head at `0036_cancel_auto_ack_runs`.
 - Fresh SQLite Alembic chain: blocked at the pre-existing 0019 constraint-alter limitation before reaching 0036.
 - PostgreSQL 0030 → 0034 → 0030 → 0034 rehearsal and production upgrade: passed in the protected release switch.

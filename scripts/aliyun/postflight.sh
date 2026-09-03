@@ -79,7 +79,7 @@ from pathlib import Path
 payload = json.loads(Path(sys.argv[1]).read_text())
 if payload.get("contract") != "AGENTPOST_AGENT_INTEGRATION":
     raise SystemExit("public protocol contract name mismatch")
-if payload.get("version") != "0.3":
+if payload.get("version") != "0.4":
     raise SystemExit("public protocol contract version mismatch")
 if payload.get("content", {}).get("native_formats") != ["text", "markdown", "json"]:
     raise SystemExit("public protocol native formats mismatch")

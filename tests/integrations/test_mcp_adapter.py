@@ -40,7 +40,6 @@ EXPECTED_TOOLS = {
     "agentpost_resolve_task",
     "agentpost_get_task",
     "agentpost_send_task_message",
-    "agentpost_send_message",
     "agentpost_list_inbox",
     "agentpost_read_message",
     "agentpost_reply",
@@ -192,7 +191,6 @@ def test_real_mcp_v2_server_exports_exact_schemas_and_sync_tool_contracts() -> N
     # MCP v2 executes registered synchronous functions via its worker-thread path.
     assert all(tool.is_async is False for tool in tools.values())
 
-    send = tools["agentpost_send_message"].parameters
     reply = tools["agentpost_reply"].parameters
     inbox = tools["agentpost_list_inbox"].parameters
     task_message = tools["agentpost_send_task_message"].parameters
@@ -200,12 +198,10 @@ def test_real_mcp_v2_server_exports_exact_schemas_and_sync_tool_contracts() -> N
     claim_run = tools["agentpost_claim_task_run"].parameters
     update_run = tools["agentpost_update_task_run"].parameters
     complete_run = tools["agentpost_complete_task_run"].parameters
-    assert "result" not in send["properties"]["message_type"]["enum"]
     assert "result" in reply["properties"]["message_type"]["enum"]
-    for schema in (send, reply):
-        idempotency = schema["properties"]["idempotency_key"]["anyOf"][0]
-        assert idempotency["minLength"] == 1
-        assert idempotency["maxLength"] == 255
+    idempotency = reply["properties"]["idempotency_key"]["anyOf"][0]
+    assert idempotency["minLength"] == 1
+    assert idempotency["maxLength"] == 255
     cursor = inbox["properties"]["cursor"]["anyOf"][0]
     assert cursor["type"] == "string"
     assert cursor["maxLength"] == 2048
@@ -321,16 +317,26 @@ def test_send_reply_ack_and_search_map_to_the_public_http_protocol() -> None:
             )
         if request.url.path.endswith("/directory/search"):
             return httpx.Response(200, json={"items": []}, request=request)
+        if request.url.path.endswith("/agent/tasks/33333333-3333-3333-3333-333333333333/messages"):
+            return httpx.Response(
+                201,
+                json={
+                    "task_id": "33333333-3333-3333-3333-333333333333",
+                    "thread_id": THREAD_ID,
+                    "activity_id": "55555555-5555-5555-5555-555555555555",
+                    "queued_run_count": 0,
+                    "legacy_delivery_count": 0,
+                },
+                request=request,
+            )
         status = "acked" if request.url.path.endswith("/ack") else "delivered"
         return httpx.Response(201, json=message_json(status=status), request=request)
 
     mcp, requests = registered_tools(handler)
-    sent = mcp.registrations["agentpost_send_message"].function(
-        "bob@agents.local",
-        "Task",
+    sent = mcp.registrations["agentpost_send_task_message"].function(
+        "33333333-3333-3333-3333-333333333333",
         "Analyse",
-        message_type="task",
-        task={"instruction": "Analyse"},
+        subject="Task",
         idempotency_key="mcp-send-reusable",
     )
     reply = mcp.registrations["agentpost_reply"].function(
@@ -348,7 +354,10 @@ def test_send_reply_ack_and_search_map_to_the_public_http_protocol() -> None:
     )
 
     assert [(request.method, request.url.path) for request in requests] == [
-        ("POST", "/root/api/v1/messages"),
+        (
+            "POST",
+            "/root/api/v1/agent/tasks/33333333-3333-3333-3333-333333333333/messages",
+        ),
         ("POST", "/root/api/v1/messages/msg_accepted/reply"),
         ("POST", "/root/api/v1/messages/msg_accepted/ack"),
         ("POST", "/root/api/v1/directory/resolve"),
@@ -357,7 +366,7 @@ def test_send_reply_ack_and_search_map_to_the_public_http_protocol() -> None:
     ]
     assert requests[0].headers["Idempotency-Key"] == "mcp-send-reusable"
     assert requests[1].headers["Idempotency-Key"] == "mcp-reply-reusable"
-    assert json.loads(requests[0].content)["type"] == "task"
+    assert json.loads(requests[0].content)["body"] == "Analyse"
     assert json.loads(requests[1].content)["type"] == "result"
     assert json.loads(requests[3].content) == {"query": "给 kcode 发消息"}
     assert json.loads(requests[4].content) == {"query": "小孔成像"}
@@ -378,8 +387,8 @@ def test_transport_failure_is_not_retried_and_exposes_generated_reusable_key() -
         raise httpx.ConnectError("secret network detail", request=request)
 
     mcp, _ = registered_tools(handler)
-    result = mcp.registrations["agentpost_send_message"].function(
-        "bob@agents.local", "Greeting", "Hello"
+    result = mcp.registrations["agentpost_send_task_message"].function(
+        "33333333-3333-3333-3333-333333333333", "Hello", subject="Greeting"
     )
     payload = structured(result)
 

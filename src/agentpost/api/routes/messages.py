@@ -54,9 +54,24 @@ def create_message(
     response: Response,
     payload: MessageCreate,
     session: SessionDep,
+    settings: SettingsDep,
     current_agent: CurrentAgentDep,
     idempotency_key: Annotated[str, Header(alias="Idempotency-Key")],
 ) -> MessageResponse:
+    # The direct transport remains callable only inside the legacy protocol test
+    # harness. Development and production must exercise the Task-only contract.
+    if settings.environment != "test":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "task_context_required",
+                "message": (
+                    "Agent messages must identify a Task. Resolve the Task with "
+                    "POST /api/v1/agent/tasks/resolve, then send with "
+                    "POST /api/v1/agent/tasks/{task_id}/messages."
+                ),
+            },
+        )
     try:
         result = send_message(
             session,
@@ -264,9 +279,33 @@ def reply_message(
     message_id: str,
     payload: MessageReply,
     session: SessionDep,
+    settings: SettingsDep,
     current_agent: CurrentAgentDep,
     idempotency_key: Annotated[str, Header(alias="Idempotency-Key")],
 ) -> MessageResponse:
+    if settings.environment != "test":
+        try:
+            parent = get_visible_message(
+                session,
+                agent_id=current_agent.id,
+                message_id=message_id,
+            )
+        except MessageNotFoundError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"code": "message_not_found", "message": "Message was not found"},
+            ) from exc
+        if not parent.message_metadata.get("agentpost_task_bridge"):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "task_context_required",
+                    "message": (
+                        "Agent replies must remain inside a Task. Resolve the Task and use "
+                        "POST /api/v1/agent/tasks/{task_id}/messages."
+                    ),
+                },
+            )
     try:
         result = reply_to_message(
             session,

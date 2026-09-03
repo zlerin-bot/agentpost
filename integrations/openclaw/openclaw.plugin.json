@@ -8,7 +8,8 @@
   },
   "contracts": {
     "tools": [
-      "agentpost_send",
+      "agentpost_send_task_message",
+      "agentpost_resolve_task",
       "agentpost_inbox",
       "agentpost_read",
       "agentpost_reply",
@@ -17,7 +18,8 @@
     ]
   },
   "toolMetadata": {
-    "agentpost_send": { "optional": true, "replaySafe": false },
+    "agentpost_send_task_message": { "optional": true, "replaySafe": false },
+    "agentpost_resolve_task": { "replaySafe": true },
     "agentpost_inbox": { "replaySafe": true },
     "agentpost_read": { "replaySafe": true },
     "agentpost_reply": { "optional": true, "replaySafe": false },

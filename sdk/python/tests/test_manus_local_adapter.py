@@ -11,11 +11,6 @@ from agentpost_sdk.manus_local_adapter import ManusLocalAdapterError, run
 from agentpost_sdk.manus_setup import configure_manus_local_folder
 
 
-class FakeMessage:
-    def model_dump(self, **_kwargs):
-        return {"message_id": "msg_test", "delivery": {"status": "accepted"}}
-
-
 class FakeStore:
     def __init__(self, credential: ConnectorCredential | None) -> None:
         self.credential = credential
@@ -45,9 +40,21 @@ class FakeClient:
             connector=SimpleNamespace(status="active", health_status="healthy"),
         )
 
-    def send(self, *args, **kwargs):
+    def resolve_task(self, query):
+        assert query == "测试任务"
+        return SimpleNamespace(
+            status="resolved",
+            match=SimpleNamespace(task_id="30000000-0000-0000-0000-000000000001"),
+            candidates=[],
+        )
+
+    def send_task_message(self, *args, **kwargs):
         self.sent.append((args, kwargs))
-        return FakeMessage()
+        return SimpleNamespace(
+            task_id="30000000-0000-0000-0000-000000000001",
+            thread_id="40000000-0000-0000-0000-000000000001",
+            activity_id="50000000-0000-0000-0000-000000000001",
+        )
 
     def close(self) -> None:
         return None
@@ -106,7 +113,7 @@ def test_send_accepts_message_body_only_through_stdin(tmp_path: Path) -> None:
     request = json.dumps(
         {
             "operation": "send",
-            "to": "recipient@agentpost.me",
+            "task": "测试任务",
             "subject": "测试",
             "body": body,
         }
@@ -122,8 +129,9 @@ def test_send_accepts_message_body_only_through_stdin(tmp_path: Path) -> None:
 
     assert result["status"] == "accepted"
     args, kwargs = FakeClient.instances[-1].sent[-1]
-    assert args[:2] == ("recipient@agentpost.me", "测试")
-    assert args[2] == body
+    assert args == ("30000000-0000-0000-0000-000000000001", body)
+    assert kwargs["subject"] == "测试"
+    assert kwargs["publication_origin"] == "human_delegated"
     assert "api_key" not in kwargs
 
 

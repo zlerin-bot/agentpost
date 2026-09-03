@@ -139,16 +139,14 @@ def _parser() -> argparse.ArgumentParser:
         help="dedicated local folder selected for a new Manus task",
     )
 
-    send = commands.add_parser("send", help="send a message using the paired Agent identity")
-    recipient = send.add_mutually_exclusive_group(required=True)
-    recipient.add_argument("--to", help="exact Agent address")
-    recipient.add_argument(
-        "--recipient",
-        help="natural recipient query; sends automatically only when exactly one Agent matches",
+    send = commands.add_parser("send", help="append a message to one explicit AgentPost Task")
+    send.add_argument(
+        "--task",
+        required=True,
+        help="stable task ID or exact task title; ambiguous matches require confirmation",
     )
     send.add_argument("--subject", default="")
     send.add_argument("--body", required=True)
-    send.add_argument("--type", choices=MESSAGE_TYPES, default="message")
     send.add_argument(
         "--attachment",
         action="append",
@@ -300,6 +298,22 @@ def _resolve_recipient(client: AgentPost, args: argparse.Namespace) -> str | Non
             "reason": resolution.reason,
             "query": resolution.query,
             "candidates": [_recipient_candidate(item) for item in resolution.candidates],
+            "security_label": resolution.security_label,
+        }
+    )
+    return None
+
+
+def _resolve_task(client: AgentPost, query: str) -> str | None:
+    resolution = client.resolve_task(query)
+    if resolution.status == "resolved" and resolution.match is not None:
+        return str(resolution.match.task_id)
+    _json(
+        {
+            "status": resolution.status,
+            "reason": resolution.reason,
+            "query": resolution.query,
+            "candidates": [item.model_dump(mode="json") for item in resolution.candidates],
             "security_label": resolution.security_label,
         }
     )
@@ -551,23 +565,24 @@ def _run(args: argparse.Namespace) -> int:
             if args.ensure_host:
                 configured = _configure_host(connector, args.ensure_host)
                 connector.heartbeat()
-            recipient_address = _resolve_recipient(client, args)
-            if recipient_address is None:
+            task_id = _resolve_task(client, args.task)
+            if task_id is None:
                 return 2
             attachment_ids = _upload_attachments(client, args.attachment)
-            sent = client.send(
-                recipient_address,
-                args.subject,
+            sent = client.send_task_message(
+                task_id,
                 args.body,
-                type=args.type,
+                subject=args.subject,
                 attachments=attachment_ids,
+                publication_origin="human_delegated",
             )
-            metadata = _message_metadata(sent)
             result = {
-                **metadata,
                 "status": "accepted",
-                "delivery_status": metadata["status"],
-                "to": recipient_address,
+                "task_id": str(sent.task_id),
+                "thread_id": str(sent.thread_id),
+                "activity_id": str(sent.activity_id),
+                "queued_run_count": sent.queued_run_count,
+                "legacy_delivery_count": sent.legacy_delivery_count,
                 "attachment_count": len(attachment_ids),
             }
             if configured is not None:

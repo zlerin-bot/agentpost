@@ -15,8 +15,6 @@ const elements = {
   refreshAdmin: document.querySelector("#refresh-admin"),
   createAgentForm: document.querySelector("#create-agent-form"),
   registrationResult: document.querySelector("#registration-result"),
-  sendMessageForm: document.querySelector("#send-message-form"),
-  sendResult: document.querySelector("#send-result"),
   refreshInbox: document.querySelector("#refresh-inbox"),
   inboxResults: document.querySelector("#inbox-results"),
 };
@@ -294,60 +292,6 @@ async function createAgent(event) {
   }
 }
 
-function freshIdempotencyKey() {
-  if (!globalThis.crypto || typeof globalThis.crypto.randomUUID !== "function") {
-    throw new Error("当前浏览器无法生成安全随机幂等键。请使用支持 crypto.randomUUID 的安全上下文。");
-  }
-  return `ui_${globalThis.crypto.randomUUID()}`;
-}
-
-async function sendMessage(event) {
-  event.preventDefault();
-  const submit = elements.sendMessageForm.querySelector("button[type='submit']");
-  submit.disabled = true;
-  setStatus(elements.sendResult, "服务器正在接受消息…");
-  try {
-    const token = requiredToken(elements.agentToken, "Agent API key");
-    const messageType = document.querySelector("#message-type").value;
-    const body = document.querySelector("#message-body").value;
-    const payload = {
-      to: [{ address: document.querySelector("#message-to").value.trim() }],
-      type: messageType,
-      subject: document.querySelector("#message-subject").value,
-      content: {
-        format: document.querySelector("#message-format").value,
-        body,
-      },
-      attachments: [],
-      priority: "normal",
-      requires_ack: true,
-      metadata: { source: "agentpost_admin_debug_ui" },
-      expires_at: null,
-    };
-    if (messageType === "task") {
-      payload.task = { instruction: body };
-    }
-
-    const result = await requestJson("/api/v1/messages", {
-      method: "POST",
-      headers: {
-        ...jsonHeaders(token),
-        "Idempotency-Key": freshIdempotencyKey(),
-      },
-      body: JSON.stringify(payload),
-    });
-    setStatus(
-      elements.sendResult,
-      `消息已接受：${safeText(result && result.message_id)} · ${safeText(result && result.delivery && result.delivery.status)}`,
-      "success",
-    );
-  } catch (error) {
-    setStatus(elements.sendResult, error.message, "error");
-  } finally {
-    submit.disabled = false;
-  }
-}
-
 function messageSender(message) {
   const sender = message && (message.from || message.sender);
   if (sender && typeof sender === "object") {
@@ -417,7 +361,6 @@ document.querySelectorAll(".tab[data-resource]").forEach((button) => {
 });
 elements.refreshAdmin.addEventListener("click", refreshAdmin);
 elements.createAgentForm.addEventListener("submit", createAgent);
-elements.sendMessageForm.addEventListener("submit", sendMessage);
 elements.refreshInbox.addEventListener("click", refreshInbox);
 
 window.addEventListener("pagehide", () => {

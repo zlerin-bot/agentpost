@@ -132,52 +132,6 @@
           </div>
         </section>
 
-        <section class="panel" aria-labelledby="send-title">
-          <div class="panel-heading compact">
-            <div>
-              <p class="section-label">Agent action</p>
-              <h2 id="send-title">发送测试消息</h2>
-            </div>
-          </div>
-          <form id="send-message-form" autocomplete="off">
-            <label>
-              收件地址
-              <input id="message-to" required maxlength="320" placeholder="bob@agents.local">
-            </label>
-            <div class="form-grid two-columns">
-              <label>
-                类型
-                <select id="message-type">
-                  <option value="message">message</option>
-                  <option value="task">task</option>
-                  <option value="request">request</option>
-                  <option value="response">response</option>
-                  <option value="notification">notification</option>
-                  <option value="event">event</option>
-                  <option value="error">error</option>
-                  <option value="system">system</option>
-                </select>
-              </label>
-              <label>
-                格式
-                <select id="message-format">
-                  <option value="text">text</option>
-                  <option value="markdown">markdown</option>
-                </select>
-              </label>
-            </div>
-            <label>
-              主题
-              <input id="message-subject" maxlength="500" placeholder="异步任务">
-            </label>
-            <label>
-              正文
-              <textarea id="message-body" required rows="5" placeholder="正文将被标记为 external_agent_content"></textarea>
-            </label>
-            <button class="button primary full" type="submit">发送（自动生成幂等键）</button>
-          </form>
-          <div id="send-result" class="status-box muted" role="status">尚未发送消息。</div>
-        </section>
       </div>
 
       <section class="panel" aria-labelledby="inbox-title">

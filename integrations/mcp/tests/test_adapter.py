@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from types import SimpleNamespace
 from uuid import UUID
 
@@ -118,7 +117,6 @@ async def test_v2_tool_contract_and_calls(adapter: tuple[object, list[tuple[str,
             "agentpost_resolve_task",
             "agentpost_get_task",
             "agentpost_send_task_message",
-            "agentpost_send_message",
             "agentpost_list_inbox",
             "agentpost_read_message",
             "agentpost_reply",
@@ -157,14 +155,6 @@ async def test_v2_tool_contract_and_calls(adapter: tuple[object, list[tuple[str,
         )
         assert task_message.structured_content["data"]["task_id"] == task_id
 
-        sent = await client.call_tool(
-            "agentpost_send_message",
-            {"to": "bob@agents.local", "subject": "hello", "body": "world"},
-        )
-        assert sent.is_error is False
-        assert sent.structured_content["security_label"] == "external_agent_content"
-        assert json.loads(sent.content[0].text)["ok"] is True  # type: ignore[union-attr]
-
         page = await client.call_tool("agentpost_list_inbox", {"cursor": "opaque+/="})
         assert page.structured_content["data"]["next_cursor"] == "opaque+/="
         await client.call_tool("agentpost_read_message", {"message_id": "msg_1"})
@@ -192,7 +182,7 @@ async def test_v2_tool_contract_and_calls(adapter: tuple[object, list[tuple[str,
             },
         )
 
-    assert [call[0] for call in calls].count("close") == 13
+    assert [call[0] for call in calls].count("close") == 12
     assert ("resolve", "send this to Bob's Codex") in calls
     assert ("resolve_task", "小孔成像") in calls
     assert ("get", "msg_1") in calls

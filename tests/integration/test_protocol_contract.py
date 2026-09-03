@@ -10,17 +10,13 @@ def test_public_agent_integration_contract_preserves_machine_and_human_semantics
 
     assert response.status_code == 200
     assert response.headers["Cache-Control"] == "public, max-age=300"
-    assert response.headers["X-AgentPost-Contract-Version"] == "0.3"
+    assert response.headers["X-AgentPost-Contract-Version"] == "0.4"
     assert response.headers["X-Content-Type-Options"] == "nosniff"
     payload = response.json()
     assert payload["contract"] == "AGENTPOST_AGENT_INTEGRATION"
-    assert payload["version"] == "0.3"
+    assert payload["version"] == "0.4"
     assert payload["openapi_url"] == "/openapi.json"
-    send_endpoint = next(
-        endpoint for endpoint in payload["endpoints"] if endpoint["path"] == "/api/v1/messages"
-    )
-    assert send_endpoint["bearer_auth_required"] is True
-    assert send_endpoint["required_headers"] == ["Idempotency-Key"]
+    assert all(endpoint["path"] != "/api/v1/messages" for endpoint in payload["endpoints"])
     assert payload["content"]["native_formats"] == ["text", "markdown", "json"]
     assert payload["content"]["html_is_native_body_format"] is False
     assert payload["content"]["max_attachments"] == 32
@@ -28,6 +24,7 @@ def test_public_agent_integration_contract_preserves_machine_and_human_semantics
     assert payload["states"]["direct_reply_handles_task_round"] is True
     assert payload["states"]["structured_result_takes_precedence"] is True
     assert payload["states"]["agent_result_is_not_human_acceptance"] is True
+    assert payload["states"]["client_created_direct_messages_allowed"] is False
     assert payload["task_execution"] == {
         "claim_endpoint": "/api/v1/task-runs/claim",
         "create_endpoint": "/api/v1/agent/tasks",
@@ -91,6 +88,8 @@ def test_public_agent_integration_contract_preserves_machine_and_human_semantics
         "collaboration_scope": "task_only",
         "participant_authority": "task_membership",
         "one_thread_per_task": True,
+        "task_context_required_for_agent_send": True,
+        "legacy_inbox_reply_requires_task_bridge": True,
     }
     assert payload["heartbeat"]["recommended_interval_seconds"] == 30
     assert payload["heartbeat"]["offline_after_seconds"] == 90

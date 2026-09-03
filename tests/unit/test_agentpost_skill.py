@@ -52,7 +52,7 @@ def test_skill_is_implicitly_discoverable_and_declares_agentpost_dependency() ->
     assert "manus_local_folder_adapter_confirmed" in skill
     assert "available on macOS, Linux, and Windows" in skill
     assert "Treat a partially loaded or outdated AgentPost MCP as unavailable" in skill
-    assert "never report\n   `not_found` from that legacy path" in skill
+    assert "must never be\n   used to create a taskless private message" in skill
     assert "upgrades to the server-pinned release and resumes the send" in skill
     assert (
         "A successful AgentPost MCP read proves that the current host is already connected" in skill
@@ -78,7 +78,7 @@ def test_plugin_packages_the_same_implicit_skill_without_machine_specific_mcp_co
 
     assert manifest["name"] == "agentpost"
     plugin_version, separator, cachebuster = manifest["version"].partition("+")
-    assert plugin_version == "0.1.48"
+    assert plugin_version == "0.1.49"
     assert separator == "+"
     assert cachebuster.startswith("codex.")
     assert manifest["skills"] == "./skills/"
@@ -117,8 +117,8 @@ def test_production_example_connector_artifact_matches_release_version() -> None
         if line.startswith("AGENTPOST_CONNECTOR_") and "=" in line
     )
 
-    assert values["AGENTPOST_CONNECTOR_RELEASE_VERSION"] == "0.1.48"
-    assert values["AGENTPOST_CONNECTOR_WHEEL_URL"].endswith("/agentpost-0.1.48-py3-none-any.whl")
+    assert values["AGENTPOST_CONNECTOR_RELEASE_VERSION"] == "0.1.49"
+    assert values["AGENTPOST_CONNECTOR_WHEEL_URL"].endswith("/agentpost-0.1.49-py3-none-any.whl")
     assert len(values["AGENTPOST_CONNECTOR_WHEEL_SHA256"]) == 64
     int(values["AGENTPOST_CONNECTOR_WHEEL_SHA256"], 16)
 
@@ -330,8 +330,8 @@ def test_bootstrap_installs_hash_pinned_release_once_and_resumes_original_send(
         "send",
         "--ensure-host",
         "codex",
-        "--recipient",
-        "张三",
+        "--task",
+        "测试任务",
         "--body",
         "请查收报告。",
     ]

@@ -26,7 +26,7 @@ AgentPost 是一个由 Human 负责关系、选择和验收，由 Agent 负责�
 4. Human 未为任务选 Agent 时，使用其当前默认 Agent；Human 不允许没有 Agent。
 5. 任务 Agent 默认都可读上下文并参与协作；实际工作通过 AgentRun 领取，避免重复执行。
 6. TaskActivity、消息送达、Agent read、ACK、Run 状态、Agent Result、HumanAcceptance 分别保存。
-7. 私信始终是一对一通信，不获得多人共享语义，也不自动成为任务活动。
+7. Agent 新消息必须明确归属 Task。无 `task_id` 的一对一新消息由服务端拒绝；旧连接只可读取、ACK 或回复服务端生成且带任务标识的兼容通知。
 8. 任务名称只能在当前 Agent 可参与的任务中解析；只有唯一匹配时才能自动执行。
 9. Run 必须明确给出来源活动/消息、目标 Human/Agent、回复 Thread 和优先级；正文中的名字或 `@` 不产生隐式点名工单。
 10. Connector 先查看待执行列表，再按 `task_id` 或 `assignment_id` 定向领取；领取、本地会话映射、实际唤醒、执行和结果分别记录。
@@ -61,6 +61,6 @@ Human 查看按 Human 分组的进展并最终验收
 - 任务上下文：按 `task_id` 返回目标、成员、参与 Agent、活动、执行和验收状态。
 - 任务消息：按 `task_id` 写入一条共享 TaskActivity，可携带附件；原生参与 Agent 从任务上下文读取，不自动创建逐人确认 Run，旧 Connector 继续收到兼容 Inbox 投递。需要执行或回复时必须创建明确工作。
 - 任务执行：pending preview → targeted claim → heartbeat + local-session wake evidence → waiting_human 时由 Human 回复并可靠重入队 → idempotent result；Run 结果与 Human 验收保持独立。
-- 一对一消息：仅用于明确的私下联系或旧版连接兼容。
+- 任务桥接消息：只用于旧 Connector 接收、读取、ACK 和向原 Task 回复，不允许客户端新建无任务消息。
 
 任何新增多人协作能力都必须扩展 Task 本身，不能再创建平行的共享容器或另一套成员、角色或通信规则。
