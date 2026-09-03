@@ -2,11 +2,11 @@
 
 Last updated: 2026-09-03
 
-Current handoff stage: `v0.1.46-task-provenance-local-candidate`
+Current handoff stage: `v0.1.47-task-contract-local-candidate`
 
 ## Current local candidate
 
-- Version: `0.1.46`
+- Version: `0.1.47`
 - Schema: `0036_cancel_auto_ack_runs`
 - Collaboration model: Task is the only multi-Human collaboration scope.
 - Human navigation: 任务、好友、AI、设置。

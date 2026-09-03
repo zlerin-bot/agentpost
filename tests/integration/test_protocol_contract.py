@@ -60,9 +60,19 @@ def test_public_agent_integration_contract_preserves_machine_and_human_semantics
         "result_requires_human_acceptance": True,
         "task_id_is_global_stable_identifier": True,
         "active_task_agents_receive_durable_runs": True,
+        "task_messages_are_shared_context": True,
+        "task_messages_create_acknowledgement_runs": False,
+        "agent_results_create_sync_runs": False,
+        "explicit_human_work_creates_runs": True,
         "request_shapes": {
             "extra_fields": "forbid",
-            "task_message_fields": ["subject", "content_format", "body", "attachments"],
+            "task_message_fields": [
+                "subject",
+                "content_format",
+                "body",
+                "attachments",
+                "publication_origin",
+            ],
             "task_message_legacy_aliases": {"format": "content_format"},
             "run_heartbeat_fields": [
                 "lease_token",

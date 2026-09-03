@@ -2,9 +2,9 @@
 
 ## 当前接续摘要
 
-- 交接阶段：`v0.1.46-task-provenance-local-candidate`
-- 本地版本：`0.1.46 / 0036_cancel_auto_ack_runs`
-- 当前生产：`0c9d844 / 0.1.45 / 0035_cancel_legacy_task_backlog / deployed_https_verified`
+- 交接阶段：`v0.1.47-task-contract-local-candidate`
+- 本地版本：`0.1.47 / 0036_cancel_auto_ack_runs`
+- 当前生产：`3c4d827 / 0.1.46 / 0036_cancel_auto_ack_runs / deployed_https_verified`
 - 生产接受状态：不是 `production_accepted`
 - 本切片：修正任务消息的发布来源、发起方/接收方/执行方显示，取消普通共享消息和结果的自动应答 Run；本地验证完成，待部署
 
@@ -27,7 +27,7 @@ AgentPost 的多人协作只发生在 Task 内。每个 Task 有一个稳定 `ta
 - 当前进展显示发起 Human → 负责 Human → 执行 AI，区分工作要求与 AI 反馈；`task_message` / `result_sync` 自动噪声不再作为当前工作卡显示。
 - 任务消息记录每个参与方的接收状态：新版连接显示“任务上下文可用，无需逐条回复”，旧版连接显示“兼容投递，尚无自动执行”，避免把接收方误认成发布者。
 - 新增 0036 数据迁移：取消所有仍未结束的历史 `task_message` / `result_sync` Assignment 和关联 Run，保留活动、结果与审计历史，回退不会重新唤醒这些任务。
-- Python SDK、MCP、TypeScript Connector、插件和内置 Skill 同步支持发布来源；版本统一为 0.1.46，协议合同保持 0.3。
+- Python SDK、MCP、TypeScript Connector、插件和内置 Skill 同步支持发布来源；0.1.47 公开合同明确共享消息不建自动应答 Run，协议合同保持 0.3。
 - 新增 0035 迁移：只取消 0.1.44 上线前仍未结束的自动 `participant_start`、`task_message`、`result_sync` Assignment/Run；保留原记录并写入 `legacy_pre_0_1_44_backlog`，不会删除审计历史或在回退时重新唤醒。
 - 当前状态轴、Assignment 总数和待处理数排除上述历史清理记录，避免无效积压继续污染 Human 的“当前进展”。
 - “当前进展”以 Human 为主体，为每条记录显示更新时间，并通过 Human ID 生成稳定的六组视觉色调；长内容在进展列截断并引导查看任务记录。
@@ -58,6 +58,7 @@ AgentPost 的多人协作只发生在 Task 内。每个 Task 有一个稳定 `ta
 
 ## 本地验证证据
 
+- 0.1.47 合同补丁的协议、版本边界、Skill、迁移聚焦测试：27 passed；TypeScript compile 和 JavaScript：45 passed；Ruff、format 与 wheel 构建通过。
 - 0.1.46 `.venv/bin/pytest -m "not postgres"`：455 passed、1 expected skip、5 deselected；聚焦 Python/MCP/SDK：57 passed；0036 迁移：2 passed。
 - 0.1.46 `.venv/bin/ruff check .`、`.venv/bin/ruff format --check .`、TypeScript compile、全部 JavaScript 49 tests 和 `git diff --check` 均通过。
 - 0.1.46 隔离桌面与 390px 视觉 smoke 通过：发布来源、发起/负责/执行关系、等待领取、工作要求/尚未反馈和共享接收状态可读；390px 无横向溢出、控制台无 warning/error。

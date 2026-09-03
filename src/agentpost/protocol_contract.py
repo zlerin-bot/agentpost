@@ -64,7 +64,13 @@ class StateContract(ContractModel):
 class TaskRequestShapeContract(ContractModel):
     extra_fields: Literal["forbid"] = "forbid"
     task_message_fields: list[str] = Field(
-        default_factory=lambda: ["subject", "content_format", "body", "attachments"]
+        default_factory=lambda: [
+            "subject",
+            "content_format",
+            "body",
+            "attachments",
+            "publication_origin",
+        ]
     )
     task_message_legacy_aliases: dict[str, str] = Field(
         default_factory=lambda: {"format": "content_format"}
@@ -133,6 +139,10 @@ class TaskExecutionContract(ContractModel):
     result_requires_human_acceptance: Literal[True] = True
     task_id_is_global_stable_identifier: Literal[True] = True
     active_task_agents_receive_durable_runs: Literal[True] = True
+    task_messages_are_shared_context: Literal[True] = True
+    task_messages_create_acknowledgement_runs: Literal[False] = False
+    agent_results_create_sync_runs: Literal[False] = False
+    explicit_human_work_creates_runs: Literal[True] = True
     request_shapes: TaskRequestShapeContract = Field(default_factory=TaskRequestShapeContract)
     human_change_request_creates_new_runs: Literal[True] = True
 
@@ -286,8 +296,8 @@ def build_agent_integration_contract(settings: Settings) -> AgentIntegrationCont
                 method="POST",
                 path="/api/v1/agent/tasks/{task_id}/messages",
                 purpose=(
-                    "append task collaboration context and fan it out through a durable Run or "
-                    "the compatible Inbox path for an older Connector"
+                    "append shared task collaboration context once without creating mandatory "
+                    "acknowledgement Runs; older Connectors receive a compatible Inbox delivery"
                 ),
                 changes_state=True,
                 required_headers=["Idempotency-Key"],

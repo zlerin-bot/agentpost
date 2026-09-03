@@ -7,7 +7,7 @@ Last updated: 2026-09-02
 `local_verified`、`deployed_https_verified` 与 `production_accepted` 是不同门禁。任何未运行或缺少
 真实环境证据的项目必须标记为 `待确认`、`partial` 或 `no_evidence`。
 
-## Current baseline — 0.1.46
+## Current baseline — 0.1.47
 
 - Task 是唯一多人协作容器；一个 Task 对应一个稳定 ID 和一条主 Thread。
 - Friendship 是双向 Human 关系，只负责识别和邀请 Task 成员。
