@@ -101,7 +101,7 @@ export type ConnectorHeartbeat = JsonObject & {
 };
 
 const RUNTIME_CAPABILITIES = ["task_context_read", "task_message_send", "durable_task_run"];
-const RUNTIME_VERSION = "agentpost-connect/0.1.45";
+const RUNTIME_VERSION = "agentpost-connect/0.1.46";
 const RUNTIME_SESSION_STARTED_AT = new Date().toISOString();
 
 export class AgentPostError extends Error {
@@ -375,6 +375,7 @@ export class AgentPostClient {
     subject?: string;
     format?: "text" | "markdown" | "json";
     attachmentIds?: string[];
+    publicationOrigin?: "human_delegated" | "agent_autonomous";
     idempotencyKey?: string;
   }): Promise<TaskMessageResult> {
     const key = options.idempotencyKey ?? idempotencyKey();
@@ -382,6 +383,7 @@ export class AgentPostClient {
       subject: options.subject ?? "",
       content_format: options.format ?? "text",
       body: options.body,
+      publication_origin: options.publicationOrigin ?? "agent_autonomous",
     };
     if (options.attachmentIds?.length) body.attachments = options.attachmentIds;
     return await this.request(

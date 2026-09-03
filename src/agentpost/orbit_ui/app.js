@@ -736,7 +736,7 @@ function createTaskActivityAttachment(activity, format, body) {
 function visibleTaskAssignments(project) {
   const latest = new Map();
   (project.assignments || [])
-    .filter((assignment) => assignment.assignment_kind !== "result_sync")
+    .filter((assignment) => !["result_sync", "task_message"].includes(assignment.assignment_kind))
     .filter((assignment) => assignment.cancellation_reason !== "legacy_pre_0_1_44_backlog")
     .forEach((assignment) => {
       const source = assignment.source_activity_id || assignment.assignment_id;
@@ -760,6 +760,19 @@ function taskProgressSummary(assignment) {
     return raw;
   }
   return `${raw.slice(0, 320).trimEnd()}…\n完整内容请在“任务记录”中查看。`;
+}
+
+function taskMessageRecipientLabel(project, recipient) {
+  for (const member of project.members || []) {
+    const agent = (member.agents || []).find((item) => item.agent_id === recipient.agent_id);
+    if (agent) {
+      const status = recipient.status === "legacy_delivered"
+        ? "兼容投递，尚无自动执行"
+        : "任务上下文可用，无需逐条回复";
+      return `${member.display_name} 的 ${agent.display_name}：${status}`;
+    }
+  }
+  return "任务参与 AI：接收状态已记录";
 }
 
 function syncTaskPrimaryAgentOptions(preferredAgentId = "") {
@@ -988,12 +1001,18 @@ function renderProjectDetail() {
     const heading = document.createElement("div");
     heading.className = "project-progress-heading";
     const name = document.createElement("strong");
-    name.textContent = assignment.responsible_human_display_name;
+    const initiator = assignment.source_actor_type === "platform"
+      ? "AgentPost"
+      : (assignment.source_actor_human_display_name
+        || assignment.created_by_human_display_name
+        || "AgentPost");
+    const targetHuman = assignment.responsible_human_display_name;
+    name.textContent = initiator === targetHuman ? targetHuman : `${initiator} → ${targetHuman}`;
     const time = document.createElement("time");
     time.textContent = dateText(assignment.updated_at || assignment.created_at);
     const status = document.createElement("span");
     const statusLabels = {
-      queued: "等待 Agent 上线",
+      queued: "等待领取",
       leased: "已领取",
       starting: "正在启动",
       running: "协同中",
@@ -1007,7 +1026,7 @@ function renderProjectDetail() {
       || assignment.run_status || assignment.status;
     heading.append(name, time, status);
     const agent = document.createElement("small");
-    agent.textContent = "使用 AI：" + assignment.assignee_agent_display_name;
+    agent.textContent = "执行 AI：" + assignment.assignee_agent_display_name;
     const route = document.createElement("small");
     const priorityLabels = { low: "低", normal: "普通", high: "高", urgent: "紧急" };
     const wakeLabels = {
@@ -1018,11 +1037,19 @@ function renderProjectDetail() {
       running: "本地 AI 已唤醒并执行",
       finished: "执行已结束",
     };
-    route.textContent = `执行依据：${assignment.source_activity_id || "任务创建"} · `
+    const sourceLabels = {
+      agent_joined_collaboration: "加入任务",
+      assignment_created: "Human 明确工作",
+      changes_requested: "Human 要求修改",
+      task_created: "任务创建",
+    };
+    route.textContent = `工作来源：${sourceLabels[assignment.source_kind] || "任务创建"} · `
       + `优先级 ${priorityLabels[assignment.priority] || assignment.priority} · `
       + `${wakeLabels[assignment.wake_stage] || assignment.wake_stage}`;
     const summary = document.createElement("p");
-    summary.textContent = taskProgressSummary(assignment);
+    summary.textContent = assignment.result_summary
+      ? `AI 反馈：${taskProgressSummary(assignment)}`
+      : `工作要求：${taskProgressSummary(assignment)}\n尚未反馈。`;
     copy.append(heading, agent, route, summary);
     row.append(avatar, copy);
     elements.projectCollaborationList.append(row);
@@ -1046,7 +1073,18 @@ function renderProjectDetail() {
     const heading = document.createElement("div");
     heading.className = "project-activity-heading";
     const actor = document.createElement("strong");
-    actor.textContent = activity.actor_display_name || "AgentPost";
+    const actorHuman = activity.actor_display_name || "AgentPost";
+    const actorAgent = activity.actor_agent_display_name;
+    if (["task_message", "task_created", "created"].includes(activity.kind) && actorAgent) {
+      const origin = activity.metadata?.publication_origin;
+      actor.textContent = origin === "human_delegated"
+        ? `${actorHuman} 委托 ${actorAgent} 发布`
+        : (origin === "agent_autonomous"
+          ? `${actorHuman} 的 ${actorAgent} 主动发布`
+          : `${actorHuman} 通过 ${actorAgent} 发布`);
+    } else {
+      actor.textContent = actorHuman;
+    }
     const time = document.createElement("time");
     time.textContent = dateText(activity.created_at);
     heading.append(actor, time);
@@ -1054,13 +1092,24 @@ function renderProjectDetail() {
     textNode.className = "project-activity-action";
     textNode.textContent = activityText(activity);
     copy.append(heading);
-    if (activity.actor_agent_display_name) {
+    if (activity.actor_agent_display_name
+      && !["task_message", "task_created", "created"].includes(activity.kind)) {
       const agent = document.createElement("small");
       agent.className = "project-activity-agent";
       agent.textContent = "通过 AI：" + activity.actor_agent_display_name;
       copy.append(agent);
     }
     copy.append(textNode);
+    if (activity.kind === "task_message"
+      && Array.isArray(activity.metadata?.recipient_statuses)
+      && activity.metadata.recipient_statuses.length) {
+      const recipients = document.createElement("small");
+      recipients.className = "project-activity-recipients";
+      recipients.textContent = "接收方：" + activity.metadata.recipient_statuses
+        .map((item) => taskMessageRecipientLabel(project, item))
+        .join("；");
+      copy.append(recipients);
+    }
     if (activity.kind === "task_message" && activity.metadata?.body !== undefined) {
       const format = String(activity.metadata.content_format || "text").toLowerCase();
       if (["markdown", "json", "html"].includes(format)) {

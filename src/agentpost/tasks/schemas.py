@@ -67,6 +67,7 @@ class AgentTaskCreate(TaskModel):
     goal: str = Field(min_length=1, max_length=10_000)
     expected_output: str = Field(min_length=1, max_length=10_000)
     due_at: datetime | None = None
+    publication_origin: Literal["human_delegated", "agent_autonomous"] = "agent_autonomous"
 
     @field_validator("title", "goal", "expected_output")
     @classmethod
@@ -126,6 +127,7 @@ class AgentTaskMessageCreate(TaskModel):
     )
     body: JsonValue
     attachments: list[UUID] = Field(default_factory=list, max_length=32)
+    publication_origin: Literal["human_delegated", "agent_autonomous"] = "agent_autonomous"
 
     @model_validator(mode="after")
     def validate_body(self) -> AgentTaskMessageCreate:
@@ -266,8 +268,15 @@ class TaskAssignmentResponse(TaskModel):
     assignment_id: UUID
     responsible_human_user_id: UUID
     responsible_human_display_name: str
+    created_by_human_user_id: UUID
+    created_by_human_display_name: str
     assignee_agent_id: UUID
     assignee_agent_display_name: str
+    source_kind: str | None = None
+    source_actor_type: Literal["human", "agent", "platform"] | None = None
+    source_actor_human_display_name: str | None = None
+    source_actor_agent_display_name: str | None = None
+    source_publication_origin: Literal["human_delegated", "agent_autonomous"] | None = None
     assignment_kind: Literal[
         "participant_start", "human_directed", "result_sync", "task_message", "revision"
     ]

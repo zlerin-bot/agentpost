@@ -168,6 +168,7 @@ export declare class AgentPostClient {
         subject?: string;
         format?: "text" | "markdown" | "json";
         attachmentIds?: string[];
+        publicationOrigin?: "human_delegated" | "agent_autonomous";
         idempotencyKey?: string;
     }): Promise<TaskMessageResult>;
     listPendingTaskRuns(options?: {

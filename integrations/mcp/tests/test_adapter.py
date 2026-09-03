@@ -86,8 +86,8 @@ class FakeClient:
         self.calls.append(("search", kwargs))
         return [{"address": "bob@agents.local"}]
 
-    def _claim_task_run(self) -> dict[str, object]:
-        self.calls.append(("claim_task_run", None))
+    def _claim_task_run(self, **kwargs: object) -> dict[str, object]:
+        self.calls.append(("claim_task_run", kwargs))
         return {"run_id": "11111111-1111-1111-1111-111111111111", "lease_token": "x" * 24}
 
     def _heartbeat_task_run(self, *args: object, **kwargs: object) -> dict[str, object]:
@@ -124,6 +124,7 @@ async def test_v2_tool_contract_and_calls(adapter: tuple[object, list[tuple[str,
             "agentpost_reply",
             "agentpost_ack",
             "agentpost_search_directory",
+            "agentpost_list_pending_task_runs",
             "agentpost_claim_task_run",
             "agentpost_update_task_run",
             "agentpost_complete_task_run",

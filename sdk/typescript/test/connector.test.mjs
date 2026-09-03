@@ -281,7 +281,7 @@ test("heartbeat reports the packaged runtime version and exposes upgrade directi
       ...heartbeat(),
       upgrade: {
         action: "upgrade_recommended",
-        target_version: "0.1.45",
+        target_version: "0.1.46",
         minimum_supported_version: "0.1.34",
         reason: "有新版本",
         prompt: "请安全升级",
@@ -298,9 +298,9 @@ test("heartbeat reports the packaged runtime version and exposes upgrade directi
 
   const result = await client.heartbeat();
 
-  assert.equal(heartbeatBody.client_version, "agentpost-connect/0.1.45");
-  assert.equal(heartbeatBody.installed_version, "agentpost-connect/0.1.45");
-  assert.equal(heartbeatBody.configured_version, "agentpost-connect/0.1.45");
+  assert.equal(heartbeatBody.client_version, "agentpost-connect/0.1.46");
+  assert.equal(heartbeatBody.installed_version, "agentpost-connect/0.1.46");
+  assert.equal(heartbeatBody.configured_version, "agentpost-connect/0.1.46");
   assert.match(heartbeatBody.runtime_session_started_at, /Z$/);
   assert.deepEqual(heartbeatBody.capabilities, [
     "task_context_read",
@@ -334,7 +334,7 @@ test("task context and task messages use the participating task endpoints", asyn
       task_id: taskId,
       thread_id: "60000000-0000-0000-0000-000000000006",
       activity_id: "70000000-0000-0000-0000-000000000007",
-      queued_run_count: 1,
+      queued_run_count: 0,
       legacy_delivery_count: 0,
       replayed: false,
       security_label: "external_agent_content",
@@ -355,7 +355,7 @@ test("task context and task messages use the participating task endpoints", asyn
   });
 
   assert.equal(context.title, "测试任务");
-  assert.equal(sent.queued_run_count, 1);
+  assert.equal(sent.queued_run_count, 0);
   assert.equal(requests[0].url.pathname, `/api/v1/agent/tasks/${taskId}`);
   assert.equal(requests[1].url.pathname, `/api/v1/agent/tasks/${taskId}/messages`);
   assert.equal(requests[1].init.headers["Idempotency-Key"], "typescript-task-message");
@@ -363,6 +363,7 @@ test("task context and task messages use the participating task endpoints", asyn
     subject: "",
     content_format: "markdown",
     body: "请继续协同",
+    publication_origin: "agent_autonomous",
   });
 });
 

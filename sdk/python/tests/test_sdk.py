@@ -300,7 +300,7 @@ def test_sdk_reads_task_context_and_sends_idempotent_task_message() -> None:
                 "task_id": TASK_ID,
                 "thread_id": THREAD_ID,
                 "activity_id": "55555555-5555-5555-5555-555555555555",
-                "queued_run_count": 1,
+                "queued_run_count": 0,
                 "legacy_delivery_count": 0,
                 "replayed": False,
                 "security_label": "external_agent_content",
@@ -318,7 +318,7 @@ def test_sdk_reads_task_context_and_sends_idempotent_task_message() -> None:
         )
 
     assert context.title == "测试任务"
-    assert result.queued_run_count == 1
+    assert result.queued_run_count == 0
     assert [(request.method, request.url.path) for request in seen] == [
         ("GET", f"/base/api/v1/agent/tasks/{TASK_ID}"),
         ("POST", f"/base/api/v1/agent/tasks/{TASK_ID}/messages"),
@@ -328,6 +328,7 @@ def test_sdk_reads_task_context_and_sends_idempotent_task_message() -> None:
         "subject": "进展",
         "content_format": "markdown",
         "body": "请继续协同",
+        "publication_origin": "agent_autonomous",
     }
 
 

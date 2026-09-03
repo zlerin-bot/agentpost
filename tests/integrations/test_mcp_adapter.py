@@ -210,6 +210,10 @@ def test_real_mcp_v2_server_exports_exact_schemas_and_sync_tool_contracts() -> N
     assert cursor["type"] == "string"
     assert cursor["maxLength"] == 2048
     assert task_message["properties"]["attachment_ids"]["anyOf"][0]["maxItems"] == 32
+    assert set(task_message["properties"]["publication_origin"]["enum"]) == {
+        "human_delegated",
+        "agent_autonomous",
+    }
     assert {"task_id", "limit"}.issubset(pending_runs["properties"])
     assert {"task_id", "assignment_id"}.issubset(claim_run["properties"])
     assert {"wake_status", "local_session_id"}.issubset(update_run["properties"])

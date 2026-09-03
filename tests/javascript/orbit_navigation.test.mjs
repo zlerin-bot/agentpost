@@ -56,13 +56,21 @@ test("tasks and formal friends are separate API-backed collaboration modules", (
 });
 
 test("task progress is Human-first and structured content stays collapsed as a safe attachment", () => {
-  assert.match(script, /assignment\.responsible_human_display_name/);
+  assert.match(script, /assignment\.source_actor_human_display_name/);
+  assert.match(script, /`\$\{initiator\} → \$\{targetHuman\}`/);
+  assert.match(script, /\["result_sync", "task_message"\]/);
+  assert.match(script, /工作要求：/);
+  assert.match(script, /尚未反馈/);
   assert.match(script, /assignment\.updated_at \|\| assignment\.created_at/);
   assert.match(script, /humanColorTone\(assignment\.responsible_human_user_id\)/);
   assert.match(stylesheet, /\.project-collaboration-row\.human-tone-0/);
-  assert.match(script, /使用 AI：/);
+  assert.match(script, /执行 AI：/);
   assert.match(script, /activity\.actor_display_name/);
   assert.match(script, /通过 AI：/);
+  assert.match(script, /委托 \$\{actorAgent\} 发布/);
+  assert.match(script, /主动发布/);
+  assert.match(script, /taskMessageRecipientLabel/);
+  assert.match(script, /兼容投递，尚无自动执行/);
   assert.match(script, /createTaskActivityAttachment/);
   assert.match(script, /\["markdown", "json", "html"\]\.includes\(format\)/);
   assert.match(script, /document\.createElement\("details"\)/);
@@ -135,7 +143,7 @@ test("task detail exposes its stable ID, automatic Agent participation, and Huma
   assert.match(script, /\/my-agents/);
   assert.match(html, /任务成员中的 AI 已经自动参与协同/);
   assert.match(html, /id="project-collaboration-list"/);
-  assert.match(script, /等待 Agent 上线/);
+  assert.match(script, /等待领取/);
   assert.match(script, /邮件通知已安排发送/);
   assert.match(script, /invited_member_count/);
   assert.match(script, /task_message: "发布了任务协作消息"/);

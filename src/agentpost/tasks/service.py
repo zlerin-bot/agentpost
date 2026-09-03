@@ -673,13 +673,82 @@ def _task_detail(session: Session, *, task: Task, viewer_membership: TaskMembers
             .order_by(AgentRun.attempt.desc())
         ):
             latest_run.setdefault(run.assignment_id, run)
+    source_activity_ids = {
+        item.trigger_activity_id for item in assignment_rows if item.trigger_activity_id is not None
+    }
+    source_activities = {
+        item.id: item
+        for item in session.scalars(
+            select(TaskActivity).where(TaskActivity.id.in_(source_activity_ids))
+        )
+    }
+    source_agent_ids = {
+        item.actor_agent_id
+        for item in source_activities.values()
+        if item.actor_agent_id is not None
+    }
+    source_agents = {
+        agent.id: agent
+        for agent in session.scalars(select(Agent).where(Agent.id.in_(source_agent_ids)))
+    }
     assignments = [
         TaskAssignmentResponse(
             assignment_id=item.id,
             responsible_human_user_id=item.responsible_human_user_id,
             responsible_human_display_name=humans[item.responsible_human_user_id].display_name,
+            created_by_human_user_id=item.created_by_human_user_id,
+            created_by_human_display_name=humans[item.created_by_human_user_id].display_name,
             assignee_agent_id=item.assignee_agent_id,
             assignee_agent_display_name=agents[item.assignee_agent_id].display_name,
+            source_kind=(
+                source_activities[item.trigger_activity_id].activity_type
+                if item.trigger_activity_id in source_activities
+                else None
+            ),
+            source_actor_type=(
+                source_activities[item.trigger_activity_id].actor_type
+                if item.trigger_activity_id in source_activities
+                else None
+            ),
+            source_actor_human_display_name=(
+                humans[source_activities[item.trigger_activity_id].actor_human_user_id].display_name
+                if item.trigger_activity_id in source_activities
+                and source_activities[item.trigger_activity_id].actor_human_user_id in humans
+                else (
+                    humans[
+                        human_id_by_agent[
+                            source_activities[item.trigger_activity_id].actor_agent_id
+                        ]
+                    ].display_name
+                    if item.trigger_activity_id in source_activities
+                    and source_activities[item.trigger_activity_id].actor_agent_id
+                    in human_id_by_agent
+                    and human_id_by_agent[
+                        source_activities[item.trigger_activity_id].actor_agent_id
+                    ]
+                    in humans
+                    else None
+                )
+            ),
+            source_actor_agent_display_name=(
+                source_agents[
+                    source_activities[item.trigger_activity_id].actor_agent_id
+                ].display_name
+                if item.trigger_activity_id in source_activities
+                and source_activities[item.trigger_activity_id].actor_agent_id in source_agents
+                else None
+            ),
+            source_publication_origin=(
+                source_activities[item.trigger_activity_id].activity_metadata.get(
+                    "publication_origin"
+                )
+                if item.trigger_activity_id in source_activities
+                and source_activities[item.trigger_activity_id].activity_metadata.get(
+                    "publication_origin"
+                )
+                in {"human_delegated", "agent_autonomous"}
+                else None
+            ),
             assignment_kind=item.assignment_kind,  # type: ignore[arg-type]
             source_activity_id=item.trigger_activity_id,
             source_message_id=item.source_message_id,
@@ -960,7 +1029,10 @@ def create_task_by_agent(
         kind="task_created",
         actor_type="agent",
         actor_agent_id=agent.id,
-        metadata={"created_for_human_user_id": str(owner.id)},
+        metadata={
+            "created_for_human_user_id": str(owner.id),
+            "publication_origin": payload.publication_origin,
+        },
     )
     session.commit()
     return _task_detail(session, task=task, viewer_membership=membership)
@@ -1175,10 +1247,11 @@ def _fanout_task_message(
     body: object,
     source_message_id: str,
     already_delivered_agent_ids: set[UUID] | None = None,
-) -> tuple[int, int, list[Message]]:
+) -> tuple[int, int, list[Message], list[dict[str, str]]]:
     queued_runs = 0
     legacy_deliveries = 0
     legacy_messages: list[Message] = []
+    recipient_statuses: list[dict[str, str]] = []
     already_delivered_agent_ids = already_delivered_agent_ids or set()
     participants = list(
         session.scalars(
@@ -1191,22 +1264,13 @@ def _fanout_task_message(
     )
     for participant in participants:
         if _supports_native_task_messages(session, agent_id=participant.agent_id):
-            _queue_collaboration_assignment(
-                session,
-                task=task,
-                human_id=participant.human_user_id,
-                agent_id=participant.agent_id,
-                created_by_human_id=task.owner_human_user_id,
-                assignment_kind="task_message",
-                trigger_activity_id=activity.id,
-                source_message_id=source_message_id,
-                instruction=(
-                    "任务中出现一条新的协作消息。请读取任务上下文并参与协同；"
-                    "如无需补充，请明确说明。\n\n"
-                    f"{body}"
-                ),
+            recipient_statuses.append(
+                {
+                    "human_user_id": str(participant.human_user_id),
+                    "agent_id": str(participant.agent_id),
+                    "status": "context_available",
+                }
             )
-            queued_runs += 1
         elif participant.agent_id not in already_delivered_agent_ids:
             legacy_message = _legacy_task_delivery(
                 session,
@@ -1221,7 +1285,14 @@ def _fanout_task_message(
             )
             legacy_messages.append(legacy_message)
             legacy_deliveries += 1
-    return queued_runs, legacy_deliveries, legacy_messages
+            recipient_statuses.append(
+                {
+                    "human_user_id": str(participant.human_user_id),
+                    "agent_id": str(participant.agent_id),
+                    "status": "legacy_delivered",
+                }
+            )
+    return queued_runs, legacy_deliveries, legacy_messages, recipient_statuses
 
 
 def send_task_message_by_agent(
@@ -1269,6 +1340,7 @@ def send_task_message_by_agent(
             "body": payload.body,
             "source_message_id": source_message_id,
             "attachment_ids": [str(value) for value in payload.attachments],
+            "publication_origin": payload.publication_origin,
         },
         external=True,
         idempotency_key=idempotency_key,
@@ -1323,7 +1395,7 @@ def send_task_message_by_agent(
     )
     session.add(source_message)
     session.flush()
-    queued_runs, legacy_deliveries, legacy_messages = _fanout_task_message(
+    queued_runs, legacy_deliveries, legacy_messages, recipient_statuses = _fanout_task_message(
         session,
         task=task,
         activity=activity,
@@ -1347,6 +1419,7 @@ def send_task_message_by_agent(
         **activity.activity_metadata,
         "queued_run_count": queued_runs,
         "legacy_delivery_count": legacy_deliveries,
+        "recipient_statuses": recipient_statuses,
         "attachments": [attachment_metadata(item) for item in attachments],
     }
     task.updated_at = utc_now()
@@ -1393,7 +1466,7 @@ def record_legacy_task_reply(
         external=True,
     )
     session.flush()
-    _fanout_task_message(
+    _, _, _, recipient_statuses = _fanout_task_message(
         session,
         task=task,
         activity=activity,
@@ -1404,6 +1477,11 @@ def record_legacy_task_reply(
         source_message_id=reply.id,
         already_delivered_agent_ids={parent.sender_agent_id},
     )
+    activity.activity_metadata = {
+        **activity.activity_metadata,
+        "publication_origin": "agent_autonomous",
+        "recipient_statuses": recipient_statuses,
+    }
     task.updated_at = utc_now()
 
 
@@ -2323,7 +2401,7 @@ def complete_agent_run(
     assignment.updated_at = now
     assignment.completed_at = now
     task.updated_at = now
-    result_activity = _add_activity(
+    _add_activity(
         session,
         task_id=task.id,
         kind="assignment_result",
@@ -2338,32 +2416,7 @@ def complete_agent_run(
         external=True,
     )
     session.flush()
-    # Every recipient of a task_message already has the same source activity in its
-    # Task context. Fan-out of each reply would create N×N result_sync work and
-    # duplicate progress cards, so only explicitly directed work propagates a bounded sync.
-    if assignment.assignment_kind == "human_directed":
-        other_participants = list(
-            session.scalars(
-                select(TaskAgentParticipant).where(
-                    TaskAgentParticipant.task_id == task.id,
-                    TaskAgentParticipant.active.is_(True),
-                    TaskAgentParticipant.agent_id != agent.id,
-                )
-            )
-        )
-        for participant in other_participants:
-            _queue_collaboration_assignment(
-                session,
-                task=task,
-                human_id=participant.human_user_id,
-                agent_id=participant.agent_id,
-                created_by_human_id=task.owner_human_user_id,
-                assignment_kind="result_sync",
-                trigger_activity_id=result_activity.id,
-                instruction=(
-                    "另一位任务 Agent 已提交协同结果。请结合共享任务上下文和以下结果，"
-                    "补充、校验或说明无需进一步行动：\n\n"
-                    f"{payload.summary}"
-                ),
-            )
+    # Results are already durable Task activities visible to every participant.
+    # Creating a new Run for every other Agent causes mechanical acknowledgement loops;
+    # review work must be requested explicitly through a Human-directed assignment.
     session.commit()

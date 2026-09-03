@@ -734,15 +734,21 @@ class AgentPost:
         subject: str = "",
         format: str = "text",
         attachments: list[UUID | str] | None = None,
+        publication_origin: str = "agent_autonomous",
         idempotency_key: str | None = None,
     ) -> TaskMessageResult:
         """Append collaboration context to an existing participating task."""
         if format not in _BODY_FORMATS:
             raise ConfigurationError("format must be text, markdown, or json")
+        if publication_origin not in {"human_delegated", "agent_autonomous"}:
+            raise ConfigurationError(
+                "publication_origin must be human_delegated or agent_autonomous"
+            )
         request_body: dict[str, Any] = {
             "subject": subject,
             "content_format": format,
             "body": body,
+            "publication_origin": publication_origin,
         }
         if attachments:
             request_body["attachments"] = [str(value) for value in attachments]

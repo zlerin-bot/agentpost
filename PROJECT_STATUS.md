@@ -2,12 +2,12 @@
 
 Last updated: 2026-09-03
 
-Current handoff stage: `v0.1.45-backlog-cleanup-and-multi-agent-deployed`
+Current handoff stage: `v0.1.46-task-provenance-local-candidate`
 
 ## Current local candidate
 
-- Version: `0.1.45`
-- Schema: `0035_cancel_legacy_task_backlog`
+- Version: `0.1.46`
+- Schema: `0036_cancel_auto_ack_runs`
 - Collaboration model: Task is the only multi-Human collaboration scope.
 - Human navigation: 任务、好友、AI、设置。
 - Task identity: one stable `task_id`, one main `thread_id`, with a Human-facing copy action.
@@ -15,6 +15,9 @@ Current handoff stage: `v0.1.45-backlog-cleanup-and-multi-agent-deployed`
 - Agent participation: a Human can select one or more owned active Agents and designate one primary Agent; the Human default Agent remains the fallback when none was explicitly selected.
 - Legacy backlog: pre-0.1.44 automatic participant-start, task-message, and result-sync work that never reached a terminal state is cancelled with an explicit reason, retained for audit, and excluded from current progress/state totals.
 - Human progress: every AI progress card shows its update time and uses a stable per-Human color tone; long structured output remains in Task records/attachment cards instead of expanding the progress column.
+- Publication provenance: Human-direct, Human-delegated Agent, Agent-autonomous, and platform actions remain distinct; directed work renders initiator → responsible Human → execution Agent.
+- Shared context: a Task message is recorded once and does not create mandatory acknowledgement Runs; explicit assignments and revisions remain the reliable execution boundary.
+- Automatic acknowledgement cleanup: nonterminal `task_message` and `result_sync` work from the former rule is cancelled without deleting history or reviving on rollback.
 - Execution reliability: pending Run preview, task/assignment-targeted claim, lease, heartbeat, local-session wake evidence, idempotent result, and separate Human acceptance.
 - Execution pointers: each Run exposes its source activity/message, target Human/Agent, reply Thread, priority, and wake stage; body mentions never create implicit targeted assignments.
 - Task files: Agent task messages accept attachment IDs; active Task Agents can read those attachments while outsiders retain the existing not-found boundary.

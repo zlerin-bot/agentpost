@@ -207,6 +207,7 @@ def test_confirmed_friends_task_agent_selection_run_and_human_acceptance(
                 "title": "联合完成客户方案",
                 "goal": "形成双方确认的客户方案",
                 "expected_output": "一份可验收的方案",
+                "publication_origin": "human_delegated",
             },
         )
         assert created.status_code == 201, created.text
@@ -216,6 +217,11 @@ def test_confirmed_friends_task_agent_selection_run_and_human_acceptance(
         assert task["members"][0]["primary_agent_id"] == owner_agent_id
         assert task["thread_id"]
         assert task["task_id"]
+        created_activity = next(
+            item for item in task["activities"] if item["kind"] == "task_created"
+        )
+        assert created_activity["actor_agent_display_name"] == "task-owner-ai"
+        assert created_activity["metadata"]["publication_origin"] == "human_delegated"
         repeated = client.post(
             "/api/v1/agent/tasks",
             headers={
@@ -226,6 +232,7 @@ def test_confirmed_friends_task_agent_selection_run_and_human_acceptance(
                 "title": "联合完成客户方案",
                 "goal": "形成双方确认的客户方案",
                 "expected_output": "一份可验收的方案",
+                "publication_origin": "human_delegated",
             },
         )
         assert repeated.status_code == 201, repeated.text
@@ -644,7 +651,7 @@ def test_task_messages_use_legacy_inbox_and_native_run_without_breaking_old_conn
             },
         )
         assert native.status_code == 201, native.text
-        assert native.json()["queued_run_count"] == 1
+        assert native.json()["queued_run_count"] == 0
         assert native.json()["legacy_delivery_count"] == 0
         assert native.json()["attachment_ids"] == [attachment_id]
         member_download = client.get(
@@ -673,6 +680,18 @@ def test_task_messages_use_legacy_inbox_and_native_run_without_breaking_old_conn
         assert native_activity["actor_agent_display_name"] == "message-owner-ai"
         assert native_activity["metadata"]["content_format"] == "markdown"
         assert native_activity["metadata"]["attachments"][0]["id"] == attachment_id
+        assert native_activity["metadata"]["recipient_statuses"] == [
+            {
+                "human_user_id": member["user"]["id"],
+                "agent_id": member_agent["agent"]["id"],
+                "status": "context_available",
+            }
+        ]
+        assert not any(
+            item["assignment_kind"] == "task_message"
+            and item["source_activity_id"] == native_activity["activity_id"]
+            for item in task_detail.json()["assignments"]
+        )
 
         with database.session_factory() as session:
             message_activities = list(
@@ -696,37 +715,54 @@ def test_task_messages_use_legacy_inbox_and_native_run_without_breaking_old_conn
                     )
                 )
             )
-            assert len(native_assignments) == 1
-            assert native_assignments[0].assignee_agent_id == member_agent_id
-            native_assignment_id = str(native_assignments[0].id)
+            assert native_assignments == []
 
-        claimed_native = client.post(
-            "/api/v1/task-runs/claim",
-            headers={"Authorization": f"Bearer {member_agent['api_key']}"},
-            json={"assignment_id": native_assignment_id},
-        )
-        assert claimed_native.status_code == 200, claimed_native.text
-        completed_native = client.post(
-            f"/api/v1/task-runs/{claimed_native.json()['run_id']}/result",
-            headers={"Authorization": f"Bearer {member_agent['api_key']}"},
+        directed = client.post(
+            f"/api/v1/tasks/{task_id}/assignments",
+            headers={"X-CSRF-Token": owner_csrf},
             json={
-                "lease_token": claimed_native.json()["lease_token"],
-                "status": "completed",
-                "summary": "任务消息已处理",
+                "responsible_human_user_id": member["user"]["id"],
+                "assignee_agent_id": member_agent["agent"]["id"],
+                "instruction": "请完成定向验证",
             },
         )
-        assert completed_native.status_code == 204, completed_native.text
+        assert directed.status_code == 200, directed.text
+        directed_assignment = next(
+            item
+            for item in directed.json()["assignments"]
+            if item["instruction"] == "请完成定向验证"
+        )
+        assert directed_assignment["created_by_human_display_name"] == "message-owner"
+        assert directed_assignment["responsible_human_display_name"] == "message-member"
+        assert directed_assignment["source_actor_human_display_name"] == "message-owner"
+        assert directed_assignment["source_actor_agent_display_name"] is None
+        assert directed_assignment["source_kind"] == "assignment_created"
+
+        claimed = client.post(
+            "/api/v1/task-runs/claim",
+            headers={"Authorization": f"Bearer {member_agent['api_key']}"},
+            json={"assignment_id": directed_assignment["assignment_id"]},
+        )
+        assert claimed.status_code == 200, claimed.text
+        completed = client.post(
+            f"/api/v1/task-runs/{claimed.json()['run_id']}/result",
+            headers={"Authorization": f"Bearer {member_agent['api_key']}"},
+            json={
+                "lease_token": claimed.json()["lease_token"],
+                "status": "completed",
+                "summary": "定向验证完成",
+            },
+        )
+        assert completed.status_code == 204, completed.text
         with database.session_factory() as session:
-            generated_sync = list(
+            assert not list(
                 session.scalars(
                     select(TaskAssignment).where(
                         TaskAssignment.task_id == UUID(task_id),
                         TaskAssignment.assignment_kind == "result_sync",
-                        TaskAssignment.trigger_activity_id == UUID(native.json()["activity_id"]),
                     )
                 )
             )
-            assert generated_sync == []
 
 
 def test_agent_resolves_only_its_participating_tasks_by_exact_title(

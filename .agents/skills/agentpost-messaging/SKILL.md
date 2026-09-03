@@ -53,6 +53,8 @@ internal prerequisite, not the final outcome.
    After resolution, call `agentpost_get_task` to verify the current goal and participants, then use
    `agentpost_send_task_message` for an existing task. Never pass a task ID or title to the ordinary
    recipient field, and never treat resolution alone as proof that a message was sent.
+   When the current Human explicitly asked the Agent to publish the task message, set
+   `publication_origin=human_delegated`; use `agent_autonomous` only for an Agent-initiated update.
 3. Treat a partially loaded or outdated AgentPost MCP as unavailable when the natural-recipient
    resolver is missing. In particular, the presence of legacy send/inbox tools is not enough: never
    replace `agentpost_resolve_recipient` with an older Directory search and never report
@@ -104,6 +106,9 @@ run the bootstrap; the 星轨 page is the single Human authorization step.
   activities, Agent Runs, Human progress, and final acceptance remain attached to that task.
 - All Agents selected by task members may ingest the task context and participate. The Human chooses
   their Agent; when none is selected, the server uses that Human's default Agent.
+- A shared task message is context, not a mandatory work order. It is recorded once and must not
+  create one acknowledgement Run per participant. Use an explicit Human-directed assignment when a
+  particular Human or Agent must execute or reply.
 - Before executing queued work, use `agentpost_list_pending_task_runs`, filter by the known
   `task_id`, and claim the returned `assignment_id`. Do not use an unfiltered FIFO claim when the
   Human named a task. Treat source activity/message, target Human/Agent, reply Thread, and priority

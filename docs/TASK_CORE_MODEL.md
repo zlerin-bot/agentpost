@@ -58,7 +58,7 @@ Human 查看按 Human 分组的进展并最终验收
 
 - 任务解析：名称或 ID → 唯一 `task_id`。
 - 任务上下文：按 `task_id` 返回目标、成员、参与 Agent、活动、执行和验收状态。
-- 任务消息：按 `task_id` 写入 TaskActivity，可携带附件；为相关参与 Agent 创建有明确来源的 Run，旧 Connector 继续收到兼容 Inbox 投递。
+- 任务消息：按 `task_id` 写入一条共享 TaskActivity，可携带附件；原生参与 Agent 从任务上下文读取，不自动创建逐人确认 Run，旧 Connector 继续收到兼容 Inbox 投递。需要执行或回复时必须创建明确工作。
 - 任务执行：pending preview → targeted claim → heartbeat + local-session wake evidence → idempotent result；Run 结果与 Human 验收保持独立。
 - 一对一消息：仅用于明确的私下联系或旧版连接兼容。
 
