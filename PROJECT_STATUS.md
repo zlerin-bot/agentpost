@@ -2,7 +2,7 @@
 
 Last updated: 2026-09-03
 
-Current handoff stage: `v0.1.47-task-contract-local-candidate`
+Current handoff stage: `v0.1.47-task-provenance-deployed`
 
 ## Current local candidate
 
@@ -39,22 +39,23 @@ configuration, and test paths.
 - Ruff format check: passed.
 - Orbit and TypeScript JavaScript: 45 passed.
 - TypeScript compile: passed.
-- Non-PostgreSQL Pytest: 454 passed, one expected loopback sandbox skip, five PostgreSQL tests deselected.
-- Alembic graph: one head at `0035_cancel_legacy_task_backlog`.
-- Fresh SQLite Alembic chain: blocked at the pre-existing 0019 constraint-alter limitation before reaching 0035.
+- Non-PostgreSQL Pytest: 455 passed, one expected loopback sandbox skip, five PostgreSQL tests deselected.
+- Alembic graph: one head at `0036_cancel_auto_ack_runs`.
+- Fresh SQLite Alembic chain: blocked at the pre-existing 0019 constraint-alter limitation before reaching 0036.
 - PostgreSQL 0030 → 0034 → 0030 → 0034 rehearsal and production upgrade: passed in the protected release switch.
 - Authenticated desktop and 390px Task list/detail: passed with zero horizontal overflow and no console errors; Run routing/wake labels and copyable Task ID were visible. A real task attachment card has API/DOM coverage but authenticated visual acceptance remains `待确认` because the isolated seed has no physical attachment.
 - Authenticated desktop and 390px production 0.1.45: passed for multi-Agent selection, primary-Agent controls, add-Agent navigation, Human colors, timestamps, mobile list/detail navigation, zero horizontal overflow, and zero console errors.
 - PostgreSQL 0034 → 0035 → 0034 → 0035 rehearsal and production upgrade: passed. The migration cancelled 43 obsolete Assignments and 49 associated historical Runs; zero targeted pre-0.1.44 nonterminal Assignments remain.
+- PostgreSQL 0036 production cleanup cancelled 5 nonterminal automatic acknowledgement Assignments and 5 associated Runs; zero nonterminal `task_message` / `result_sync` Assignments remain.
 
 ## Production
 
-- Current production commit: `0c9d844`
-- Current production version/schema: `0.1.45 / 0035_cancel_legacy_task_backlog`
+- Current production commit: `0fabd78`
+- Current production version/schema: `0.1.47 / 0036_cancel_auto_ack_runs`
 - State: `deployed_https_verified`, not `production_accepted`.
 - Protected switch reported `deploy_status=ok`; independent full postflight reported `postflight_status=ok`.
-- Public health/ready report 0.1.45, protocol contract reports 0.3, the public wheel SHA-256 is `047f5fbd661858663b3a13fc803c33ab685b6de9d0bf1c18e51706c378c1d47f`, and an unknown wheel URL returns 404.
-- The authenticated production Task page loaded the four primary entries and existing Task data successfully; desktop and 390px changed flows passed.
+- Public health/ready report 0.1.47, protocol contract reports 0.3 with shared-context/no-auto-ack semantics, the public wheel SHA-256 is `40984be6c2afcfff6565f426d4252cf85e0549f688970e3f6c21a87d52a10877`, and an unknown wheel URL returns 404.
+- The authenticated production Task page loaded existing Task data and the corrected Human → Human → Agent progress relationship; desktop and 390px list/detail passed with no horizontal overflow or console warnings/errors.
 
 ## Next release gates
 

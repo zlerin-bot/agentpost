@@ -2,11 +2,11 @@
 
 ## 当前接续摘要
 
-- 交接阶段：`v0.1.47-task-contract-local-candidate`
+- 交接阶段：`v0.1.47-task-provenance-deployed`
 - 本地版本：`0.1.47 / 0036_cancel_auto_ack_runs`
-- 当前生产：`3c4d827 / 0.1.46 / 0036_cancel_auto_ack_runs / deployed_https_verified`
+- 当前生产：`0fabd78 / 0.1.47 / 0036_cancel_auto_ack_runs / deployed_https_verified`
 - 生产接受状态：不是 `production_accepted`
-- 本切片：修正任务消息的发布来源、发起方/接收方/执行方显示，取消普通共享消息和结果的自动应答 Run；本地验证完成，待部署
+- 本切片：修正任务消息的发布来源、发起方/接收方/执行方显示，取消普通共享消息和结果的自动应答 Run；已部署并完成 HTTPS 后检
 
 ## 当前产品模型
 
@@ -58,7 +58,7 @@ AgentPost 的多人协作只发生在 Task 内。每个 Task 有一个稳定 `ta
 
 ## 本地验证证据
 
-- 0.1.47 合同补丁的协议、版本边界、Skill、迁移聚焦测试：27 passed；TypeScript compile 和 JavaScript：45 passed；Ruff、format 与 wheel 构建通过。
+- 0.1.47 `.venv/bin/pytest -m "not postgres"`：455 passed、1 expected skip、5 deselected；TypeScript compile 和 JavaScript：45 passed；Ruff、format、wheel 构建和 `git diff --check` 通过。
 - 0.1.46 `.venv/bin/pytest -m "not postgres"`：455 passed、1 expected skip、5 deselected；聚焦 Python/MCP/SDK：57 passed；0036 迁移：2 passed。
 - 0.1.46 `.venv/bin/ruff check .`、`.venv/bin/ruff format --check .`、TypeScript compile、全部 JavaScript 49 tests 和 `git diff --check` 均通过。
 - 0.1.46 隔离桌面与 390px 视觉 smoke 通过：发布来源、发起/负责/执行关系、等待领取、工作要求/尚未反馈和共享接收状态可读；390px 无横向溢出、控制台无 warning/error。
@@ -80,6 +80,14 @@ AgentPost 的多人协作只发生在 Task 内。每个 Task 有一个稳定 `ta
 1. 完成真实任务附件卡和连接详情的认证视觉验收。
 2. 完成真实用户跨设备验收；此前不得标记为 `production_accepted`。
 3. 不要纳入两个无关的未跟踪管理汇报文件。
+
+## 0.1.47 生产发布证据
+
+- 功能提交 `3c4d827` 完成任务来源、共享上下文、进展显示和 0036 清理；公网检查发现旧机器合同描述未同步后，以补丁提交 `0fabd78` 形成最终 0.1.47，不覆盖已发布的不可变版本。
+- 0.1.47 单一上传包与内部六个文件哈希全部通过；受保护切换从 0.1.46 创建完整备份、完成同 schema 迁移演练、原子切换与本机健康检查，返回 `deploy_status=ok`。0036 共取消 5 个非终态自动应答 Assignment 和 5 个关联 Run，目标非终态积压为 0。
+- 独立后检返回 `postflight_status=ok`；AgentPost、Nginx、PostgreSQL 正常，关键数据量未下降，备份哈希和即时回退脚本通过。
+- 公网 health/ready 为 0.1.47；协议合同 0.3 明确任务消息是共享上下文、不建自动应答 Run，Agent 结果不建同步 Run，Human 明确工作才建 Run；公开 wheel SHA-256 为 `40984be6c2afcfff6565f426d4252cf85e0549f688970e3f6c21a87d52a10877`，未知 wheel 返回 404。
+- 登录态生产任务页桌面和 390px 列表/详情通过，无横向溢出和 console warning/error；这仍是 `deployed_https_verified`，不是跨设备真实用户 `production_accepted`。
 
 ## 0.1.45 生产发布证据
 
