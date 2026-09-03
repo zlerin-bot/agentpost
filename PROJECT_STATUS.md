@@ -2,7 +2,7 @@
 
 Last updated: 2026-09-03
 
-Current handoff stage: `v0.1.48-waiting-human-local-verified`
+Current handoff stage: `v0.1.48-waiting-human-deployed`
 
 ## Current local candidate
 
@@ -41,7 +41,7 @@ configuration, and test paths.
 - Ruff format check: passed.
 - Orbit and TypeScript JavaScript: 45 passed.
 - TypeScript compile: passed.
-- Non-PostgreSQL Pytest: 455 passed, one expected loopback sandbox skip, five PostgreSQL tests deselected.
+- Non-PostgreSQL Pytest: 456 passed, one expected loopback sandbox skip, five PostgreSQL tests deselected.
 - Alembic graph: one head at `0036_cancel_auto_ack_runs`.
 - Fresh SQLite Alembic chain: blocked at the pre-existing 0019 constraint-alter limitation before reaching 0036.
 - PostgreSQL 0030 → 0034 → 0030 → 0034 rehearsal and production upgrade: passed in the protected release switch.
@@ -52,15 +52,16 @@ configuration, and test paths.
 
 ## Production
 
-- Current production commit: `0fabd78`
-- Current production version/schema: `0.1.47 / 0036_cancel_auto_ack_runs`
+- Current production commit: `36855ff`
+- Current production version/schema: `0.1.48 / 0036_cancel_auto_ack_runs`
 - State: `deployed_https_verified`, not `production_accepted`.
 - Protected switch reported `deploy_status=ok`; independent full postflight reported `postflight_status=ok`.
-- Public health/ready report 0.1.47, protocol contract reports 0.3 with shared-context/no-auto-ack semantics, the public wheel SHA-256 is `40984be6c2afcfff6565f426d4252cf85e0549f688970e3f6c21a87d52a10877`, and an unknown wheel URL returns 404.
-- The authenticated production Task page loaded existing Task data and the corrected Human → Human → Agent progress relationship; desktop and 390px list/detail passed with no horizontal overflow or console warnings/errors.
+- Public health/ready and Connector release config report 0.1.48; the protocol contract exposes the waiting-Human response/requeue flags, the public wheel SHA-256 is `cc80b8816b808e9dd963c6dc0065d05f1d52eb7a4bd639265b8b6d04e3d1d211`, and an unknown wheel URL returns 404.
+- The authenticated production “测试任务” page exposes the waiting-Human question and response control. Its long-progress link expands the matching lifecycle group, updates the activity anchor, and reveals the complete Task record; the console had no warnings/errors.
 
 ## Next release gates
 
-1. Complete authenticated visual acceptance of a real Task attachment card and Connector runtime details.
-2. Complete real-user cross-device acceptance before changing the state to `production_accepted`.
-3. Keep the two unrelated untracked management-report files untouched.
+1. Complete the real-Agent waiting-Human response → reclaim → result cross-device loop.
+2. Complete authenticated visual acceptance of a real Task attachment card and Connector runtime details.
+3. Complete real-user cross-device acceptance before changing the state to `production_accepted`.
+4. Keep the two unrelated untracked management-report files untouched.

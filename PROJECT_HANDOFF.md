@@ -2,11 +2,11 @@
 
 ## 当前接续摘要
 
-- 交接阶段：`v0.1.48-waiting-human-local-verified`
+- 交接阶段：`v0.1.48-waiting-human-deployed`
 - 本地版本：`0.1.48 / 0036_cancel_auto_ack_runs`
-- 当前生产：`0fabd78 / 0.1.47 / 0036_cancel_auto_ack_runs / deployed_https_verified`
+- 当前生产：`36855ff / 0.1.48 / 0036_cancel_auto_ack_runs / deployed_https_verified`
 - 生产接受状态：不是 `production_accepted`
-- 本切片：补齐 waiting_human 的问题展示、Human 回复和同 Assignment 可靠重入队；统一任务 AI 名称，拆分状态变化与心跳时间，折叠历史执行噪声，并为长进展增加任务记录定位链接；本地已验证，尚未部署
+- 本切片：补齐 waiting_human 的问题展示、Human 回复和同 Assignment 可靠重入队；统一任务 AI 名称，拆分状态变化与心跳时间，折叠历史执行噪声，并为长进展增加任务记录定位链接；已部署并完成 HTTPS 后检
 
 ## 当前产品模型
 
@@ -85,10 +85,18 @@ AgentPost 的多人协作只发生在 Task 内。每个 Task 有一个稳定 `ta
 
 ## 待完成
 
-1. 从明确提交构建并部署 0.1.48，在真实“测试任务”验证 waiting_human 回复和任务记录定位链接。
+1. 在真实 Agent 上完成 waiting_human 回复后的重新领取、执行和结果回写跨设备验收。
 2. 完成真实任务附件卡和连接详情的认证视觉验收。
 3. 完成真实用户跨设备验收；此前不得标记为 `production_accepted`。
 4. 不要纳入两个无关的未跟踪管理汇报文件。
+
+## 0.1.48 生产发布证据
+
+- 从提交 `36855ff` 生成并上传单一发布包；staging 的外层和内部六个文件哈希、切换与后检脚本语法全部通过。
+- 受保护切换从 0.1.47 创建完整备份，完成同 schema PostgreSQL 迁移往返演练、原子 current 切换和本机健康检查，返回 `deploy_status=ok`；只重启 AgentPost 并 reload Nginx。
+- 独立后检返回 `postflight_status=ok`；AgentPost、Nginx、PostgreSQL 正常，schema 为 `0036_cancel_auto_ack_runs`，关键数据量未下降，备份哈希和即时回退脚本通过。
+- 开发机独立公网核对 health/ready、连接升级配置均为 0.1.48；公开 wheel SHA-256 为 `cc80b8816b808e9dd963c6dc0065d05f1d52eb7a4bd639265b8b6d04e3d1d211`，未知 wheel 返回 404。
+- 登录态生产“测试任务”确认 waiting_human 问题和 Human 回复入口可见；长进展的“查看完整任务记录”链接可自动展开分组、更新 URL 锚点并定位到完整记录，控制台无 warning/error。
 
 ## 0.1.47 生产发布证据
 
