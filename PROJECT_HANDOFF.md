@@ -92,6 +92,14 @@ Task，不能再建立平行容器、另一套成员角色或共享通信规则�
 3. 完成真实用户跨设备验收；此前不得标记为 `production_accepted`。
 4. 不要纳入两个无关的未跟踪管理汇报文件。
 
+## 0.1.49 生产发布证据
+
+- 从提交 `770fcac` 生成 0.1.49 单一发布包；上传包 SHA-256 为 `4874feddf155771591d622a965a45f4c0dc9b00af1a8d07902ff287fb96b3f49`，包内清单、源码、wheel、manifest 和发布脚本哈希全部通过。
+- Workbench 当前 `/home/admin` 由 root 持有且登录用户不可写，因此先创建仅供发布上传、归 admin 所有的 `/home/admin/agentpost-upload`，未改变既有发布目录权限；随后完成脚本语法检查和受保护原子切换。
+- 受保护切换返回 `deploy_status=ok release=0.1.49 commit=770fcac`；独立后检返回 `postflight_status=ok`，AgentPost、Nginx、PostgreSQL 正常，schema 为 `0036_cancel_auto_ack_runs`，备份和关键数据量检查通过。
+- 开发机独立公网核对 health/ready 均为 0.1.49，协议合同为 0.4，Connector 推荐版本为 0.1.49、最低兼容版本为 0.1.34；公开 wheel SHA-256 为 `5acf653829825e23abc83d1fc970110eb29a9b621dcb98987a66d59ff6b2fd3c`，未知 wheel 返回 404。
+- 当前状态为 `deployed_https_verified`；尚未完成真实用户跨设备验收，因此不是 `production_accepted`。
+
 ## 0.1.48 生产发布证据
 
 - 从提交 `36855ff` 生成并上传单一发布包；staging 的外层和内部六个文件哈希、切换与后检脚本语法全部通过。

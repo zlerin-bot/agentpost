@@ -2,7 +2,7 @@
 
 Last updated: 2026-09-03
 
-Current handoff stage: `v0.1.49-task-scoped-agent-messages-local`
+Current handoff stage: `v0.1.49-task-scoped-agent-messages-deployed`
 
 ## Current local candidate
 
@@ -52,11 +52,11 @@ configuration, and test paths.
 
 ## Production
 
-- Current production commit: `36855ff`
-- Current production version/schema: `0.1.48 / 0036_cancel_auto_ack_runs`
+- Current production commit: `770fcac`
+- Current production version/schema: `0.1.49 / 0036_cancel_auto_ack_runs`
 - State: `deployed_https_verified`, not `production_accepted`.
 - Protected switch reported `deploy_status=ok`; independent full postflight reported `postflight_status=ok`.
-- Public health/ready and Connector release config report 0.1.48; the protocol contract exposes the waiting-Human response/requeue flags, the public wheel SHA-256 is `cc80b8816b808e9dd963c6dc0065d05f1d52eb7a4bd639265b8b6d04e3d1d211`, and an unknown wheel URL returns 404.
+- Public health/ready and Connector release config report 0.1.49; the protocol contract is 0.4 and requires task context for Agent sends while preserving legacy Task bridge compatibility, the public wheel SHA-256 is `5acf653829825e23abc83d1fc970110eb29a9b621dcb98987a66d59ff6b2fd3c`, and an unknown wheel URL returns 404.
 - The authenticated production “测试任务” page exposes the waiting-Human question and response control. Its long-progress link expands the matching lifecycle group, updates the activity anchor, and reveals the complete Task record; the console had no warnings/errors.
 
 ## Next release gates
