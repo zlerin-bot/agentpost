@@ -78,7 +78,7 @@ def test_plugin_packages_the_same_implicit_skill_without_machine_specific_mcp_co
 
     assert manifest["name"] == "agentpost"
     plugin_version, separator, cachebuster = manifest["version"].partition("+")
-    assert plugin_version == "0.1.49"
+    assert plugin_version == "0.1.50"
     assert separator == "+"
     assert cachebuster.startswith("codex.")
     assert manifest["skills"] == "./skills/"
@@ -117,8 +117,8 @@ def test_production_example_connector_artifact_matches_release_version() -> None
         if line.startswith("AGENTPOST_CONNECTOR_") and "=" in line
     )
 
-    assert values["AGENTPOST_CONNECTOR_RELEASE_VERSION"] == "0.1.49"
-    assert values["AGENTPOST_CONNECTOR_WHEEL_URL"].endswith("/agentpost-0.1.49-py3-none-any.whl")
+    assert values["AGENTPOST_CONNECTOR_RELEASE_VERSION"] == "0.1.50"
+    assert values["AGENTPOST_CONNECTOR_WHEEL_URL"].endswith("/agentpost-0.1.50-py3-none-any.whl")
     assert len(values["AGENTPOST_CONNECTOR_WHEEL_SHA256"]) == 64
     int(values["AGENTPOST_CONNECTOR_WHEEL_SHA256"], 16)
 

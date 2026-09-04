@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -28,7 +29,7 @@ def test_server_package_metadata_import_does_not_require_sdk(tmp_path: Path) -> 
     )
 
     assert completed.returncode == 0, completed.stderr
-    assert completed.stdout.strip() == "0.1.49"
+    assert completed.stdout.strip() == "0.1.50"
 
 
 def test_server_sdk_and_mcp_versions_match_release() -> None:
@@ -38,8 +39,24 @@ def test_server_sdk_and_mcp_versions_match_release() -> None:
     import agentpost
 
     assert {agentpost.__version__, agentpost_sdk.__version__, agentpost_mcp.__version__} == {
-        "0.1.49"
+        "0.1.50"
     }
+    root = Path(__file__).resolve().parents[2]
+    for filename in (
+        "sdk/typescript/package.json",
+        "integrations/openclaw/package.json",
+        "integrations/openclaw/openclaw.plugin.json",
+        "plugins/agentpost/.codex-plugin/plugin.json",
+    ):
+        assert (
+            json.loads((root / filename).read_text())["version"].split("+")[0]
+            == agentpost.__version__
+        )
+    lock = tomllib.loads((root / "uv.lock").read_text())
+    assert (
+        next(item for item in lock["package"] if item["name"] == "agentpost")["version"]
+        == agentpost.__version__
+    )
 
 
 def test_sdist_carries_the_forced_wheel_bootstrap_source() -> None:

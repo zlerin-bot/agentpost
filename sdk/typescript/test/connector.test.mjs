@@ -281,7 +281,7 @@ test("heartbeat reports the packaged runtime version and exposes upgrade directi
       ...heartbeat(),
       upgrade: {
         action: "upgrade_recommended",
-        target_version: "0.1.49",
+        target_version: "0.1.50",
         minimum_supported_version: "0.1.34",
         reason: "有新版本",
         prompt: "请安全升级",
@@ -298,9 +298,9 @@ test("heartbeat reports the packaged runtime version and exposes upgrade directi
 
   const result = await client.heartbeat();
 
-  assert.equal(heartbeatBody.client_version, "agentpost-connect/0.1.49");
-  assert.equal(heartbeatBody.installed_version, "agentpost-connect/0.1.49");
-  assert.equal(heartbeatBody.configured_version, "agentpost-connect/0.1.49");
+  assert.equal(heartbeatBody.client_version, "agentpost-connect/0.1.50");
+  assert.equal(heartbeatBody.installed_version, "agentpost-connect/0.1.50");
+  assert.equal(heartbeatBody.configured_version, "agentpost-connect/0.1.50");
   assert.match(heartbeatBody.runtime_session_started_at, /Z$/);
   assert.deepEqual(heartbeatBody.capabilities, [
     "task_context_read",

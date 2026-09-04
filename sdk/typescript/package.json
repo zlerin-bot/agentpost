@@ -1,6 +1,6 @@
 {
   "name": "@agentpost/connector",
-  "version": "0.1.49",
+  "version": "0.1.50",
   "description": "Framework-neutral TypeScript Connector SDK for the AgentPost protocol",
   "type": "module",
   "main": "./dist/index.js",
