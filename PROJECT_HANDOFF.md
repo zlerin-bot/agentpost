@@ -2,14 +2,23 @@
 
 ## 当前接续摘要
 
-- 交接阶段：`post-0.1.49-thread-compatibility-fix-local`
-- 本地版本：`0.1.50` 待发布；schema 仍为 `0036_cancel_auto_ack_runs`，不覆盖 0.1.49 发布物。
-- 最近记录的生产：`770fcac / 0.1.49 / 0036_cancel_auto_ack_runs / deployed_https_verified`（依据下方发布证据，本轮未重新部署）
+- 交接阶段：`0.1.50-deployed-https-verified`
+- 本地与生产版本：`0.1.50`；schema 仍为 `0036_cancel_auto_ack_runs`，保留 0.1.49 回退点。
+- 当前生产：`2ae66a3 / 0.1.50 / 0036_cancel_auto_ack_runs / deployed_https_verified`（2026-09-04 10:10 +08:00 完成后检）。
 - 生产接受状态：不是 `production_accepted`
 - 本切片：修复旧 Thread 列表/详情混入无 Delivery 的 Task 源消息导致 500；保留当前 Agent 的实际投递视图，并要求 TaskMembership 与 Agent 参与资格均有效。共享完整上下文继续使用 Task API，不恢复无任务私信。
 - OpenAPI 版本使用实际包版本；意外异常返回安全 JSON 和 request_id，不输出异常正文或凭据。心跳显式返回 version_status、原因、推荐与最低版本，未上报保持 unknown；Python SDK 兼容旧响应缺少这些字段。
 - 测试任务反馈口径：无 Task bridge 的历史私信回复被拒绝是预期行为。完成状态以服务端 Run/Result 为准；正文的“尚未提交”保留为原始 Agent 内容，不能自动改写历史状态，更不能据此推断 Task 已提交或 Human 已验收。
-- 本切片未部署，未修改生产任务数据，也未发送新的协同消息。网页登录、移动端、附件及跨设备验收仍待完成。
+- 本切片已部署，未手动修改生产任务或好友关系，也未发送协同消息。登录入口正常；Chrome 重启后 Human 会话已退出，生产登录后好友页、移动端及跨设备真实用户验收仍待完成。
+
+### 0.1.50 发布证据（2026-09-04）
+
+- 已发布好友入口待确认数量、可点击待处理提示、“待你确认/已发申请”分离，以及旧 Thread 投递视图隔离、运行版本诊断修复。
+- 发布提交 `2ae66a3e1218dc36e80d2614ce302ece33d49e07`；固定 Workbench 上传/暂存/切换/后检流程，`stage_status=ok`、`deploy_status=ok`（39 秒）、`postflight_status=ok`（3 秒）。
+- 备份 `/opt/agentpost/backups/20260904-100915-2ae66a3-pre-050`；回退脚本 `rollback-immediate-0.1.50.sh`，dump/附件/配置/旧 wheel 校验通过。
+- 公网及本机 health/ready 均正常，公网 OpenAPI 版本 0.1.50；wheel SHA-256 `239c59bcf3b36ca2e1ea2266f0ad5b36891f7ff186466b1f2fd668f4ffb62724` 与发布物一致，未知 wheel 404。
+- 后检数据量：agents=63、messages=581、deliveries=572、attachments=50、humans=16；脚本确认关键计数未减少。AgentPost PID=417472，Nginx PID=362620、PostgreSQL PID=365086 保持原进程。
+- 本地回归证据见发布候选记录；生产真实用户验收仍为 pending，不标记 `production_accepted`。
 
 ## 当前产品模型
 
