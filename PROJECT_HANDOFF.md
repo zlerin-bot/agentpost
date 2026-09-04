@@ -2,12 +2,16 @@
 
 ## 当前接续摘要
 
+- 0.1.51 已于 2026-09-04 18:19 +08:00 完成生产后检：`2a6b464 / 0036_cancel_auto_ack_runs / deployed_https_verified`。下列“待发布”条目为本次发布前记录，现已随 0.1.51 上线；历史消息未补写回复关联。
+- 发布证据：单上传包和内部文件 SHA 全通过，`stage_status=ok`、`deploy_status=ok`（39 秒）、`postflight_status=ok`（3 秒）。备份 `/opt/agentpost/backups/20260904-181757-2a6b464-pre-051`，已验证 `rollback-immediate-0.1.51.sh` 与 0.1.50 回退资料。
+- 公网 health/ready/OpenAPI 均为 0.1.51，公开 wheel SHA-256 `41b236f5a6dcb0e2bc464e82769f6a9df09e57814b581b2a48111ec0e4571008`；后检 agents=65、messages=606、deliveries=588、attachments=51、humans=16，关键计数未减少。AgentPost PID=423665，Nginx=362620、PostgreSQL=365086 保持原进程；schema 未变化。
+- 已登录生产新标签页确认“测试任务”的重复标题消失、接收方折叠为“共享给 N 人”、回复入口与讨论/时间切换可见，控制台无 error/warn。未发送生产测试消息；跨设备真实回复验收仍待确认，不标记 `production_accepted`。本次发布回归：462 Python passed、1 沙箱 skip、5 PostgreSQL deselected；52 JavaScript/Connector/OpenClaw passed，TypeScript 编译/Ruff/format/JS syntax/diff check 通过。
 - 0.1.51 发布候选：整合任务页标题/接收方降噪与显式回复串；server/SDK/MCP/OpenClaw/插件/锁文件版本已同步。schema 保持 `0036_cancel_auto_ack_runs`。已获部署授权，按单上传包 Workbench 流程执行，生产切换与后检结果待记录。
 - 本地待发布回复关联切片：Task 消息支持 `reply_to_activity_id`、`referenced_activity_ids`，服务端验证同任务并生成 `discussion_root_activity_id`；无回复参数的旧连接与既有幂等哈希保持兼容，不推断历史关联。Python SDK/MCP/OpenClaw/机器合同同步新增可选参数。Human 可在任务记录直接回复，使用 Human 会话、CSRF、幂等键与真实 Human 身份，写入共享 TaskActivity，不代替 Run/Human 验收；该入口不产生旧 Inbox 投递或唤醒工单，Agent 通过 Task API 读取。页面默认按讨论折叠、可切换时间视图，支持原文定位；附加引用目前由 Agent API 提供，网站回复入口只选择一条直接回复对象。462 项非 PostgreSQL 测试通过、1 沙箱 skip、5 PostgreSQL deselected；35 项导航测试通过，Ruff/format/JS syntax 通过。隔离 Chrome 实测两级 Human 回复、讨论/时间切换、原文定位、390px 无横向溢出与控制台错误。未部署、未修改历史生产消息。
 - 本地待发布 UI 小切片：任务记录接收范围默认折叠为“共享给 N 人”，按 Human ID 去重；展开后查看 Human/AI 与简短状态，兼容投递及未知状态在摘要提示。只调整展示，不改变投递、已读或 Run 状态。前端导航测试 34 项、JS 语法及 diff check 通过；隔离浏览器因本地 Chrome 沙箱启动失败，桌面/390px 交互验证待确认；未部署。
-- 交接阶段：`0.1.50-deployed-https-verified`
-- 本地与生产版本：`0.1.50`；schema 仍为 `0036_cancel_auto_ack_runs`，保留 0.1.49 回退点。
-- 当前生产：`2ae66a3 / 0.1.50 / 0036_cancel_auto_ack_runs / deployed_https_verified`（2026-09-04 10:10 +08:00 完成后检）。
+- 交接阶段：`0.1.51-deployed-https-verified`
+- 本地与生产版本：`0.1.51`；schema 仍为 `0036_cancel_auto_ack_runs`，保留 0.1.50 回退点。
+- 当前生产：`2a6b464 / 0.1.51 / 0036_cancel_auto_ack_runs / deployed_https_verified`（2026-09-04 18:19 +08:00 完成后检）。
 - 生产接受状态：不是 `production_accepted`
 - 本切片：修复旧 Thread 列表/详情混入无 Delivery 的 Task 源消息导致 500；保留当前 Agent 的实际投递视图，并要求 TaskMembership 与 Agent 参与资格均有效。共享完整上下文继续使用 Task API，不恢复无任务私信。
 - OpenAPI 版本使用实际包版本；意外异常返回安全 JSON 和 request_id，不输出异常正文或凭据。心跳显式返回 version_status、原因、推荐与最低版本，未上报保持 unknown；Python SDK 兼容旧响应缺少这些字段。
