@@ -590,6 +590,10 @@ footer {
   backdrop-filter: blur(18px);
 }
 
+.context-heading[hidden] {
+  display: none;
+}
+
 .context-heading {
   min-height: 152px;
   border-bottom: 1px solid var(--line);
@@ -5785,4 +5789,48 @@ footer {
     flex-direction: column;
     gap: 7px;
   }
+}
+.project-activity-recipients {
+  color: var(--muted);
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+.project-activity-recipients summary {
+  cursor: pointer;
+}
+
+.project-activity-recipients summary:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.project-activity-recipients > div {
+  margin-top: 4px;
+}
+.task-discussion, .task-record-reply {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.task-discussion {
+  padding: 10px;
+  border: 1px solid #dadce0;
+  border-radius: 8px;
+}
+.task-discussion summary, .task-record-reply summary {
+  cursor: pointer;
+}
+.task-discussion summary p {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin: 6px 0 0;
+}
+.task-record-reply form {
+  display: grid;
+  gap: 8px;
+}
+.task-record-reply textarea {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 80px;
 }

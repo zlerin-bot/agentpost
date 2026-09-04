@@ -6,7 +6,7 @@ import re
 import secrets
 import unicodedata
 from datetime import UTC, datetime, timedelta
-from uuid import UUID
+from uuid import UUID, uuid5
 
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.exc import IntegrityError
@@ -1310,6 +1310,89 @@ def _fanout_task_message(
     return queued_runs, legacy_deliveries, legacy_messages, recipient_statuses
 
 
+def send_task_message_by_human(
+    session: Session,
+    *,
+    user: HumanUser,
+    task_id: UUID,
+    body: str,
+    parent_id: UUID,
+    references: list[UUID],
+    idempotency_key: str,
+) -> AgentTaskMessageResponse:
+    task, membership = _task_context(session, task_id=task_id, user=user, lock=True)
+    if membership.status != "active":
+        raise TaskNotFoundError
+    metadata = _task_reply_metadata(
+        session,
+        task_id=task.id,
+        parent_id=parent_id,
+        references=references,
+    )
+    metadata.update({"body": body, "content_format": "text", "publication_origin": "human_direct"})
+    request_hash = hashlib.sha256(json.dumps(metadata, sort_keys=True).encode()).hexdigest()
+    activity_id = uuid5(user.id, f"task-message:{task.id}:{idempotency_key}")
+    existing = session.get(TaskActivity, activity_id)
+    if existing is not None:
+        if existing.request_hash != request_hash:
+            raise TaskMessageIdempotencyConflictError
+    else:
+        activity = _add_activity(
+            session,
+            task_id=task.id,
+            kind="task_message",
+            actor_type="human",
+            actor_human_id=user.id,
+            metadata=metadata,
+            external=True,
+            request_hash=request_hash,
+        )
+        activity.id = activity_id
+        task.updated_at = utc_now()
+        try:
+            session.commit()
+        except IntegrityError:
+            session.rollback()
+            existing = session.get(TaskActivity, activity_id)
+            if existing is None:
+                raise
+            if existing.request_hash != request_hash:
+                raise TaskMessageIdempotencyConflictError from None
+    return AgentTaskMessageResponse(
+        task_id=task.id,
+        thread_id=task.thread_id,
+        activity_id=activity_id,
+        queued_run_count=0,
+        legacy_delivery_count=0,
+        attachment_ids=[],
+        replayed=existing is not None,
+    )
+
+
+def _task_reply_metadata(
+    session: Session, *, task_id: UUID, parent_id: UUID | None, references: list[UUID]
+) -> dict[str, object]:
+    ids = set(references) | ({parent_id} if parent_id else set())
+    records = {
+        item.id: item
+        for item in session.scalars(
+            select(TaskActivity).where(TaskActivity.task_id == task_id, TaskActivity.id.in_(ids))
+        )
+    }
+    if ids != set(records):
+        raise TaskNotFoundError
+    metadata: dict[str, object] = {}
+    if parent_id:
+        parent = records[parent_id]
+        metadata["reply_to_activity_id"] = str(parent_id)
+        metadata["discussion_root_activity_id"] = parent.activity_metadata.get(
+            "discussion_root_activity_id", str(parent_id)
+        )
+    if references:
+        metadata["referenced_activity_ids"] = list(dict.fromkeys(str(item) for item in references))
+    return metadata
+
+
 def send_task_message_by_agent(
     session: Session,
     *,
@@ -1319,8 +1402,19 @@ def send_task_message_by_agent(
     idempotency_key: str,
 ) -> AgentTaskMessageResponse:
     task, _, _ = _task_participation_for_agent(session, agent=agent, task_id=task_id)
+    reply_metadata = _task_reply_metadata(
+        session,
+        task_id=task.id,
+        parent_id=payload.reply_to_activity_id,
+        references=payload.referenced_activity_ids,
+    )
+    hash_payload = payload.model_dump(mode="json")
+    if payload.reply_to_activity_id is None:
+        hash_payload.pop("reply_to_activity_id")
+    if not payload.referenced_activity_ids:
+        hash_payload.pop("referenced_activity_ids")
     request_hash = hashlib.sha256(
-        json.dumps(payload.model_dump(mode="json"), sort_keys=True, ensure_ascii=False).encode()
+        json.dumps(hash_payload, sort_keys=True, ensure_ascii=False).encode()
     ).hexdigest()
     existing = session.scalar(
         select(TaskActivity).where(
@@ -1356,6 +1450,7 @@ def send_task_message_by_agent(
             "source_message_id": source_message_id,
             "attachment_ids": [str(value) for value in payload.attachments],
             "publication_origin": payload.publication_origin,
+            **reply_metadata,
         },
         external=True,
         idempotency_key=idempotency_key,
@@ -1395,7 +1490,13 @@ def send_task_message_by_agent(
         message_type="notification",
         priority="normal",
         thread_id=task.thread_id,
-        reply_to_message_id=None,
+        reply_to_message_id=(
+            session.get(TaskActivity, payload.reply_to_activity_id).activity_metadata.get(
+                "source_message_id"
+            )
+            if payload.reply_to_activity_id
+            else None
+        ),
         requires_ack=False,
         task_payload=None,
         result_payload=None,

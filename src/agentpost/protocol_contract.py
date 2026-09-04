@@ -71,6 +71,8 @@ class TaskRequestShapeContract(ContractModel):
             "body",
             "attachments",
             "publication_origin",
+            "reply_to_activity_id",
+            "referenced_activity_ids",
         ]
     )
     task_message_legacy_aliases: dict[str, str] = Field(

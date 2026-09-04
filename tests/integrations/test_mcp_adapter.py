@@ -338,6 +338,8 @@ def test_send_reply_ack_and_search_map_to_the_public_http_protocol() -> None:
         "Analyse",
         subject="Task",
         idempotency_key="mcp-send-reusable",
+        reply_to_activity_id="66666666-6666-6666-6666-666666666666",
+        referenced_activity_ids=["77777777-7777-7777-7777-777777777777"],
     )
     reply = mcp.registrations["agentpost_reply"].function(
         "msg_accepted",
@@ -367,6 +369,13 @@ def test_send_reply_ack_and_search_map_to_the_public_http_protocol() -> None:
     assert requests[0].headers["Idempotency-Key"] == "mcp-send-reusable"
     assert requests[1].headers["Idempotency-Key"] == "mcp-reply-reusable"
     assert json.loads(requests[0].content)["body"] == "Analyse"
+    assert (
+        json.loads(requests[0].content)["reply_to_activity_id"]
+        == "66666666-6666-6666-6666-666666666666"
+    )
+    assert json.loads(requests[0].content)["referenced_activity_ids"] == [
+        "77777777-7777-7777-7777-777777777777"
+    ]
     assert json.loads(requests[1].content)["type"] == "result"
     assert json.loads(requests[3].content) == {"query": "给 kcode 发消息"}
     assert json.loads(requests[4].content) == {"query": "小孔成像"}

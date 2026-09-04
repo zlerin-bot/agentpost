@@ -409,8 +409,8 @@ const MODULE_DEFINITIONS = Object.freeze({
   }),
   projects: Object.freeze({
     label: "任务",
-    title: "任务中心",
-    description: "一个任务对应一条 Thread，统一查看执行、结果与 Human 验收。",
+    title: "任务",
+    description: "",
     defaultSection: "board",
     sections: Object.freeze(["board"]),
   }),
@@ -802,17 +802,59 @@ function taskRecordTarget(project, assignment) {
   return activity ? `#task-activity-${activity.activity_id}` : "#task-records";
 }
 
+function taskDiscussionGroups(activities) {
+  const byId = new Map(activities.map((item) => [item.activity_id, item]));
+  const groups = new Map();
+  for (const activity of activities) {
+    let root = activity;
+    const seen = new Set([root.activity_id]);
+    while (byId.has(root.metadata?.reply_to_activity_id)) {
+      const parent = byId.get(root.metadata.reply_to_activity_id);
+      if (seen.has(parent.activity_id)) break;
+      seen.add(parent.activity_id);
+      root = parent;
+    }
+    const group = groups.get(root.activity_id) || [];
+    group.push(activity);
+    groups.set(root.activity_id, group);
+  }
+  return [...groups.values()].map((group) => group.sort((a, b) => (
+    a.created_at.localeCompare(b.created_at) || a.activity_id.localeCompare(b.activity_id)
+  ))).sort((a, b) => b.at(-1).created_at.localeCompare(a.at(-1).created_at));
+}
+
+function revealTaskRecord(activityId) {
+  const target = document.getElementById(`task-activity-${activityId}`);
+  if (!target) return;
+  for (let parent = target.parentElement; parent; parent = parent.parentElement) {
+    if (parent.tagName === "DETAILS") parent.open = true;
+  }
+  target.tabIndex = -1;
+  target.focus({ preventScroll: true });
+  target.scrollIntoView({ block: "center", behavior: "smooth" });
+}
+
 function taskMessageRecipientLabel(project, recipient) {
+  const status = recipient.status === "legacy_delivered"
+    ? "兼容投递，尚无自动执行"
+    : recipient.status === "context_available" ? "可查看" : "状态待确认";
   for (const member of project.members || []) {
     const agent = (member.agents || []).find((item) => item.agent_id === recipient.agent_id);
     if (agent) {
-      const status = recipient.status === "legacy_delivered"
-        ? "兼容投递，尚无自动执行"
-        : "任务上下文可用，无需逐条回复";
-      return `${member.display_name} 的 ${agent.display_name}：${status}`;
+      return `${member.display_name} · ${agent.display_name}：${status}`;
     }
   }
-  return "任务参与 AI：接收状态已记录";
+  return `历史参与 AI：${status}`;
+}
+
+function taskMessageRecipientSummary(recipients) {
+  const humans = new Set(recipients.map((item) => item.human_user_id).filter(Boolean));
+  const hasUnknownHuman = recipients.some((item) => !item.human_user_id);
+  const label = hasUnknownHuman ? `共享范围：${recipients.length} 个 AI` : `共享给 ${humans.size} 人`;
+  const legacy = recipients.filter((item) => item.status === "legacy_delivered").length;
+  const unknown = recipients.filter((item) => !["context_available", "legacy_delivered"].includes(item.status)).length;
+  return label + (legacy ? ` · ${legacy} 个 AI 兼容投递` : "")
+    + (unknown ? ` · ${unknown} 个状态待确认` : "");
 }
 
 function syncTaskPrimaryAgentOptions(preferredAgentId = "") {
@@ -1150,6 +1192,15 @@ function renderProjectDetail() {
   }
 
   elements.projectActivityList.replaceChildren();
+  const recordView = document.createElement("button");
+  recordView.type = "button";
+  recordView.className = "quiet-button";
+  recordView.textContent = state.taskRecordView === "time" ? "按讨论查看" : "按时间查看";
+  recordView.addEventListener("click", () => {
+    state.taskRecordView = state.taskRecordView === "time" ? "discussion" : "time";
+    renderProjectDetail();
+  });
+  elements.projectActivityList.append(recordView);
   const assignmentsById = new Map(
     (project.assignments || []).map((assignment) => [String(assignment.assignment_id), assignment]),
   );
@@ -1171,6 +1222,18 @@ function renderProjectDetail() {
     avatar.textContent = (activity.actor_display_name || "系").slice(0, 1);
     const copy = document.createElement("div");
     copy.className = "project-activity-copy";
+    const parentId = activity.metadata?.reply_to_activity_id;
+    const referenceIds = [...new Set([parentId, ...(activity.metadata?.referenced_activity_ids || [])].filter(Boolean))];
+    referenceIds.forEach((id) => {
+      const original = project.activities.find((item) => item.activity_id === id);
+      const link = document.createElement("a");
+      link.href = `#task-activity-${id}`;
+      link.textContent = original
+        ? `${id === parentId ? "回复" : "引用"} ${original.actor_display_name} · ${dateText(original.created_at)}`
+        : "原记录暂不可用";
+      link.addEventListener("click", (event) => { event.preventDefault(); revealTaskRecord(id); });
+      copy.append(link);
+    });
     const heading = document.createElement("div");
     heading.className = "project-activity-heading";
     const actor = document.createElement("strong");
@@ -1228,11 +1291,16 @@ function renderProjectDetail() {
     if (activity.kind === "task_message"
       && Array.isArray(activity.metadata?.recipient_statuses)
       && activity.metadata.recipient_statuses.length) {
-      const recipients = document.createElement("small");
+      const recipients = document.createElement("details");
       recipients.className = "project-activity-recipients";
-      recipients.textContent = "接收方：" + activity.metadata.recipient_statuses
-        .map((item) => taskMessageRecipientLabel(project, item))
-        .join("；");
+      const summary = document.createElement("summary");
+      summary.textContent = taskMessageRecipientSummary(activity.metadata.recipient_statuses);
+      recipients.append(summary);
+      activity.metadata.recipient_statuses.forEach((item) => {
+        const recipient = document.createElement("div");
+        recipient.textContent = taskMessageRecipientLabel(project, item);
+        recipients.append(recipient);
+      });
       copy.append(recipients);
     }
     if (activity.kind === "task_message" && activity.metadata?.body !== undefined) {
@@ -1252,6 +1320,51 @@ function renderProjectDetail() {
       appendThreadAttachments({ attachments: activity.metadata.attachments }, copy);
     }
     row.append(avatar, copy);
+    if (["task_message", "created", "task_created", "assignment_created", "assignment_result"].includes(activity.kind)) {
+      const reply = document.createElement("details");
+      reply.className = "task-record-reply";
+      const replyLabel = document.createElement("summary");
+      replyLabel.textContent = "回复";
+      const form = document.createElement("form");
+      const input = document.createElement("textarea");
+      input.required = true;
+      input.maxLength = 20000;
+      input.setAttribute("aria-label", `回复 ${actorHuman}`);
+      const send = document.createElement("button");
+      send.type = "submit";
+      send.textContent = "发送回复";
+      const feedback = document.createElement("small");
+      feedback.setAttribute("role", "status");
+      const key = crypto.randomUUID();
+      let sent = false;
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        if (sent || !input.value.trim()) return;
+        send.disabled = true;
+        try {
+          await requestJson(`/api/v1/tasks/${encodeURIComponent(project.task_id)}/messages`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-CSRF-Token": state.csrfToken, "Idempotency-Key": key },
+            body: JSON.stringify({ body: input.value, reply_to_activity_id: activity.activity_id }),
+          });
+          sent = true;
+          input.disabled = true;
+          feedback.textContent = "回复已保存";
+          const updated = await requestJson(`/api/v1/tasks/${encodeURIComponent(project.task_id)}`);
+          if (state.selectedProject?.task_id === project.task_id) {
+            state.selectedProject = updated;
+            renderProjectDetail();
+            revealTaskRecord(activity.activity_id);
+          }
+        } catch (error) {
+          feedback.textContent = sent ? "回复已保存，请刷新查看。" : error.message;
+          send.disabled = sent;
+        }
+      });
+      form.append(input, send, feedback);
+      reply.append(replyLabel, form);
+      copy.append(reply);
+    }
     container.append(row);
   });
   const lifecycleKinds = new Set([
@@ -1267,9 +1380,39 @@ function renderProjectDetail() {
     }
   });
   const renderedLifecycleAssignments = new Set();
+  const discussions = taskDiscussionGroups(currentActivities);
+  const discussionByActivity = new Map();
+  if (state.taskRecordView !== "time") {
+    discussions.filter((group) => group.length > 1).forEach((group) => {
+      group.forEach((item) => discussionByActivity.set(item.activity_id, group));
+    });
+  }
+  const renderedDiscussions = new Set();
   currentActivities.forEach((activity) => {
+    const discussion = discussionByActivity.get(activity.activity_id);
+    if (discussion) {
+      if (renderedDiscussions.has(discussion)) return;
+      renderedDiscussions.add(discussion);
+      const details = document.createElement("details");
+      details.className = "task-discussion";
+      const summary = document.createElement("summary");
+      const root = discussion[0];
+      const latest = discussion.at(-1);
+      const title = root.metadata?.subject || String(root.metadata?.body || activityText(root)).slice(0, 80);
+      summary.textContent = `${root.actor_display_name}：${title} · ${discussion.length - 1} 条回复 · ${dateText(latest.created_at)}`;
+      const preview = document.createElement("p");
+      preview.textContent = `${latest.actor_display_name}：${String(latest.metadata?.body || activityText(latest)).slice(0, 120)}`;
+      const list = document.createElement("div");
+      renderActivitiesInto(discussion, list);
+      summary.append(preview);
+      details.append(summary, list);
+      elements.projectActivityList.append(details);
+      return;
+    }
     const assignmentId = String(activity.metadata?.assignment_id || "");
-    const group = lifecycleGroups.get(assignmentId);
+    const group = lifecycleKinds.has(activity.kind)
+      ? lifecycleGroups.get(assignmentId)?.filter((item) => !discussionByActivity.has(item.activity_id))
+      : null;
     if (!group || group.length < 2) {
       renderActivitiesInto([activity], elements.projectActivityList);
       return;
@@ -2128,6 +2271,7 @@ function activateRoute(module, section, { updateHistory = true, focusContent = f
     view.hidden = !(view.dataset.module === route.module && view.dataset.section === route.section);
   });
   elements.contextEyebrow.textContent = definition.label;
+  document.querySelector("#context-heading").hidden = route.module === "projects";
   elements.contextTitle.textContent = definition.title;
   elements.contextCopy.textContent = definition.description;
   elements.brandSection.textContent = definition.label;

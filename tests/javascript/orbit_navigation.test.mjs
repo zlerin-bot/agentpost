@@ -11,6 +11,38 @@ const [html, script, stylesheet] = await Promise.all([
   readFile(resolve(repositoryRoot, "src/agentpost/orbit_ui/styles.css"), "utf8"),
 ]);
 
+test("task recipient summaries count Humans and preserve nonstandard states", () => {
+  const source = script.slice(script.indexOf("function taskMessageRecipientSummary("),
+    script.indexOf("function syncTaskPrimaryAgentOptions("));
+  const summary = new Function(`${source}; return taskMessageRecipientSummary;`)();
+  const recipients = [
+    { human_user_id: "one", status: "context_available" },
+    { human_user_id: "one", status: "context_available" },
+    { human_user_id: "two", status: "context_available" },
+  ];
+  assert.equal(summary(recipients), "共享给 2 人");
+  assert.equal(summary([...recipients, { human_user_id: "three", status: "legacy_delivered" }]),
+    "共享给 3 人 · 1 个 AI 兼容投递");
+  assert.equal(summary([{ status: "failed" }]), "共享范围：1 个 AI · 1 个状态待确认");
+  assert.doesNotMatch(script, /任务上下文可用，无需逐条回复/);
+  assert.match(script, /summary.textContent = taskMessageRecipientSummary/);
+});
+
+test("explicit reply chains group once without guessing from body or author", () => {
+  const source = script.slice(script.indexOf("function taskDiscussionGroups("), script.indexOf("function revealTaskRecord("));
+  const group = new Function(`${source}; return taskDiscussionGroups;`)();
+  const root = { activity_id: "a", created_at: "2026-09-04T01:00", metadata: { body: "request" } };
+  const reply = { activity_id: "b", created_at: "2026-09-04T02:00", metadata: { reply_to_activity_id: "a" } };
+  const followup = { activity_id: "c", created_at: "2026-09-04T04:00", metadata: { reply_to_activity_id: "b" } };
+  const unrelated = { activity_id: "d", created_at: "2026-09-04T03:00", metadata: { body: "Re: request" } };
+  const missing = { activity_id: "e", created_at: "2026-09-04T00:00", metadata: { reply_to_activity_id: "missing" } };
+  assert.deepEqual(group([followup, unrelated, reply, root, missing]).map(items => items.map(i => i.activity_id)),
+    [["a", "b", "c"], ["d"], ["e"]]);
+  assert.match(script, /reply_to_activity_id: activity.activity_id/);
+  assert.match(script, /state.taskRecordView === "time"/);
+  assert.match(script, /parent.tagName === "DETAILS"/);
+});
+
 test("AgentPost exposes exactly task, friends, AI, and settings", () => {
   const primaryNavigation = html.slice(
     html.indexOf('id="primary-navigation"'),
@@ -33,7 +65,9 @@ test("AgentPost exposes exactly task, friends, AI, and settings", () => {
 test("tasks and formal friends are separate API-backed collaboration modules", () => {
   assert.match(html, /data-module="projects" data-section="board"/);
   assert.match(html, /data-module="friends" data-section="directory"/);
-  assert.match(script, /一个任务对应一条 Thread/);
+  assert.doesNotMatch(`${html}\n${script}`, /一个任务对应一条 Thread，统一查看执行、结果与 Human 验收/);
+  assert.match(html, /id="context-heading" class="context-heading" hidden/);
+  assert.match(script, /querySelector\("#context-heading"\).hidden = route.module === "projects"/);
   assert.match(script, /好友必须双向确认/);
   assert.match(script, /\/api\/v1\/tasks/);
   assert.match(script, /\/api\/v1\/friends/);

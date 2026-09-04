@@ -72,6 +72,8 @@ def test_public_agent_integration_contract_preserves_machine_and_human_semantics
                 "body",
                 "attachments",
                 "publication_origin",
+                "reply_to_activity_id",
+                "referenced_activity_ids",
             ],
             "task_message_legacy_aliases": {"format": "content_format"},
             "run_heartbeat_fields": [

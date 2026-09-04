@@ -146,7 +146,9 @@ def register_tools(mcp: Any, create_client: ClientFactory) -> None:
             "Append a collaboration message to an existing task after resolving and reading it. "
             "The server records one shared task activity without requiring every Agent to reply; "
             "older Connector versions receive a compatible Inbox delivery. Set publication_origin "
-            "to human_delegated only when the current Human explicitly requested this publication."
+            "to human_delegated only when the current Human explicitly requested this publication. "
+            "For a reply, set reply_to_activity_id to the original task activity; "
+            "referenced_activity_ids optionally cites other records in the same task."
         ),
         annotations=WRITE_ONCE,
         structured_output=False,
@@ -158,6 +160,8 @@ def register_tools(mcp: Any, create_client: ClientFactory) -> None:
         content_format: ContentFormat = "text",
         attachment_ids: AttachmentIds = None,
         publication_origin: Literal["human_delegated", "agent_autonomous"] = "agent_autonomous",
+        reply_to_activity_id: UUID | None = None,
+        referenced_activity_ids: Annotated[list[UUID], Field(max_length=16)] | None = None,
         idempotency_key: IdempotencyKey = None,
     ) -> CallToolResult:
         try:
@@ -169,6 +173,8 @@ def register_tools(mcp: Any, create_client: ClientFactory) -> None:
                     format=content_format,
                     attachments=attachment_ids,
                     publication_origin=publication_origin,
+                    reply_to_activity_id=reply_to_activity_id,
+                    referenced_activity_ids=referenced_activity_ids,
                     idempotency_key=idempotency_key,
                 )
             return success(result, external=True)

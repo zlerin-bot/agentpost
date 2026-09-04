@@ -18,6 +18,117 @@ ADMIN_KEY = "admin-secret-admin-secret-admin-secret"
 REGISTRATION_TOKEN = "task-agent-registration"
 
 
+def test_explicit_task_reply_chain_and_human_identity(
+    settings: Settings, database: Database
+) -> None:
+    with TestClient(create_app(settings=_runtime(settings), database=database)) as client:
+        owner = _register(client, "reply-owner")
+        agent = _create_owned_agent(client, human_id=str(owner["user"]["id"]), handle="reply-owner")
+        auth = {"Authorization": f"Bearer {agent['api_key']}"}
+
+        def create_task(key: str) -> str:
+            result = client.post(
+                "/api/v1/agent/tasks",
+                headers={**auth, "Idempotency-Key": key},
+                json={"title": key, "goal": "reply tests", "expected_output": "evidence"},
+            )
+            assert result.status_code == 201, result.text
+            return result.json()["task_id"]
+
+        task_id = create_task("reply-task")
+        other_id = create_task("other-task")
+        url = f"/api/v1/agent/tasks/{task_id}/messages"
+        first = client.post(
+            url, headers={**auth, "Idempotency-Key": "root"}, json={"body": "request"}
+        )
+        assert first.status_code == 201, first.text
+        root = first.json()["activity_id"]
+        payload = {"body": "test result", "reply_to_activity_id": root}
+        second = client.post(url, headers={**auth, "Idempotency-Key": "reply"}, json=payload)
+        assert second.status_code == 201, second.text
+        assert second.json()["queued_run_count"] == 0
+        assert client.post(url, headers={**auth, "Idempotency-Key": "reply"}, json=payload).json()[
+            "replayed"
+        ]
+        assert (
+            client.post(
+                url,
+                headers={**auth, "Idempotency-Key": "reply"},
+                json={"body": "changed", "reply_to_activity_id": root},
+            ).status_code
+            == 409
+        )
+        assert (
+            client.post(
+                f"/api/v1/agent/tasks/{other_id}/messages",
+                headers={**auth, "Idempotency-Key": "cross-task"},
+                json=payload,
+            ).status_code
+            == 404
+        )
+        assert (
+            client.post(
+                url,
+                headers={**auth, "Idempotency-Key": "bad-ref"},
+                json={
+                    "body": "bad",
+                    "referenced_activity_ids": ["00000000-0000-0000-0000-000000000001"],
+                },
+            ).status_code
+            == 404
+        )
+        csrf = _login(client, "reply-owner")
+        human_url = f"/api/v1/tasks/{task_id}/messages"
+        headers = {"X-CSRF-Token": csrf, "Idempotency-Key": "human-reply"}
+        human_payload = {
+            "body": "please retest",
+            "reply_to_activity_id": second.json()["activity_id"],
+            "referenced_activity_ids": [root],
+        }
+        assert (
+            client.post(
+                human_url, headers={"Idempotency-Key": "no-csrf"}, json=human_payload
+            ).status_code
+            == 403
+        )
+        human = client.post(human_url, headers=headers, json=human_payload)
+        assert human.status_code == 201, human.text
+        assert client.post(human_url, headers=headers, json=human_payload).json()["replayed"]
+        assert (
+            client.post(
+                human_url, headers=headers, json={**human_payload, "body": "different"}
+            ).status_code
+            == 409
+        )
+        assert (
+            client.post(
+                human_url,
+                headers={**headers, "Idempotency-Key": "blank"},
+                json={**human_payload, "body": "   "},
+            ).status_code
+            == 422
+        )
+        detail = client.get(f"/api/v1/agent/tasks/{task_id}", headers=auth).json()
+        records = {item["activity_id"]: item for item in detail["activities"]}
+        third = records[human.json()["activity_id"]]
+        assert third["actor_type"] == "human"
+        assert third["actor_agent_display_name"] is None
+        assert third["metadata"]["discussion_root_activity_id"] == root
+        assert third["metadata"]["referenced_activity_ids"] == [root]
+        assert "reply_to_activity_id" not in records[root]["metadata"]
+        assert records[second.json()["activity_id"]]["metadata"]["reply_to_activity_id"] == root
+        _register(client, "reply-outsider")
+        outsider_csrf = _login(client, "reply-outsider")
+        assert (
+            client.post(
+                human_url,
+                headers={"X-CSRF-Token": outsider_csrf, "Idempotency-Key": "forbidden"},
+                json=human_payload,
+            ).status_code
+            == 404
+        )
+
+
 def _runtime(settings: Settings) -> Settings:
     return Settings(
         environment="test",

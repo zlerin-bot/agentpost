@@ -120,6 +120,8 @@ class AgentTaskResolution(TaskModel):
 
 
 class AgentTaskMessageCreate(TaskModel):
+    reply_to_activity_id: UUID | None = None
+    referenced_activity_ids: list[UUID] = Field(default_factory=list, max_length=16)
     subject: str = Field(default="", max_length=500)
     content_format: Literal["text", "markdown", "json"] = Field(
         default="text",
@@ -153,6 +155,19 @@ class AgentTaskMessageResponse(TaskModel):
     attachment_ids: list[UUID] = Field(default_factory=list)
     replayed: bool = False
     security_label: Literal["external_agent_content"] = "external_agent_content"
+
+
+class HumanTaskMessageCreate(TaskModel):
+    body: str = Field(min_length=1, max_length=20000)
+    reply_to_activity_id: UUID
+    referenced_activity_ids: list[UUID] = Field(default_factory=list, max_length=16)
+
+    @field_validator("body")
+    @classmethod
+    def nonblank_body(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("reply cannot be blank")
+        return value
 
 
 class TaskMembersInvite(TaskModel):

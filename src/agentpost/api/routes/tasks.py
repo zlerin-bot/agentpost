@@ -24,6 +24,7 @@ from agentpost.tasks.schemas import (
     FriendRequestCreate,
     FriendRequestDecision,
     FriendResponse,
+    HumanTaskMessageCreate,
     TaskAcceptanceDecision,
     TaskAssignmentCreate,
     TaskCreate,
@@ -68,6 +69,7 @@ from agentpost.tasks.service import (
     respond_to_waiting_agent_run,
     select_task_agents,
     send_task_message_by_agent,
+    send_task_message_by_human,
     submit_task,
     update_agent_run,
     update_task_status,
@@ -284,6 +286,32 @@ def send_agent_task_message(
             status_code=status.HTTP_409_CONFLICT,
             detail={"code": "attachment_unavailable", "message": str(exc)},
         ) from exc
+
+
+@router.post("/tasks/{task_id}/messages", response_model=AgentTaskMessageResponse, status_code=201)
+def send_human_task_message(
+    task_id: UUID,
+    payload: HumanTaskMessageCreate,
+    current_human: CurrentHumanDep,
+    session: SessionDep,
+    csrf: HumanCsrfDep,
+    idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=255)],
+) -> AgentTaskMessageResponse:
+    del csrf
+    try:
+        return send_task_message_by_human(
+            session,
+            user=current_human,
+            task_id=task_id,
+            body=payload.body,
+            parent_id=payload.reply_to_activity_id,
+            references=payload.referenced_activity_ids,
+            idempotency_key=idempotency_key,
+        )
+    except TaskNotFoundError as exc:
+        raise _not_found() from exc
+    except TaskMessageIdempotencyConflictError as exc:
+        raise _conflict("idempotency_conflict") from exc
 
 
 @router.get("/tasks/{task_id}", response_model=TaskDetail)

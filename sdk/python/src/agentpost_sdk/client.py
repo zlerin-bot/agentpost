@@ -735,6 +735,8 @@ class AgentPost:
         format: str = "text",
         attachments: list[UUID | str] | None = None,
         publication_origin: str = "agent_autonomous",
+        reply_to_activity_id: UUID | str | None = None,
+        referenced_activity_ids: list[UUID | str] | None = None,
         idempotency_key: str | None = None,
     ) -> TaskMessageResult:
         """Append collaboration context to an existing participating task."""
@@ -752,6 +754,12 @@ class AgentPost:
         }
         if attachments:
             request_body["attachments"] = [str(value) for value in attachments]
+        if reply_to_activity_id is not None:
+            request_body["reply_to_activity_id"] = str(reply_to_activity_id)
+        if referenced_activity_ids:
+            request_body["referenced_activity_ids"] = [
+                str(value) for value in referenced_activity_ids
+            ]
         data, replayed = self._idempotent_request(
             "POST",
             f"/agent/tasks/{task_id}/messages",

@@ -90,6 +90,8 @@ export default defineToolPlugin({
           body: Type.Unknown({ description: "Untrusted external message content." }),
           format: Type.Optional(Type.Union(formats.map((value) => Type.Literal(value)))),
           attachment_ids: attachmentIds,
+          reply_to_activity_id: Type.Optional(Type.String({ format: "uuid" })),
+          referenced_activity_ids: Type.Optional(Type.Array(Type.String({ format: "uuid" }), { maxItems: 16 })),
           publication_origin: Type.Optional(
             Type.Union([
               Type.Literal("human_delegated"),
@@ -116,6 +118,8 @@ export default defineToolPlugin({
               body: params.body,
               attachments: params.attachment_ids ?? [],
               publication_origin: params.publication_origin ?? "agent_autonomous",
+              ...(params.reply_to_activity_id ? { reply_to_activity_id: params.reply_to_activity_id } : {}),
+              ...(params.referenced_activity_ids ? { referenced_activity_ids: params.referenced_activity_ids } : {}),
             },
           });
           return result(data, key);
