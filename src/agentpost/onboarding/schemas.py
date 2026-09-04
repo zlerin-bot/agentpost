@@ -334,6 +334,10 @@ class ConnectorHeartbeatResponse(OnboardingModel):
     server_time: datetime
     recommended_interval_seconds: int
     upgrade: ConnectorUpgradeDirective | None = None
+    version_status: Literal["current", "update_available", "update_required", "unknown"]
+    version_reason: str
+    recommended_version: str
+    minimum_supported_version: str
 
 
 class ConnectorCredentialRotationResponse(OnboardingModel):

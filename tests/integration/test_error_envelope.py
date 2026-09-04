@@ -3,6 +3,22 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 
+def test_unexpected_errors_are_safe_json_with_request_id(client: TestClient, caplog) -> None:
+    @client.app.get("/test-unexpected-error")
+    def unexpected_error():
+        raise RuntimeError("SECRET_EXCEPTION_CANARY")
+
+    response = client.get(
+        "/test-unexpected-error", headers={"X-Request-ID": "unexpected-error-test"}
+    )
+    assert response.status_code == 500
+    assert response.json()["error"]["code"] == "INTERNAL_SERVER_ERROR"
+    assert response.json()["error"]["request_id"] == "unexpected-error-test"
+    assert response.headers["X-Request-ID"] == "unexpected-error-test"
+    assert "SECRET_EXCEPTION_CANARY" not in response.text
+    assert "SECRET_EXCEPTION_CANARY" not in caplog.text
+
+
 def test_validation_errors_use_protocol_error_envelope(client: TestClient) -> None:
     response = client.post(
         "/api/v1/agents",

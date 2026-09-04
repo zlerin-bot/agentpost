@@ -11,7 +11,7 @@ from agentpost.db import Database
 from agentpost.identity.models import utc_now
 from agentpost.main import create_app
 from agentpost.onboarding.models import AgentConnectorBinding, ConnectorInstance
-from agentpost.tasks.models import AgentRun, TaskActivity, TaskAssignment
+from agentpost.tasks.models import AgentRun, TaskActivity, TaskAgentParticipant, TaskAssignment
 
 PASSWORD = "correct horse battery staple"
 ADMIN_KEY = "admin-secret-admin-secret-admin-secret"
@@ -677,6 +677,43 @@ def test_task_messages_use_legacy_inbox_and_native_run_without_breaking_old_conn
         )
         assert bridge["thread_id"] == task["thread_id"]
         assert bridge["metadata"]["agentpost_task_id"] == task_id
+        # A real task send stores both a delivery-free source and a legacy
+        # bridge in the same Thread. Neither listing nor detail may crash.
+        for participant in (owner_agent, member_agent):
+            headers = {"Authorization": f"Bearer {participant['api_key']}"}
+            threads = client.get("/api/v1/threads", headers=headers)
+            assert threads.status_code == 200, threads.text
+            detail = client.get(f"/api/v1/threads/{task['thread_id']}", headers=headers)
+            assert detail.status_code == 200, detail.text
+            assert [item["message_id"] for item in detail.json()["messages"]] == [
+                bridge["message_id"]
+            ]
+            assert detail.json()["messages"][0]["delivery"]["status"] == "delivered"
+        hidden_thread = client.get(
+            f"/api/v1/threads/{task['thread_id']}",
+            headers={"Authorization": f"Bearer {outsider_agent['api_key']}"},
+        )
+        assert hidden_thread.status_code == 404
+        with database.session_factory() as session:
+            participant = session.get(
+                TaskAgentParticipant,
+                (UUID(task_id), UUID(member_agent["agent"]["id"])),
+            )
+            participant.active = False
+            session.commit()
+        member_headers = {"Authorization": f"Bearer {member_agent['api_key']}"}
+        assert (
+            client.get(f"/api/v1/threads/{task['thread_id']}", headers=member_headers).status_code
+            == 404
+        )
+        assert client.get("/api/v1/threads", headers=member_headers).json()["items"] == []
+        with database.session_factory() as session:
+            participant = session.get(
+                TaskAgentParticipant,
+                (UUID(task_id), UUID(member_agent["agent"]["id"])),
+            )
+            participant.active = True
+            session.commit()
         reply = client.post(
             f"/api/v1/messages/{bridge['message_id']}/reply",
             headers={

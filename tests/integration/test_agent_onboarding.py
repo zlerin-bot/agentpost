@@ -330,6 +330,18 @@ def test_outdated_connector_heartbeat_requests_upgrade_once_and_keeps_inbox_comp
         assert token.status_code == 200, token.text
         agent_key = token.json()["api_key"]
 
+        unknown = client.post(
+            "/api/v1/connect/heartbeat",
+            headers={"Authorization": f"Bearer {agent_key}"},
+            json={"health_status": "healthy"},
+        )
+        assert unknown.status_code == 200, unknown.text
+        assert unknown.json()["version_status"] == "unknown"
+        assert unknown.json()["recommended_version"] == "0.1.45"
+        assert unknown.json()["minimum_supported_version"] == "0.1.34"
+        assert unknown.json()["upgrade"] is None
+        assert unknown.json()["version_reason"]
+
         first = client.post(
             "/api/v1/connect/heartbeat",
             headers={"Authorization": f"Bearer {agent_key}"},
@@ -352,6 +364,7 @@ def test_outdated_connector_heartbeat_requests_upgrade_once_and_keeps_inbox_comp
         visible = client.get("/api/v1/orbit/connectors").json()["items"]
         assert visible[0]["reconnect_required"] is True
         directive = first.json()["upgrade"]
+        assert first.json()["version_status"] == "update_required"
         assert directive["action"] == "upgrade_required"
         assert directive["target_version"] == "0.1.45"
         assert directive["minimum_supported_version"] == "0.1.34"
@@ -403,6 +416,7 @@ def test_outdated_connector_heartbeat_requests_upgrade_once_and_keeps_inbox_comp
         )
         assert upgraded.status_code == 200, upgraded.text
         assert upgraded.json()["upgrade"] is None
+        assert upgraded.json()["version_status"] == "current"
         visible = client.get("/api/v1/orbit/connectors").json()["items"]
         assert visible[0]["reconnect_required"] is False
 

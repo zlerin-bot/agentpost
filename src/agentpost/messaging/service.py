@@ -47,6 +47,7 @@ from agentpost.messaging.schemas import (
     ThreadResponse,
     ThreadSummary,
 )
+from agentpost.tasks.models import Task, TaskAgentParticipant, TaskMembership
 
 _IDEMPOTENCY_KEY_PATTERN = re.compile(r"^[\x21-\x7e]{1,255}$", flags=re.ASCII)
 
@@ -534,19 +535,45 @@ def _archived_thread_ids_for_agent(agent_id: UUID):
     )
 
 
+def _accessible_task_threads(agent_id: UUID):
+    return (
+        select(Task.thread_id)
+        .join(TaskAgentParticipant, TaskAgentParticipant.task_id == Task.id)
+        .join(
+            TaskMembership,
+            (TaskMembership.task_id == Task.id)
+            & (TaskMembership.human_user_id == TaskAgentParticipant.human_user_id),
+        )
+        .where(
+            TaskAgentParticipant.agent_id == agent_id,
+            TaskAgentParticipant.active.is_(True),
+            TaskMembership.status == "active",
+        )
+    )
+
+
+def _legacy_thread_query(agent_id: UUID):
+    # Shared Task source messages deliberately have no Delivery. The legacy
+    # projection exposes only actual deliveries involving this Agent; Task
+    # membership is still required even when a historic bridge exists.
+    return (
+        _message_query()
+        .join(Delivery, Delivery.message_id == Message.id)
+        .where(
+            or_(Message.sender_agent_id == agent_id, Delivery.recipient_agent_id == agent_id),
+            Message.thread_id.not_in(_archived_thread_ids_for_agent(agent_id)),
+            or_(
+                Message.thread_id.not_in(select(Task.thread_id)),
+                Message.thread_id.in_(_accessible_task_threads(agent_id)),
+            ),
+        )
+    )
+
+
 def _visible_thread_ids(session: Session, agent_id: UUID) -> list[UUID]:
     return list(
         session.scalars(
-            select(Message.thread_id)
-            .join(Delivery, Delivery.message_id == Message.id)
-            .where(
-                or_(
-                    Message.sender_agent_id == agent_id,
-                    Delivery.recipient_agent_id == agent_id,
-                ),
-                Message.thread_id.not_in(_archived_thread_ids_for_agent(agent_id)),
-            )
-            .distinct()
+            _legacy_thread_query(agent_id).with_only_columns(Message.thread_id).distinct()
         )
     )
 
@@ -554,7 +581,7 @@ def _visible_thread_ids(session: Session, agent_id: UUID) -> list[UUID]:
 def _thread_messages(session: Session, thread_id: UUID, *, agent_id: UUID) -> list[Message]:
     messages = list(
         session.scalars(
-            _message_query()
+            _legacy_thread_query(agent_id)
             .where(Message.thread_id == thread_id)
             .order_by(Message.created_at.asc(), Message.id.asc())
         ).unique()

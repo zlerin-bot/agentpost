@@ -6,6 +6,9 @@ import time
 from uuid import uuid4
 
 from fastapi import Request, Response
+from fastapi.responses import JSONResponse
+
+from agentpost.api.errors import error_payload
 
 logger = logging.getLogger("agentpost.http")
 _REQUEST_ID = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
@@ -37,7 +40,14 @@ async def request_context_middleware(request: Request, call_next) -> Response:
                 "thread_id": None,
             },
         )
-        raise
+        response = JSONResponse(
+            status_code=500,
+            content=error_payload(
+                request,
+                code="INTERNAL_SERVER_ERROR",
+                message="An unexpected error occurred; contact support with the request_id",
+            ),
+        )
     finally:
         duration_ms = round((time.perf_counter() - started) * 1000, 3)
         logger.info(

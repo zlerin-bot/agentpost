@@ -6,6 +6,7 @@ import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
 
+from agentpost import __version__
 from agentpost.api.errors import http_exception_handler, validation_exception_handler
 from agentpost.api.middleware import request_context_middleware
 from agentpost.api.routes.access import router as access_router
@@ -40,7 +41,7 @@ def create_app(settings: Settings | None = None, database: Database | None = Non
 
     app = FastAPI(
         title="AgentPost API",
-        version="0.1.0",
+        version=__version__,
         description="Human and AI task collaboration with durable messaging",
         lifespan=lifespan,
     )

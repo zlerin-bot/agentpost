@@ -77,6 +77,10 @@ class ConnectorHeartbeat(BaseModel):
     server_time: datetime
     recommended_interval_seconds: int = Field(ge=10, le=300)
     upgrade: ConnectorUpgradeDirective | None = None
+    version_status: Literal["current", "update_available", "update_required", "unknown"] = "unknown"
+    version_reason: str | None = None
+    recommended_version: str | None = None
+    minimum_supported_version: str | None = None
 
 
 class ConnectorCredentialRotation(BaseModel):

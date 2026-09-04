@@ -2,11 +2,14 @@
 
 ## 当前接续摘要
 
-- 交接阶段：`v0.1.49-task-scoped-agent-messages-local`
-- 本地版本：`0.1.49 / 0036_cancel_auto_ack_runs`
-- 当前生产：`36855ff / 0.1.48 / 0036_cancel_auto_ack_runs / deployed_https_verified`
+- 交接阶段：`post-0.1.49-thread-compatibility-fix-local`
+- 本地版本：`0.1.49` 基础上的待发布修复；schema 仍为 `0036_cancel_auto_ack_runs`，发布前需分配新版本并统一构建，不覆盖 0.1.49 发布物。
+- 最近记录的生产：`770fcac / 0.1.49 / 0036_cancel_auto_ack_runs / deployed_https_verified`（依据下方发布证据，本轮未重新部署）
 - 生产接受状态：不是 `production_accepted`
-- 本切片：Agent 发出的新消息必须明确 Task；无任务直发由开发/生产服务器拒绝，新版 MCP、CLI、OpenClaw 与 Manus 只提供任务消息路径；机器协议合同升级为 0.4；本地验证中，尚未部署
+- 本切片：修复旧 Thread 列表/详情混入无 Delivery 的 Task 源消息导致 500；保留当前 Agent 的实际投递视图，并要求 TaskMembership 与 Agent 参与资格均有效。共享完整上下文继续使用 Task API，不恢复无任务私信。
+- OpenAPI 版本使用实际包版本；意外异常返回安全 JSON 和 request_id，不输出异常正文或凭据。心跳显式返回 version_status、原因、推荐与最低版本，未上报保持 unknown；Python SDK 兼容旧响应缺少这些字段。
+- 测试任务反馈口径：无 Task bridge 的历史私信回复被拒绝是预期行为。完成状态以服务端 Run/Result 为准；正文的“尚未提交”保留为原始 Agent 内容，不能自动改写历史状态，更不能据此推断 Task 已提交或 Human 已验收。
+- 本切片未部署，未修改生产任务数据，也未发送新的协同消息。网页登录、移动端、附件及跨设备验收仍待完成。
 
 ## 当前产品模型
 
@@ -65,6 +68,7 @@ Task，不能再建立平行容器、另一套成员角色或共享通信规则�
 
 ## 本地验证证据
 
+- 2026-09-04 Thread 兼容修复：完整非 PostgreSQL 回归 460 passed、1 loopback 沙箱 skip、5 PostgreSQL deselected；真实 Task 源消息/桥接消息混合、撤销参与资格、跨收件人隔离、读取无状态副作用、异常 JSON 脱敏和 OpenAPI 版本一致性均有回归覆盖。Ruff check / format check / diff check 通过。本轮未改前端、未运行浏览器验收、未部署。
 - 0.1.49 `.venv/bin/pytest -m "not postgres"`：457 passed、1 expected skip、5 deselected；浏览器 JavaScript 37 passed、TypeScript Connector 8 passed并完成编译、OpenClaw adapter 4 passed；Ruff、format、JavaScript syntax、wheel 构建和 `git diff --check` 通过；本地 wheel SHA-256 为 `5acf653829825e23abc83d1fc970110eb29a9b621dcb98987a66d59ff6b2fd3c`。
 - 0.1.48 `.venv/bin/pytest -m "not postgres"`：456 passed、1 expected skip、5 deselected；全部 JavaScript 37 passed、TypeScript Connector 8 passed并完成编译；Ruff、format、JavaScript syntax 通过；本地 wheel SHA-256 为 `cc80b8816b808e9dd963c6dc0065d05f1d52eb7a4bd639265b8b6d04e3d1d211`。
 - 0.1.48 隔离认证浏览器闭环通过：waiting_human 问题可见，Human 回复后同 Assignment 变为待领取，页面显示回复内容；桌面和 390px 无横向溢出。

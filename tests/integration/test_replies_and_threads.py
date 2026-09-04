@@ -336,6 +336,26 @@ def test_unrelated_agent_cannot_read_reply_or_thread_or_create_reply(
     assert message_count(database) == before
 
 
+def test_thread_does_not_expose_other_recipients_deliveries(
+    client: TestClient, database: Database
+) -> None:
+    alice = register(client, "alice-scope@agents.local")
+    bob = register(client, "bob-scope@agents.local")
+    eve = register(client, "eve-scope@agents.local")
+    visible = send_message(client, alice, bob, key="visible-delivery")
+    hidden = send_message(client, alice, eve, key="other-recipient-delivery")
+    with database.session_factory() as session:
+        message = session.get(Message, hidden["message_id"])
+        message.thread_id = UUID(visible["thread_id"])
+        session.commit()
+    detail = client.get(f"/api/v1/threads/{visible['thread_id']}", headers=bearer(bob))
+    assert detail.status_code == 200, detail.text
+    assert [item["message_id"] for item in detail.json()["messages"]] == [visible["message_id"]]
+    threads = client.get("/api/v1/threads", headers=bearer(bob))
+    assert threads.json()["items"][0]["message_count"] == 1
+    assert threads.json()["items"][0]["unread_count"] == 1
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     [

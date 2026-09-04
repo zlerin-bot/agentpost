@@ -1,5 +1,11 @@
 from fastapi.testclient import TestClient
 
+from agentpost import __version__
+
+
+def test_openapi_version_matches_running_server(client: TestClient) -> None:
+    assert client.get("/openapi.json").json()["info"]["version"] == __version__
+
 
 def test_health_does_not_require_database(client: TestClient) -> None:
     response = client.get("/health")

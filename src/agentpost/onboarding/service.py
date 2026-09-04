@@ -1019,12 +1019,21 @@ def record_connector_heartbeat(
         now=now,
     )
     session.commit()
+    version_status, version_reason = _connector_version_status(
+        connector.runtime_version,
+        recommended_version=settings.connector_release_version,
+        minimum_supported_version=CONNECTOR_MINIMUM_SUPPORTED_VERSION,
+    )
     return ConnectorHeartbeatResponse(
         connector=_connector_response(connector),
         agent=_agent_response(agent),
         server_time=now,
         recommended_interval_seconds=settings.connector_heartbeat_interval_seconds,
         upgrade=upgrade,
+        version_status=version_status,
+        version_reason=version_reason,
+        recommended_version=settings.connector_release_version,
+        minimum_supported_version=CONNECTOR_MINIMUM_SUPPORTED_VERSION,
     )
 
 
