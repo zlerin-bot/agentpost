@@ -97,12 +97,39 @@ test("friends use one clear hierarchy and explicit relationship states", () => {
   assert.doesNotMatch(friendNavigation, /我的好友/);
   assert.doesNotMatch(html, /个人通讯录|协作好友/);
   assert.match(html, /data-friend-filter="accepted"[^>]*>好友</);
-  assert.match(html, /data-friend-filter="pending"[^>]*>待确认</);
+  assert.match(html, /data-friend-filter="pending_incoming"[^>]*>待你确认</);
+  assert.match(html, /data-friend-filter="pending_outgoing"[^>]*>已发申请</);
   assert.match(html, /data-friend-filter="suggested"[^>]*>联系过的人</);
   assert.match(script, /accepted: "已成为好友"/);
   assert.match(script, /pending_incoming: "待你确认"/);
   assert.match(script, /badge: friendRelationLabel\(friend\)/);
   assert.doesNotMatch(script, /badge: dateOnlyText\(friend\.last_contact_at\)/);
+});
+
+test("friend alerts count only incoming requests and clear after handling", () => {
+  const source = script.slice(script.indexOf("function renderFriendPendingNotice()"),
+    script.indexOf("function renderFriendDetail()"));
+  const element = () => ({ hidden: false, textContent: "", setAttribute() {},
+    classList: { toggle() {} } });
+  const elements = { friendPendingBadge: element(), friendPendingNotice: element(),
+    friendFilters: ["accepted", "pending_incoming", "pending_outgoing"].map((filter) => ({
+      ...element(), dataset: { friendFilter: filter },
+    })) };
+  const state = { friendFilter: "pending_incoming", friends: [
+    { relation_status: "pending_incoming" }, { relation_status: "pending_incoming" },
+    { relation_status: "pending_outgoing" }, { relation_status: "accepted" },
+  ] };
+  const render = new Function("state", "elements", source + ";renderFriendPendingNotice();");
+  render(state, elements);
+  assert.equal(elements.friendPendingBadge.textContent, "2");
+  assert.equal(elements.friendPendingBadge.hidden, false);
+  assert.equal(elements.friendPendingNotice.textContent, "2 人申请成为好友 · 点击处理");
+  assert.equal(elements.friendFilters[1].textContent, "待你确认（2）");
+  state.friends = [{ relation_status: "pending_outgoing" }];
+  render(state, elements);
+  assert.equal(elements.friendPendingBadge.hidden, true);
+  assert.equal(elements.friendPendingNotice.hidden, true);
+  assert.equal(elements.friendFilters[1].textContent, "待你确认");
 });
 
 test("connection management separates first pairing from reported runtime version", () => {

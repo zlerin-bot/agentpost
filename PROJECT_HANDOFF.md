@@ -68,6 +68,7 @@ Task，不能再建立平行容器、另一套成员角色或共享通信规则�
 
 ## 本地验证证据
 
+- 2026-09-04 好友待确认提示：一级“好友”入口显示 incoming 数量，好友页提供可点击待处理提示、分离“待你确认/已发申请”，首次加载优先展示收到的申请，处理后清除计数；待确认时不再误报 0 个 Agent。38 项前端测试、JS syntax 与 diff check 通过；隔离测试账户桌面/390px 读取与接受申请通过，手机接受后回到列表，计数 2→1→0，控制台无 error/warn。本轮不发送邮件、不修改生产好友关系，尚未部署。
 - 2026-09-04 Thread 兼容修复：完整非 PostgreSQL 回归 460 passed、1 loopback 沙箱 skip、5 PostgreSQL deselected；真实 Task 源消息/桥接消息混合、撤销参与资格、跨收件人隔离、读取无状态副作用、异常 JSON 脱敏和 OpenAPI 版本一致性均有回归覆盖。Ruff check / format check / diff check 通过。本轮未改前端、未运行浏览器验收、未部署。
 - 0.1.49 `.venv/bin/pytest -m "not postgres"`：457 passed、1 expected skip、5 deselected；浏览器 JavaScript 37 passed、TypeScript Connector 8 passed并完成编译、OpenClaw adapter 4 passed；Ruff、format、JavaScript syntax、wheel 构建和 `git diff --check` 通过；本地 wheel SHA-256 为 `5acf653829825e23abc83d1fc970110eb29a9b621dcb98987a66d59ff6b2fd3c`。
 - 0.1.48 `.venv/bin/pytest -m "not postgres"`：456 passed、1 expected skip、5 deselected；全部 JavaScript 37 passed、TypeScript Connector 8 passed并完成编译；Ruff、format、JavaScript syntax 通过；本地 wheel SHA-256 为 `cc80b8816b808e9dd963c6dc0065d05f1d52eb7a4bd639265b8b6d04e3d1d211`。

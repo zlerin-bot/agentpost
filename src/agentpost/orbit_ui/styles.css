@@ -4635,9 +4635,40 @@ footer {
 }
 
 .prototype-filter:has([data-friend-filter]) {
-  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: center;
 }
+
+.primary-nav-item:has(.friend-pending-badge) { position: relative; }
+
+.friend-pending-badge {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 6px;
+  border-radius: 12px;
+  background: #b42318;
+  color: white;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.friend-pending-notice {
+  width: 100%;
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid #e8ad5b;
+  border-radius: 12px;
+  background: #fff4dc;
+  color: #713f12;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.friend-pending-badge[hidden], .friend-pending-notice[hidden] { display: none; }
+.friend-pending-notice:focus-visible { outline: 3px solid #2563eb; outline-offset: 2px; }
 
 .prototype-filter button {
   min-width: 0;
@@ -5654,7 +5685,7 @@ footer {
   }
 
   .prototype-filter:has([data-friend-filter]) {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .prototype-filter:has([data-friend-filter]) .count-pill {

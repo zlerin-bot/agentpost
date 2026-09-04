@@ -191,6 +191,8 @@ const elements = {
   taskCompletedResult: document.querySelector("#task-completed-result"),
   taskCompletedSummary: document.querySelector("#task-completed-summary"),
   friendBrowser: document.querySelector("#friend-browser"),
+  friendPendingBadge: document.querySelector("#friend-pending-badge"),
+  friendPendingNotice: document.querySelector("#friend-pending-notice"),
   friendBrowserCount: document.querySelector("#friend-browser-count"),
   friendSearchInput: document.querySelector("#friend-search-input"),
   friendFilters: Array.from(document.querySelectorAll("[data-friend-filter]")),
@@ -505,8 +507,8 @@ function filteredFriends() {
   return state.friends.filter((friend) => {
     const matchesFilter = state.friendFilter === "accepted"
       ? friend.relation_status === "accepted"
-      : state.friendFilter === "pending"
-        ? ["pending_incoming", "pending_outgoing"].includes(friend.relation_status)
+      : ["pending_incoming", "pending_outgoing"].includes(state.friendFilter)
+        ? friend.relation_status === state.friendFilter
         : friend.relation_status === "suggested";
     const searchable = [
       friend.display_name,
@@ -621,14 +623,15 @@ async function loadFriends() {
     state.friends = [...formal, ...suggested.filter(
       (candidate) => !formal.some((friend) => friend.human_user_id === candidate.human_user_id),
     )];
+    if (!state.friendsLoaded && formal.some((friend) => friend.relation_status === "pending_incoming")) {
+      state.friendFilter = "pending_incoming";
+    }
     state.friendsLoaded = true;
     if (!friendById(state.selectedFriendId)) {
       state.selectedFriendId = isMobileWorkspace() ? "" : (state.friends[0]?.human_user_id || "");
     }
     renderFriendBrowser();
   } catch (error) {
-    state.friendsLoaded = true;
-    state.friends = [];
     renderFriendBrowser();
     elements.friendDetailNote.textContent = error.message;
   }
@@ -1306,16 +1309,27 @@ function renderProjectDetail() {
 }
 
 function renderFriendBrowser() {
+  renderFriendPendingNotice();
   const friends = filteredFriends();
   if (!friends.some((friend) => friend.human_user_id === state.selectedFriendId)) {
     state.selectedFriendId = isMobileWorkspace() ? "" : (friends[0]?.human_user_id || "");
   }
   elements.friendBrowserCount.textContent = friends.length + " 人";
   elements.friendBrowserList.replaceChildren();
+  if (!friends.length) {
+    const empty = document.createElement("p");
+    empty.className = "prototype-inline-empty";
+    empty.textContent = state.friendQuery ? "没有匹配的好友，请调整搜索条件。"
+      : state.friendFilter === "pending_incoming" ? "暂无待你确认的好友申请。"
+        : state.friendFilter === "pending_outgoing" ? "暂无已发出的好友申请。"
+          : "当前列表暂无好友。";
+    elements.friendBrowserList.append(empty);
+  }
   friends.forEach((friend) => {
     elements.friendBrowserList.append(createCollaborationListButton({
       title: friend.display_name,
-      meta: "@" + friend.username + " · " + friend.agents.length + " 个 Agent",
+      meta: "@" + friend.username + " · " + (friend.relation_status === "accepted"
+        ? friend.agents.length + " 个可见 Agent" : "成为好友后可查看 Agent"),
       badge: friendRelationLabel(friend),
       active: state.selectedFriendId === friend.human_user_id,
       avatar: friend.display_name.slice(0, 1),
@@ -1329,6 +1343,23 @@ function renderFriendBrowser() {
     }));
   });
   renderFriendDetail();
+}
+
+function renderFriendPendingNotice() {
+  const count = state.friends.filter((friend) => friend.relation_status === "pending_incoming").length;
+  elements.friendPendingBadge.hidden = count === 0;
+  elements.friendPendingBadge.textContent = count ? String(count) : "";
+  elements.friendPendingBadge.setAttribute("aria-label", count + " 条好友申请待你确认");
+  elements.friendPendingNotice.hidden = count === 0;
+  elements.friendPendingNotice.textContent = count + " 人申请成为好友 · 点击处理";
+  elements.friendFilters.forEach((button) => {
+    const active = state.friendFilter === button.dataset.friendFilter;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+    if (button.dataset.friendFilter === "pending_incoming") {
+      button.textContent = count ? "待你确认（" + count + "）" : "待你确认";
+    }
+  });
 }
 
 function renderFriendDetail() {
@@ -1373,7 +1404,8 @@ function renderFriendDetail() {
     empty.textContent = "暂未声明能力";
     elements.friendCapabilities.append(empty);
   }
-  elements.friendAgentCount.textContent = friend.agents.length + " 个";
+  elements.friendAgentCount.textContent = friend.relation_status === "accepted"
+    ? friend.agents.length + " 个" : "确认好友后可查看";
   elements.friendAgentList.replaceChildren();
   friend.agents.forEach((agent) => {
     const row = document.createElement("article");
@@ -1483,6 +1515,8 @@ async function actOnSelectedFriend() {
       });
     }
     await loadFriends();
+    updateCollaborationWorkspaceMode();
+    resetMobileLayerScroll();
   } catch (error) {
     elements.friendDetailNote.textContent = error.message;
   }
@@ -1840,6 +1874,14 @@ function initializeCollaborationModules() {
       });
       renderFriendBrowser();
     });
+  });
+  elements.friendPendingNotice.addEventListener("click", () => {
+    state.friendFilter = "pending_incoming";
+    state.friendQuery = "";
+    elements.friendSearchInput.value = "";
+    state.selectedFriendId = "";
+    renderFriendBrowser();
+    updateCollaborationWorkspaceMode();
   });
   [elements.projectBrowserNew, elements.projectEmptyNew].forEach((button) => {
     button.addEventListener("click", openProjectCreateDialog);
