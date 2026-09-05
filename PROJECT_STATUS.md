@@ -2,13 +2,13 @@
 
 Last updated: 2026-09-05
 
-Current handoff stage: `v0.1.54-deployed-https-verified`
+Current handoff stage: `v0.1.55-deployed-https-verified`
 
 Local recovery tag: `stage-v0.1.52-20260905`; detailed handoff: `docs/AgentPost阶段版本0.1.52交接_20260905.md`.
 
 ## Current local candidate
 
-- Version: `0.1.54`
+- Version: `0.1.55`
 - Schema: `0037_task_activity_relations`
 - Collaboration model: Task is the only multi-Human collaboration scope.
 - Human navigation: 任务、好友、AI、设置。
@@ -58,15 +58,17 @@ configuration, and test paths.
 
 ## Production
 
-- Current production commit: `354d82eb02aa6e406e3889b03cff293516769de4`
-- Current production version/schema: `0.1.54 / 0037_task_activity_relations`
-- State: `deployed_https_verified`, not `production_accepted` (2026-09-05 21:46 +08:00).
-- Single-package staging, protected switch (38 seconds), and independent postflight (2 seconds): passed.
+- Typography is unified across desktop/mobile: page titles 28/24px, section titles 18px, item titles 16px, body 15px, controls 14px, metadata 13px. Authenticated production computed-style checks, long Markdown/SHA wrapping and zero-overflow checks passed at 1470px and 390px.
+
+- Current production commit: `a7470ba2071443076deda59bc1d6a7050425a349`
+- Current production version/schema: `0.1.55 / 0037_task_activity_relations`
+- State: `deployed_https_verified`, not `production_accepted` (2026-09-05 22:08 +08:00).
+- Single-package staging, protected switch (40 seconds), and independent postflight (2 seconds): passed.
 - Public/local health and ready, public OpenAPI, protocol and host installation contract: passed. Public JS/CSS exactly match the committed release source.
-- Wheel SHA-256: `02ffa6c33a75a75274edb3276d5bf4a801e58f14debfa4589f89e34d19ca3019`; unknown downloads return 404.
-- Backup: `/opt/agentpost/backups/20260905-214549-354d82e-pre-054`. Database, attachments, environment, systemd, Nginx, prior wheel and immediate rollback script checksums passed. Earlier backups remain available.
-- Postflight counts: agents=67, messages=638, deliveries=614, attachments=51, humans=16; no protected count decreased.
-- AgentPost PID=442441; Nginx PID=362620 and PostgreSQL PID=365086 unchanged.
+- Wheel SHA-256: `69ae709df1feccf8036de2591fc1ae4cffb1d9d3bac38ee72da38d1a9677a665`; unknown downloads return 404.
+- Backup: `/opt/agentpost/backups/20260905-220720-a7470ba-pre-055`. Database, attachments, environment, systemd, Nginx, prior wheel and immediate rollback script checksums passed. Earlier backups remain available.
+- Postflight counts: agents=67, messages=641, deliveries=617, attachments=51, humans=16; no protected count decreased.
+- AgentPost PID=444735; Nginx PID=362620 and PostgreSQL PID=365086 unchanged.
 - Human task navigation now isolates late responses, preserves in-memory reply drafts, prevents repeated mutations and exposes task deep links. Attention, recent collaboration and readable body cards precede collapsible setup and submission controls.
 - Production testing found long Agent hostnames and SHA/JSON excerpts could widen mobile grids in 0.1.53. The 0.1.54 patch uses shrinkable grid columns and wraps unbroken text. Synthetic local data and authenticated production Tasks both passed at 390px and 1470px.
 - Fresh authenticated production checks: task switching, mobile deep links/return-to-list, Markdown expansion and a real attachment card passed; no console warning/error. No production test message was sent. Real cross-device Agent execution and Human final acceptance remain pending.

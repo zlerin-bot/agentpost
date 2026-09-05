@@ -2,6 +2,11 @@
 
 ## 当前接续摘要
 
+- 当前生产：**0.1.55 / a7470ba / 0037_task_activity_relations / deployed_https_verified**（2026-09-05 22:08 +08:00）。字号统一切片已发布，下方“本地待发布”是历史过程记录；仍不是 production_accepted。
+- 单包 stage/deploy/postflight 全部 ok，切换 40 秒、后检 2 秒。备份 `/opt/agentpost/backups/20260905-220720-a7470ba-pre-055`；数据库、附件、配置、旧 wheel 和即时回退脚本校验通过。公开 wheel SHA-256 `69ae709df1feccf8036de2591fc1ae4cffb1d9d3bac38ee72da38d1a9677a665`；公网及本机 health/ready、OpenAPI、机器合同、安装合同、未知下载 404 与公开 CSS 字节一致性通过。
+- 后检 agents=67、messages=641、deliveries=617、attachments=51、humans=16，关键计数未减少；AgentPost PID=444735，Nginx=362620、PostgreSQL=365086 保持原进程。schema 无变化，副本 upgrade/downgrade/upgrade 保持 0037。
+- 发布回归 463 Python passed、1 loopback 沙箱 skip、5 PostgreSQL deselected；63 JavaScript/Connector/OpenClaw passed；Ruff check/format、TypeScript build、diff check 通过。生产新认证 Chrome 实测 PC 1470px/手机 390px 无横向溢出；页面标题 28/24px、板块标题 18px、正文 15px、辅助信息 13px 与设计一致，真实 Markdown/长 SHA 展开仍可读，控制台无 warning/error。未发送生产消息，真实跨设备 Agent 执行及 Human 验收仍待确认。
+
 - 本地待发布字号统一切片（0.1.54 之后）：用共享 rem 字号变量替换历史小数散值；PC/手机页面标题 28/24px，板块 18px、内容标题 16px、正文 15px、操作 14px、辅助信息 13px，状态标签/任务 ID 12px；输入控件 16px。任务、好友、AI、设置与弹窗共用层级，任务进展/记录/折叠板块标题一致，普通正文/进展/阅读卡摘要不再混用 10–16px。长正文卡标题换行、图标顶部对齐，手机卡片缩小头像占位以保留阅读宽度。
 - 字号切片验证：51 JavaScript tests、JS syntax、diff check 通过；本地真实计算字号与上述层级一致，桌面 1470px 与手机 390px 无横向溢出；手机任务/好友/AI/设置、创建窗口 Tab/Escape、16px 输入、合成长主机名/64 位哈希/JSON 换行实测通过，控制台无 warning/error。本轮只改 CSS，未重跑 Python/PostgreSQL；未部署此字号切片，当前生产仍是下述 0.1.54。
 
@@ -35,9 +40,9 @@
 - 0.1.51 发布候选：整合任务页标题/接收方降噪与显式回复串；server/SDK/MCP/OpenClaw/插件/锁文件版本已同步。schema 保持 `0036_cancel_auto_ack_runs`。已获部署授权，按单上传包 Workbench 流程执行，生产切换与后检结果待记录。
 - 本地待发布回复关联切片：Task 消息支持 `reply_to_activity_id`、`referenced_activity_ids`，服务端验证同任务并生成 `discussion_root_activity_id`；无回复参数的旧连接与既有幂等哈希保持兼容，不推断历史关联。Python SDK/MCP/OpenClaw/机器合同同步新增可选参数。Human 可在任务记录直接回复，使用 Human 会话、CSRF、幂等键与真实 Human 身份，写入共享 TaskActivity，不代替 Run/Human 验收；该入口不产生旧 Inbox 投递或唤醒工单，Agent 通过 Task API 读取。页面默认按讨论折叠、可切换时间视图，支持原文定位；附加引用目前由 Agent API 提供，网站回复入口只选择一条直接回复对象。462 项非 PostgreSQL 测试通过、1 沙箱 skip、5 PostgreSQL deselected；35 项导航测试通过，Ruff/format/JS syntax 通过。隔离 Chrome 实测两级 Human 回复、讨论/时间切换、原文定位、390px 无横向溢出与控制台错误。未部署、未修改历史生产消息。
 - 本地待发布 UI 小切片：任务记录接收范围默认折叠为“共享给 N 人”，按 Human ID 去重；展开后查看 Human/AI 与简短状态，兼容投递及未知状态在摘要提示。只调整展示，不改变投递、已读或 Run 状态。前端导航测试 34 项、JS 语法及 diff check 通过；隔离浏览器因本地 Chrome 沙箱启动失败，桌面/390px 交互验证待确认；未部署。
-- 交接阶段：`0.1.54-deployed-https-verified`
-- 本地发布提交与生产：`354d82e / 0.1.54 / 0037_task_activity_relations`；保留历史版本即时回退点。
-- 当前生产：`354d82e / 0.1.54 / 0037_task_activity_relations / deployed_https_verified`（2026-09-05 21:46 +08:00 完成后检）。
+- 交接阶段：`0.1.55-deployed-https-verified`
+- 本地发布提交与生产：`a7470ba / 0.1.55 / 0037_task_activity_relations`；保留历史版本即时回退点。
+- 当前生产：`a7470ba / 0.1.55 / 0037_task_activity_relations / deployed_https_verified`（2026-09-05 22:08 +08:00 完成后检）。
 - 生产接受状态：不是 `production_accepted`
 - 本切片：修复旧 Thread 列表/详情混入无 Delivery 的 Task 源消息导致 500；保留当前 Agent 的实际投递视图，并要求 TaskMembership 与 Agent 参与资格均有效。共享完整上下文继续使用 Task API，不恢复无任务私信。
 - OpenAPI 版本使用实际包版本；意外异常返回安全 JSON 和 request_id，不输出异常正文或凭据。心跳显式返回 version_status、原因、推荐与最低版本，未上报保持 unknown；Python SDK 兼容旧响应缺少这些字段。
