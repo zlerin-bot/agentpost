@@ -2,6 +2,10 @@
 
 ## 当前接续摘要
 
+- 0.1.53 发布过程记录（2026-09-05 21:37 +08:00）：`bd1655f / 0037_task_activity_relations`；stage/deploy/postflight 全部 ok（切换 38 秒、后检 2 秒）。备份 `/opt/agentpost/backups/20260905-213706-bd1655f-pre-053`；wheel SHA `7993c32d611eeab1e7c961c8fffe0cf3455bc86266501fadfbcab2bb8ba582ca`。agents=67、messages=634、deliveries=610、attachments=51、humans=16，关键计数未减少；AgentPost=441013、Nginx=362620、PostgreSQL=365086。公网 health/ready/OpenAPI 与 JS/CSS 字节验证通过；新 Chrome 会话成功进入任务并显示新功能。生产手机实看暴露长内容溢出，由 0.1.54 补丁修复，真实跨设备验收仍待确认。
+
+- 0.1.54 发布候选：0.1.53 已完成部署后检，但生产 390px 实看发现长 AI 主机名及 SHA/JSON 摘要撑宽网格；补充可收缩网格列与任意长文本换行。合成长主机名、64 位哈希及 JSON 窄屏验证 scrollWidth=390，正在复核后发布补丁。
+
 - 0.1.53 发布候选：已获 Human 部署授权；包含下述 Human 任务界面切片，server/SDK/MCP/TypeScript/OpenClaw/插件/锁文件同步到 0.1.53，schema 保持 0037_task_activity_relations。本地发布回归 463 Python passed、1 loopback 沙箱 skip、5 PostgreSQL deselected；63 JavaScript/Connector/OpenClaw passed；Ruff check/format、JS syntax、TypeScript build、diff check 通过。生产切换及后检待记录。
 
 - 2026-09-05 本地未发布 Human 任务界面切片：从 0.1.52 冻结点继续，未改 server/SDK/schema/包版本。任务切换整块隐藏并 inert 旧详情，按请求序号隔离迟到响应，404 不再递归重载；选择任务写入 task 深链接，支持后退/前进和手机直接进入详情，创建任务不会被旧 URL 拉回原任务。

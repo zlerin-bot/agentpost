@@ -4816,7 +4816,7 @@ footer {
 .task-earlier-work[open] > summary { margin-bottom: 12px; }
 .task-work-technical small { display: block; margin-top: 8px; overflow-wrap: anywhere; }
 .project-progress-copy > h4, .task-collaboration-update h4 { font-size: 1rem; margin: 8px 0; overflow-wrap: anywhere; }
-.task-content-excerpt { margin: 6px 0 0; font-weight: 400; color: #596777; line-height: 1.6; font-size: .86rem; }
+.task-content-excerpt { margin: 6px 0 0; font-weight: 400; color: #596777; line-height: 1.6; font-size: .86rem; overflow-wrap: anywhere; }
 .task-readable-body { padding: 18px; font-size: .96rem; line-height: 1.85; color: #253348; overflow-wrap: anywhere; }
 .task-readable-body p { margin: 8px 0; white-space: pre-wrap; }
 .task-readable-body h3, .task-readable-body h4, .task-readable-body h5, .task-readable-body h6 { margin: 20px 0 8px; line-height: 1.5; }
@@ -5283,6 +5283,7 @@ footer {
 
 .task-activity-attachment summary > span:last-child {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   min-width: 0;
   gap: 2px;
 }
@@ -5529,6 +5530,9 @@ footer {
 
 .task-collaboration-updates {
   display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+  overflow-wrap: anywhere;
   gap: 8px;
   border-top: 1px solid #e3e7ed;
   padding-top: 12px;
@@ -5551,6 +5555,8 @@ footer {
 
 .task-collaboration-update {
   display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
   gap: 5px;
   border-left: 4px solid var(--human-accent, #1a73e8);
   border-radius: 9px;
@@ -5584,6 +5590,8 @@ footer {
 .task-collaboration-update p { margin: 0; white-space: pre-wrap; }
 
 .task-execution-state {
+  min-width: 0;
+  overflow-wrap: anywhere;
   border: 1px dashed #c5cad1;
   border-radius: 10px;
   background: #f8f9fa;
