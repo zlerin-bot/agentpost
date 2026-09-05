@@ -39,8 +39,29 @@ test("explicit reply chains group once without guessing from body or author", ()
   assert.deepEqual(group([followup, unrelated, reply, root, missing]).map(items => items.map(i => i.activity_id)),
     [["a", "b", "c"], ["d"], ["e"]]);
   assert.match(script, /reply_to_activity_id: activity.activity_id/);
-  assert.match(script, /state.taskRecordView === "time"/);
+  assert.match(script, /state\.taskRecordFilter === "discussion"/);
+  assert.match(script, /reply_relation_source/);
+  assert.match(script, /activity-relations\/reply/);
+  assert.match(script, /不是回复/);
   assert.match(script, /parent.tagName === "DETAILS"/);
+});
+
+test("task progress separates explicit work from deduplicated participation runs", () => {
+  const source = script.slice(script.indexOf("function operationalTaskAssignments("),
+    script.indexOf("function humanColorTone("));
+  const functions = new Function(`${source}; return { operationalTaskAssignments, visibleTaskAssignments };`)();
+  const base = { responsible_human_user_id: "human", assignee_agent_id: "agent" };
+  const project = { assignments: [
+    { ...base, assignment_id: "old", assignment_kind: "participant_start", status: "cancelled",
+      created_at: "2026-09-01T01:00" },
+    { ...base, assignment_id: "new", assignment_kind: "participant_start", status: "queued",
+      created_at: "2026-09-01T02:00" },
+    { ...base, assignment_id: "work", source_activity_id: "source",
+      assignment_kind: "human_directed", status: "running", created_at: "2026-09-01T03:00" },
+  ] };
+  assert.deepEqual(functions.operationalTaskAssignments(project).map(item => item.assignment_id),
+    ["new", "work"]);
+  assert.deepEqual(functions.visibleTaskAssignments(project).map(item => item.assignment_id), ["work"]);
 });
 
 test("AgentPost exposes exactly task, friends, AI, and settings", () => {
@@ -80,9 +101,9 @@ test("tasks and formal friends are separate API-backed collaboration modules", (
   assert.match(script, /activateRoute\("friends", "directory"/);
   assert.doesNotMatch(`${html}\n${script}`, /本地体验|本地演示|交互原型|不连接生产|演示项目/);
   assert.doesNotMatch(html, /id="project-create-friend"|首位协作好友/);
-  assert.match(html, /Human 协作状态/);
-  assert.match(html, /AI 当前进展/);
-  assert.match(html, /完整过程/);
+  assert.match(html, /工作、结果与最新协作/);
+  assert.match(html, /任务进展/);
+  assert.match(html, /原始事实与审计记录/);
   assert.match(html, /任务记录/);
   assert.match(html, /选择参与的 AI（至少一个）/);
   assert.doesNotMatch(script, /DEMO_FRIENDS|demoProjects|confirmDemoAcceptance|inviteDemoFriend/);
@@ -102,6 +123,15 @@ test("task progress is Human-first and structured content stays collapsed as a s
   assert.match(script, /human-response/);
   assert.match(script, /发送回复并重新唤醒 AI/);
   assert.match(script, /查看完整任务记录/);
+  assert.match(script, /近期协作更新/);
+  assert.match(script, /不代表已经形成执行结果或通过验收/);
+  assert.match(script, /AI 执行状态/);
+  assert.match(script, /不等同于业务进展或 Human 验收/);
+  assert.match(script, /\["human_directed", "revision"\]/);
+  assert.match(script, /assignment\.assignment_kind === "participant_start"/);
+  assert.match(script, /\["discussion", "讨论"\]/);
+  assert.match(script, /\["work", "工作与结果"\]/);
+  assert.match(script, /加载更早记录/);
   assert.match(script, /activity\.kind === "assignment_created"/);
   assert.match(html, /id="task-records"/);
   assert.match(script, /0\.1\.47 前的历史自动协同/);

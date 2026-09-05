@@ -5475,6 +5475,96 @@ footer {
   gap: 9px;
 }
 
+.task-collaboration-updates {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid #e3e7ed;
+  padding-top: 12px;
+}
+
+.task-collaboration-updates > h4,
+.task-collaboration-updates > p {
+  margin: 0;
+}
+
+.task-collaboration-updates > h4 {
+  color: #202124;
+  font-size: 0.76rem;
+}
+
+.task-collaboration-updates > p {
+  color: #80868b;
+  font-size: 0.65rem;
+}
+
+.task-collaboration-update {
+  display: grid;
+  gap: 5px;
+  border-left: 4px solid var(--human-accent, #1a73e8);
+  border-radius: 9px;
+  background: var(--human-surface, #f8fbff);
+  padding: 9px 11px;
+}
+
+.task-collaboration-update.human-tone-0 { --human-accent: #1a73e8; --human-surface: #f8fbff; }
+.task-collaboration-update.human-tone-1 { --human-accent: #7b1fa2; --human-surface: #fcf8ff; }
+.task-collaboration-update.human-tone-2 { --human-accent: #137333; --human-surface: #f6fbf7; }
+.task-collaboration-update.human-tone-3 { --human-accent: #b06000; --human-surface: #fffaf3; }
+.task-collaboration-update.human-tone-4 { --human-accent: #c5221f; --human-surface: #fff8f7; }
+.task-collaboration-update.human-tone-5 { --human-accent: #007b83; --human-surface: #f4fbfc; }
+
+.task-collaboration-update > div {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.task-collaboration-update > div strong { margin-right: auto; }
+.task-collaboration-update time,
+.task-collaboration-update small { color: #80868b; font-size: 0.63rem; }
+.task-collaboration-update > div span {
+  border-radius: 999px;
+  background: #eef2f7;
+  padding: 3px 6px;
+  font-size: 0.61rem;
+}
+.task-collaboration-update p { margin: 0; white-space: pre-wrap; }
+
+.task-execution-state {
+  border: 1px dashed #c5cad1;
+  border-radius: 10px;
+  background: #f8f9fa;
+  padding: 9px 11px;
+}
+
+.task-execution-state > summary {
+  cursor: pointer;
+  color: #3c4043;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.task-execution-state > p {
+  margin: 8px 0;
+  color: #80868b;
+  font-size: 0.64rem;
+}
+
+.task-execution-state-row {
+  display: grid;
+  grid-template-columns: minmax(80px, 0.8fr) minmax(120px, 1.4fr) minmax(110px, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  border-top: 1px solid #e3e7ed;
+  padding: 7px 0;
+  color: #5f6368;
+  font-size: 0.64rem;
+}
+
+.task-execution-state-row strong { color: #202124; }
+.task-execution-state-row time { color: #80868b; }
+
 .project-collaboration-row {
   display: grid;
   grid-template-columns: 36px minmax(0, 1fr);
@@ -5542,6 +5632,57 @@ footer {
 .task-record-link:hover,
 .task-record-link:focus-visible {
   text-decoration: underline;
+}
+
+.task-record-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.task-record-toolbar > button {
+  border: 1px solid #dadce0;
+  border-radius: 999px;
+  background: #fff;
+  padding: 6px 9px;
+  color: #5f6368;
+  font: inherit;
+  font-size: 0.65rem;
+  cursor: pointer;
+}
+
+.task-record-toolbar > button.active {
+  border-color: #1a73e8;
+  background: #e8f0fe;
+  color: #185abc;
+  font-weight: 700;
+}
+
+.task-record-toolbar .task-record-more { margin-left: auto; }
+
+.task-reply-relation-source {
+  color: #5f6368;
+  font-size: 0.62rem;
+}
+
+.task-reply-suggestion {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid #f2d28b;
+  border-radius: 8px;
+  background: #fff8e1;
+  padding: 7px 8px;
+  color: #6f4e00;
+  font-size: 0.64rem;
+}
+
+.task-reply-suggestion-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 6px;
 }
 
 .task-human-response-form {
@@ -5833,4 +5974,26 @@ footer {
   width: 100%;
   box-sizing: border-box;
   min-height: 80px;
+}
+
+@media (max-width: 580px) {
+  .task-execution-state-row {
+    grid-template-columns: 1fr;
+    gap: 3px;
+  }
+
+  .task-record-toolbar .task-record-more {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .task-reply-suggestion {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .task-reply-suggestion-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
 }

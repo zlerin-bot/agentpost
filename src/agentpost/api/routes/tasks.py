@@ -26,6 +26,7 @@ from agentpost.tasks.schemas import (
     FriendResponse,
     HumanTaskMessageCreate,
     TaskAcceptanceDecision,
+    TaskActivityReplyRelationCreate,
     TaskAssignmentCreate,
     TaskCreate,
     TaskDetail,
@@ -49,6 +50,7 @@ from agentpost.tasks.service import (
     TaskStateConflictError,
     claim_agent_run,
     complete_agent_run,
+    confirm_task_activity_reply,
     create_assignment,
     create_task,
     create_task_by_agent,
@@ -316,12 +318,47 @@ def send_human_task_message(
 
 @router.get("/tasks/{task_id}", response_model=TaskDetail)
 def get_human_task(
-    task_id: UUID, current_human: CurrentHumanDep, session: SessionDep
+    task_id: UUID,
+    current_human: CurrentHumanDep,
+    session: SessionDep,
+    activity_limit: Annotated[int, Query(ge=50, le=2000)] = 200,
 ) -> TaskDetail:
     try:
-        return get_task(session, user=current_human, task_id=task_id)
+        return get_task(
+            session,
+            user=current_human,
+            task_id=task_id,
+            activity_limit=activity_limit,
+        )
     except TaskNotFoundError as exc:
         raise _not_found() from exc
+
+
+@router.post("/tasks/{task_id}/activity-relations/reply", response_model=TaskDetail)
+def confirm_human_task_activity_reply(
+    task_id: UUID,
+    payload: TaskActivityReplyRelationCreate,
+    request: Request,
+    current_human: CurrentHumanDep,
+    session: SessionDep,
+    csrf: HumanCsrfDep,
+) -> TaskDetail:
+    del csrf
+    try:
+        return confirm_task_activity_reply(
+            session,
+            user=current_human,
+            task_id=task_id,
+            payload=payload,
+            human_session_id=human_session_id_from_request(request),
+            request_id=request.state.request_id,
+        )
+    except TaskNotFoundError as exc:
+        raise _not_found() from exc
+    except TaskOwnerRequiredError as exc:
+        raise _forbidden() from exc
+    except TaskStateConflictError as exc:
+        raise _conflict("task_activity_relation_conflict") from exc
 
 
 @router.get("/tasks/{task_id}/invite-candidates", response_model=dict[str, list[FriendResponse]])

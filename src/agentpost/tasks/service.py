@@ -26,6 +26,7 @@ from agentpost.tasks.models import (
     Friendship,
     Task,
     TaskActivity,
+    TaskActivityRelation,
     TaskAgentParticipant,
     TaskAssignment,
     TaskMembership,
@@ -46,6 +47,7 @@ from agentpost.tasks.schemas import (
     AgentTaskResolution,
     FriendResponse,
     TaskAcceptanceDecision,
+    TaskActivityReplyRelationCreate,
     TaskActivityResponse,
     TaskAssignmentCreate,
     TaskAssignmentResponse,
@@ -612,7 +614,13 @@ def _task_state_axes(
     )
 
 
-def _task_detail(session: Session, *, task: Task, viewer_membership: TaskMembership) -> TaskDetail:
+def _task_detail(
+    session: Session,
+    *,
+    task: Task,
+    viewer_membership: TaskMembership,
+    activity_limit: int = 200,
+) -> TaskDetail:
     membership_rows = session.execute(
         select(TaskMembership, HumanUser)
         .join(HumanUser, HumanUser.id == TaskMembership.human_user_id)
@@ -782,14 +790,124 @@ def _task_detail(session: Session, *, task: Task, viewer_membership: TaskMembers
         )
         for item in assignment_rows
     ]
-    activity_rows = list(
-        session.scalars(
-            select(TaskActivity)
-            .where(TaskActivity.task_id == task.id)
-            .order_by(TaskActivity.created_at.desc())
-            .limit(200)
+    if activity_limit:
+        activity_total = (
+            session.scalar(
+                select(func.count(TaskActivity.id)).where(TaskActivity.task_id == task.id)
+            )
+            or 0
         )
-    )
+        activity_rows = list(
+            session.scalars(
+                select(TaskActivity)
+                .where(TaskActivity.task_id == task.id)
+                .order_by(TaskActivity.created_at.desc())
+                .limit(activity_limit)
+            )
+        )
+        activity_relations = list(
+            session.scalars(
+                select(TaskActivityRelation).where(TaskActivityRelation.task_id == task.id)
+            )
+        )
+    else:
+        activity_total = 0
+        activity_rows = []
+        activity_relations = []
+    confirmed_reply_by_child = {
+        item.child_activity_id: item for item in activity_relations if item.relation_type == "reply"
+    }
+    dismissed_reply_suggestion_children = {
+        item.child_activity_id
+        for item in activity_relations
+        if item.relation_type == "dismissed_reply_suggestion"
+    }
+    projected_metadata: dict[UUID, dict[str, object]] = {}
+
+    def project_activity_metadata(rows: list[TaskActivity]) -> None:
+        new_rows = [item for item in rows if item.id not in projected_metadata]
+        for item in new_rows:
+            metadata = dict(item.activity_metadata)
+            relation = confirmed_reply_by_child.get(item.id)
+            if relation is not None and "reply_to_activity_id" not in metadata:
+                metadata["reply_to_activity_id"] = str(relation.parent_activity_id)
+                metadata["reply_relation_source"] = relation.source
+                metadata["reply_relation_confirmed_by_human_user_id"] = str(
+                    relation.confirmed_by_human_user_id
+                )
+            if item.id in dismissed_reply_suggestion_children:
+                metadata["reply_suggestion_dismissed"] = True
+            projected_metadata[item.id] = metadata
+
+        legacy_ids = {
+            str(projected_metadata[item.id].get("legacy_reply_message_id"))
+            for item in new_rows
+            if "reply_to_activity_id" not in projected_metadata[item.id]
+            and projected_metadata[item.id].get("legacy_reply_message_id")
+        }
+        if not legacy_ids:
+            return
+        replies = {
+            message.id: message
+            for message in session.scalars(select(Message).where(Message.id.in_(legacy_ids)))
+        }
+        parent_message_ids = {
+            message.reply_to_message_id
+            for message in replies.values()
+            if message.reply_to_message_id
+        }
+        parents = {
+            message.id: message
+            for message in session.scalars(
+                select(Message).where(Message.id.in_(parent_message_ids))
+            )
+        }
+        for item in new_rows:
+            metadata = projected_metadata[item.id]
+            reply = replies.get(str(metadata.get("legacy_reply_message_id")))
+            parent = parents.get(reply.reply_to_message_id) if reply is not None else None
+            if parent is None or not parent.message_metadata.get("agentpost_task_bridge"):
+                continue
+            if str(parent.message_metadata.get("agentpost_task_id")) != str(task.id):
+                continue
+            try:
+                parent_activity_id = UUID(
+                    str(parent.message_metadata["agentpost_task_activity_id"])
+                )
+            except (KeyError, TypeError, ValueError):
+                continue
+            metadata["reply_to_activity_id"] = str(parent_activity_id)
+            metadata["reply_relation_source"] = "legacy_task_bridge"
+
+    project_activity_metadata(activity_rows)
+    loaded_activity_ids = {item.id for item in activity_rows}
+    for _ in range(32):
+        missing_parent_ids: set[UUID] = set()
+        for metadata in projected_metadata.values():
+            parent_id = metadata.get("reply_to_activity_id")
+            if not parent_id:
+                continue
+            try:
+                parsed = UUID(str(parent_id))
+            except ValueError:
+                continue
+            if parsed not in loaded_activity_ids:
+                missing_parent_ids.add(parsed)
+        if not missing_parent_ids:
+            break
+        parents = list(
+            session.scalars(
+                select(TaskActivity).where(
+                    TaskActivity.task_id == task.id,
+                    TaskActivity.id.in_(missing_parent_ids),
+                )
+            )
+        )
+        if not parents:
+            break
+        activity_rows.extend(parents)
+        loaded_activity_ids.update(item.id for item in parents)
+        project_activity_metadata(parents)
     activity_agent_ids = {item.actor_agent_id for item in activity_rows if item.actor_agent_id}
     activity_agents = {
         agent.id: agent
@@ -799,6 +917,7 @@ def _task_detail(session: Session, *, task: Task, viewer_membership: TaskMembers
     for item in activity_rows:
         actor_name = None
         actor_agent_name = None
+        actor_human_id = item.actor_human_user_id
         if item.actor_human_user_id in humans:
             actor_name = humans[item.actor_human_user_id].display_name
         elif item.actor_agent_id in activity_agents:
@@ -819,10 +938,12 @@ def _task_detail(session: Session, *, task: Task, viewer_membership: TaskMembers
                 activity_id=item.id,
                 kind=item.activity_type,
                 actor_type=item.actor_type,  # type: ignore[arg-type]
+                actor_human_user_id=actor_human_id,
+                actor_agent_id=item.actor_agent_id,
                 actor_display_name=actor_name,
                 actor_agent_display_name=actor_agent_name,
                 target_display_name=target_name,
-                metadata=item.activity_metadata,
+                metadata=projected_metadata[item.id],
                 security_label=item.security_label,  # type: ignore[arg-type]
                 created_at=_as_utc(item.created_at),
             )
@@ -864,6 +985,8 @@ def _task_detail(session: Session, *, task: Task, viewer_membership: TaskMembers
         members=members,
         assignments=assignments,
         activities=activities,
+        activity_total=activity_total,
+        activities_truncated=activity_total > activity_limit,
     )
 
 
@@ -880,16 +1003,117 @@ def list_tasks(session: Session, *, user: HumanUser, limit: int = 100) -> list[T
     ).all()
     return [
         TaskSummary.model_validate(
-            _task_detail(session, task=task, viewer_membership=membership).model_dump(
-                exclude={"members", "assignments", "activities"}
+            _task_detail(
+                session,
+                task=task,
+                viewer_membership=membership,
+                activity_limit=0,
+            ).model_dump(
+                exclude={
+                    "members",
+                    "assignments",
+                    "activities",
+                    "activity_total",
+                    "activities_truncated",
+                }
             )
         )
         for task, membership in rows
     ]
 
 
-def get_task(session: Session, *, user: HumanUser, task_id: UUID) -> TaskDetail:
+def get_task(
+    session: Session,
+    *,
+    user: HumanUser,
+    task_id: UUID,
+    activity_limit: int = 200,
+) -> TaskDetail:
     task, membership = _task_context(session, task_id=task_id, user=user)
+    return _task_detail(
+        session,
+        task=task,
+        viewer_membership=membership,
+        activity_limit=activity_limit,
+    )
+
+
+def confirm_task_activity_reply(
+    session: Session,
+    *,
+    user: HumanUser,
+    task_id: UUID,
+    payload: TaskActivityReplyRelationCreate,
+    human_session_id: UUID | None,
+    request_id: str,
+) -> TaskDetail:
+    task, membership = _task_context(session, task_id=task_id, user=user, lock=True)
+    _require_owner(task, membership)
+    child = session.get(TaskActivity, payload.child_activity_id)
+    parent = session.get(TaskActivity, payload.parent_activity_id)
+    if (
+        child is None
+        or parent is None
+        or child.task_id != task.id
+        or parent.task_id != task.id
+        or child.id == parent.id
+        or child.activity_type != "task_message"
+        or parent.created_at > child.created_at
+    ):
+        raise TaskStateConflictError
+    if child.activity_metadata.get("reply_to_activity_id"):
+        if payload.decision == "confirm" and str(
+            child.activity_metadata["reply_to_activity_id"]
+        ) == str(parent.id):
+            return _task_detail(session, task=task, viewer_membership=membership)
+        raise TaskStateConflictError
+    relation_type = "reply" if payload.decision == "confirm" else "dismissed_reply_suggestion"
+    existing = session.scalar(
+        select(TaskActivityRelation).where(
+            TaskActivityRelation.child_activity_id == child.id,
+            TaskActivityRelation.relation_type == relation_type,
+        )
+    )
+    if existing is not None:
+        if existing.parent_activity_id == parent.id:
+            return _task_detail(session, task=task, viewer_membership=membership)
+        raise TaskStateConflictError
+    confirmed = session.scalar(
+        select(TaskActivityRelation).where(
+            TaskActivityRelation.child_activity_id == child.id,
+            TaskActivityRelation.relation_type == "reply",
+        )
+    )
+    if confirmed is not None:
+        raise TaskStateConflictError
+    session.add(
+        TaskActivityRelation(
+            task_id=task.id,
+            child_activity_id=child.id,
+            parent_activity_id=parent.id,
+            relation_type=relation_type,
+            source="human_confirmed",
+            confirmed_by_human_user_id=user.id,
+            created_at=utc_now(),
+        )
+    )
+    add_human_action_audit(
+        session,
+        human_user_id=user.id,
+        human_session_id=human_session_id,
+        action=(
+            "task.activity_reply_confirmed"
+            if payload.decision == "confirm"
+            else "task.activity_reply_suggestion_dismissed"
+        ),
+        target_type="task_activity",
+        target_id=str(child.id),
+        outcome="success",
+        request_id=request_id,
+        audit_metadata={"parent_activity_id": str(parent.id), "task_id": str(task.id)},
+    )
+    task.updated_at = utc_now()
+    session.commit()
     return _task_detail(session, task=task, viewer_membership=membership)
 
 
@@ -1567,6 +1791,19 @@ def record_legacy_task_reply(
         task, _, _ = _task_participation_for_agent(session, agent=agent, task_id=task_id)
     except TaskNotFoundError:
         return
+    try:
+        parent_activity_id = UUID(str(parent.message_metadata["agentpost_task_activity_id"]))
+    except (KeyError, TypeError, ValueError):
+        return
+    try:
+        reply_metadata = _task_reply_metadata(
+            session,
+            task_id=task.id,
+            parent_id=parent_activity_id,
+            references=[],
+        )
+    except TaskNotFoundError:
+        return
     activity = _add_activity(
         session,
         task_id=task.id,
@@ -1578,6 +1815,10 @@ def record_legacy_task_reply(
             "content_format": reply.content_format,
             "body": reply.content_body,
             "legacy_reply_message_id": reply.id,
+            "source_message_id": reply.id,
+            "publication_origin": "agent_autonomous",
+            "reply_relation_source": "legacy_task_bridge",
+            **reply_metadata,
         },
         external=True,
     )
@@ -1595,7 +1836,6 @@ def record_legacy_task_reply(
     )
     activity.activity_metadata = {
         **activity.activity_metadata,
-        "publication_origin": "agent_autonomous",
         "recipient_statuses": recipient_statuses,
     }
     task.updated_at = utc_now()

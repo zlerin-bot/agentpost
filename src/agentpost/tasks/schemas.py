@@ -170,6 +170,12 @@ class HumanTaskMessageCreate(TaskModel):
         return value
 
 
+class TaskActivityReplyRelationCreate(TaskModel):
+    child_activity_id: UUID
+    parent_activity_id: UUID
+    decision: Literal["confirm", "dismiss"] = "confirm"
+
+
 class TaskMembersInvite(TaskModel):
     human_user_ids: list[UUID] = Field(min_length=1, max_length=50)
 
@@ -318,6 +324,8 @@ class TaskActivityResponse(TaskModel):
     activity_id: UUID
     kind: str
     actor_type: Literal["human", "agent", "platform"]
+    actor_human_user_id: UUID | None = None
+    actor_agent_id: UUID | None = None
     actor_display_name: str | None
     actor_agent_display_name: str | None = None
     target_display_name: str | None
@@ -375,6 +383,8 @@ class TaskDetail(TaskSummary):
     members: list[TaskMember]
     assignments: list[TaskAssignmentResponse]
     activities: list[TaskActivityResponse]
+    activity_total: int = 0
+    activities_truncated: bool = False
 
 
 class AgentCollaborationUpdate(TaskModel):

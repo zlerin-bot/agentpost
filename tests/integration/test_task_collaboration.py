@@ -58,6 +58,28 @@ def test_explicit_task_reply_chain_and_human_identity(
             ).status_code
             == 409
         )
+        csrf = _login(client, "reply-owner")
+        dismissed_child = client.post(
+            url,
+            headers={**auth, "Idempotency-Key": "dismissed-unlinked-reply"},
+            json={"body": "unrelated update"},
+        )
+        assert dismissed_child.status_code == 201, dismissed_child.text
+        dismissed = client.post(
+            f"/api/v1/tasks/{task_id}/activity-relations/reply",
+            headers={"X-CSRF-Token": csrf},
+            json={
+                "child_activity_id": dismissed_child.json()["activity_id"],
+                "parent_activity_id": root,
+                "decision": "dismiss",
+            },
+        )
+        assert dismissed.status_code == 200, dismissed.text
+        dismissed_record = {item["activity_id"]: item for item in dismissed.json()["activities"]}[
+            dismissed_child.json()["activity_id"]
+        ]
+        assert dismissed_record["metadata"]["reply_suggestion_dismissed"] is True
+        assert "reply_to_activity_id" not in dismissed_record["metadata"]
         assert (
             client.post(
                 f"/api/v1/agent/tasks/{other_id}/messages",
@@ -77,7 +99,6 @@ def test_explicit_task_reply_chain_and_human_identity(
             ).status_code
             == 404
         )
-        csrf = _login(client, "reply-owner")
         human_url = f"/api/v1/tasks/{task_id}/messages"
         headers = {"X-CSRF-Token": csrf, "Idempotency-Key": "human-reply"}
         human_payload = {
@@ -117,6 +138,46 @@ def test_explicit_task_reply_chain_and_human_identity(
         assert third["metadata"]["referenced_activity_ids"] == [root]
         assert "reply_to_activity_id" not in records[root]["metadata"]
         assert records[second.json()["activity_id"]]["metadata"]["reply_to_activity_id"] == root
+        orphan = client.post(
+            url,
+            headers={**auth, "Idempotency-Key": "unlinked-reply"},
+            json={"body": "legacy-style unlinked response"},
+        )
+        assert orphan.status_code == 201, orphan.text
+        relation = client.post(
+            f"/api/v1/tasks/{task_id}/activity-relations/reply",
+            headers={"X-CSRF-Token": csrf},
+            json={
+                "child_activity_id": orphan.json()["activity_id"],
+                "parent_activity_id": root,
+            },
+        )
+        assert relation.status_code == 200, relation.text
+        related = {item["activity_id"]: item for item in relation.json()["activities"]}[
+            orphan.json()["activity_id"]
+        ]
+        assert related["metadata"]["reply_to_activity_id"] == root
+        assert related["metadata"]["reply_relation_source"] == "human_confirmed"
+        replayed_relation = client.post(
+            f"/api/v1/tasks/{task_id}/activity-relations/reply",
+            headers={"X-CSRF-Token": csrf},
+            json={
+                "child_activity_id": orphan.json()["activity_id"],
+                "parent_activity_id": root,
+            },
+        )
+        assert replayed_relation.status_code == 200
+        assert (
+            client.post(
+                f"/api/v1/tasks/{task_id}/activity-relations/reply",
+                headers={"X-CSRF-Token": csrf},
+                json={
+                    "child_activity_id": orphan.json()["activity_id"],
+                    "parent_activity_id": second.json()["activity_id"],
+                },
+            ).status_code
+            == 409
+        )
         _register(client, "reply-outsider")
         outsider_csrf = _login(client, "reply-outsider")
         assert (
@@ -838,6 +899,41 @@ def test_task_messages_use_legacy_inbox_and_native_run_without_breaking_old_conn
             },
         )
         assert reply.status_code == 201, reply.text
+
+        with database.session_factory() as session:
+            activities = list(
+                session.scalars(select(TaskActivity).where(TaskActivity.task_id == UUID(task_id)))
+            )
+            root_activity = next(
+                item for item in activities if item.activity_metadata.get("body") == "请确认收到"
+            )
+            reply_activity = next(
+                item
+                for item in activities
+                if item.activity_metadata.get("body") == "旧连接已收到并回复"
+            )
+            assert str(reply_activity.activity_metadata["reply_to_activity_id"]) == str(
+                root_activity.id
+            )
+            historical_metadata = dict(reply_activity.activity_metadata)
+            historical_metadata.pop("reply_to_activity_id")
+            historical_metadata.pop("discussion_root_activity_id")
+            historical_metadata.pop("reply_relation_source")
+            reply_activity.activity_metadata = historical_metadata
+            session.commit()
+
+        restored = client.get(
+            f"/api/v1/agent/tasks/{task_id}",
+            headers={"Authorization": f"Bearer {owner_agent['api_key']}"},
+        )
+        assert restored.status_code == 200, restored.text
+        restored_reply = next(
+            item
+            for item in restored.json()["activities"]
+            if item["metadata"].get("body") == "旧连接已收到并回复"
+        )
+        assert restored_reply["metadata"]["reply_to_activity_id"] == str(root_activity.id)
+        assert restored_reply["metadata"]["reply_relation_source"] == "legacy_task_bridge"
 
         member_agent_id = UUID(member_agent["agent"]["id"])
         with database.session_factory() as session:

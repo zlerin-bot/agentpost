@@ -49,6 +49,8 @@ const state = {
   projectsLoaded: false,
   projectQuery: "",
   projectFilter: "active",
+  taskRecordFilter: "discussion",
+  taskActivityLimit: 200,
   friends: [],
   friendsLoaded: false,
   selectedFriendId: "",
@@ -594,7 +596,8 @@ async function loadProjectDetail(projectId) {
     return;
   }
   try {
-    const project = await requestJson("/api/v1/tasks/" + encodeURIComponent(projectId));
+    const project = await requestJson("/api/v1/tasks/" + encodeURIComponent(projectId)
+      + "?activity_limit=" + encodeURIComponent(state.taskActivityLimit));
     if (state.selectedProjectId !== projectId) {
       return;
     }
@@ -656,6 +659,8 @@ function renderProjectBrowser() {
       onClick: async () => {
         state.selectedProjectId = project.task_id;
         state.selectedProject = null;
+        state.taskActivityLimit = 200;
+        state.taskRecordFilter = "discussion";
         renderProjectBrowser();
         updateCollaborationWorkspaceMode();
         await loadProjectDetail(project.task_id);
@@ -737,13 +742,15 @@ function createTaskActivityAttachment(activity, format, body) {
   return details;
 }
 
-function visibleTaskAssignments(project) {
+function operationalTaskAssignments(project) {
   const latest = new Map();
   (project.assignments || [])
     .filter((assignment) => !["result_sync", "task_message"].includes(assignment.assignment_kind))
     .filter((assignment) => assignment.cancellation_reason !== "legacy_pre_0_1_44_backlog")
     .forEach((assignment) => {
-      const source = assignment.source_activity_id || assignment.assignment_id;
+      const source = assignment.assignment_kind === "participant_start"
+        ? "participant"
+        : (assignment.source_activity_id || assignment.assignment_id);
       const key = [source, assignment.responsible_human_user_id, assignment.assignee_agent_id].join(":");
       const previous = latest.get(key);
       if (!previous || String(previous.created_at) < String(assignment.created_at)) {
@@ -751,6 +758,13 @@ function visibleTaskAssignments(project) {
       }
     });
   return [...latest.values()];
+}
+
+function visibleTaskAssignments(project) {
+  return operationalTaskAssignments(project).filter((assignment) => (
+    ["human_directed", "revision"].includes(assignment.assignment_kind)
+      && assignment.status !== "cancelled"
+  ));
 }
 
 function humanColorTone(humanUserId) {
@@ -764,6 +778,21 @@ function taskProgressSummary(assignment) {
     return { text: raw, truncated: false };
   }
   return { text: `${raw.slice(0, 320).trimEnd()}…`, truncated: true };
+}
+
+function taskExecutionStatusLabel(status) {
+  return ({
+    queued: "等待领取",
+    leased: "已领取",
+    starting: "正在启动",
+    running: "执行中",
+    waiting_human: "等待 Human",
+    completed: "已完成",
+    partial: "部分完成",
+    failed: "执行异常",
+    interrupted: "执行中断",
+    cancelled: "已取消",
+  })[status] || status || "状态待确认";
 }
 
 function taskAgentDisplayName(agent) {
@@ -799,7 +828,7 @@ function taskRecordTarget(project, assignment) {
     String(item.metadata?.assignment_id || "") === String(assignment.assignment_id)
       && ["assignment_result", "run_waiting_human", "assignment_created"].includes(item.kind)
   ));
-  return activity ? `#task-activity-${activity.activity_id}` : "#task-records";
+  return activity?.activity_id || null;
 }
 
 function taskDiscussionGroups(activities) {
@@ -823,6 +852,60 @@ function taskDiscussionGroups(activities) {
   ))).sort((a, b) => b.at(-1).created_at.localeCompare(a.at(-1).created_at));
 }
 
+function taskCollaborationUpdates(project) {
+  const latestByHuman = new Map();
+  for (const group of taskDiscussionGroups(
+    (project.activities || []).filter((activity) => activity.kind === "task_message"),
+  )) {
+    const latest = group.at(-1);
+    const humanKey = latest.actor_human_user_id || latest.actor_display_name || latest.activity_id;
+    const previous = latestByHuman.get(humanKey);
+    if (!previous || previous.latest.created_at < latest.created_at) {
+      latestByHuman.set(humanKey, { root: group[0], latest, count: group.length });
+    }
+  }
+  return [...latestByHuman.values()]
+    .sort((a, b) => b.latest.created_at.localeCompare(a.latest.created_at))
+    .slice(0, 8);
+}
+
+function suggestedTaskReplyParent(project, activity) {
+  if (activity.kind !== "task_message" || activity.metadata?.reply_to_activity_id
+      || activity.metadata?.reply_suggestion_dismissed || !activity.actor_agent_display_name) {
+    return null;
+  }
+  const childTime = Date.parse(activity.created_at);
+  return (project.activities || []).find((candidate) => {
+    const age = childTime - Date.parse(candidate.created_at);
+    return candidate.kind === "task_message"
+      && candidate.activity_id !== activity.activity_id
+      && candidate.actor_display_name !== activity.actor_display_name
+      && age > 0
+      && age <= 2 * 60 * 60 * 1000;
+  }) || null;
+}
+
+async function decideTaskReplyRelation(childActivityId, parentActivityId, decision) {
+  const project = state.selectedProject;
+  if (!project) return;
+  const updated = await requestJson(
+    `/api/v1/tasks/${encodeURIComponent(project.task_id)}/activity-relations/reply`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": state.csrfToken },
+      body: JSON.stringify({
+        child_activity_id: childActivityId,
+        parent_activity_id: parentActivityId,
+        decision,
+      }),
+    },
+  );
+  if (state.selectedProjectId === updated.task_id) {
+    state.selectedProject = updated;
+    renderProjectDetail();
+  }
+}
+
 function revealTaskRecord(activityId) {
   const target = document.getElementById(`task-activity-${activityId}`);
   if (!target) return;
@@ -832,6 +915,25 @@ function revealTaskRecord(activityId) {
   target.tabIndex = -1;
   target.focus({ preventScroll: true });
   target.scrollIntoView({ block: "center", behavior: "smooth" });
+}
+
+function openTaskRecord(activityId, filter = "all") {
+  state.taskRecordFilter = filter;
+  renderProjectDetail();
+  requestAnimationFrame(() => revealTaskRecord(activityId));
+}
+
+function appendTaskRecordLink(container, activityId, label = "查看任务记录", filter = "all") {
+  if (!activityId) return;
+  const link = document.createElement("a");
+  link.className = "task-record-link";
+  link.href = `#task-activity-${activityId}`;
+  link.textContent = label;
+  link.addEventListener("click", (event) => {
+    event.preventDefault();
+    openTaskRecord(activityId, filter);
+  });
+  container.append(link);
 }
 
 function taskMessageRecipientLabel(project, recipient) {
@@ -950,8 +1052,9 @@ function renderProjectDetail() {
   elements.taskCompletedSummary.textContent = project.final_summary || "任务结果已验收通过。";
   elements.taskReviewNote.value = "";
   elements.taskAssignmentOutputInherited.textContent = project.expected_output;
+  const operationalAssignments = operationalTaskAssignments(project);
   const visibleAssignments = visibleTaskAssignments(project);
-  const unfinishedAssignments = visibleAssignments.filter(
+  const unfinishedAssignments = operationalAssignments.filter(
     (assignment) => !["completed", "cancelled"].includes(assignment.status),
   ).length;
   elements.taskSubmitFinal.disabled = unfinishedAssignments > 0;
@@ -1093,19 +1196,7 @@ function renderProjectDetail() {
     const time = document.createElement("time");
     time.textContent = `状态变化 ${dateText(assignmentStatusChangedAt(project, assignment))}`;
     const status = document.createElement("span");
-    const statusLabels = {
-      queued: "等待领取",
-      leased: "已领取",
-      starting: "正在启动",
-      running: "协同中",
-      waiting_human: "等待 Human",
-      completed: "已贡献",
-      partial: "部分完成",
-      failed: "执行异常",
-      cancelled: "已取消",
-    };
-    status.textContent = statusLabels[assignment.run_status || assignment.status]
-      || assignment.run_status || assignment.status;
+    status.textContent = taskExecutionStatusLabel(assignment.run_status || assignment.status);
     heading.append(name, time, status);
     const agent = document.createElement("small");
     agent.textContent = "执行 AI：" + assignment.assignee_agent_display_name;
@@ -1145,18 +1236,12 @@ function renderProjectDetail() {
         : `工作要求：${progress.text}\n${assignment.run_status === "queued" ? "等待 AI 领取。" : "AI 尚未提交结果。"}`;
     }
     copy.append(heading, agent, route, heartbeat, summary);
-    if (progress.truncated) {
-      const recordLink = document.createElement("a");
-      recordLink.className = "task-record-link";
-      recordLink.href = taskRecordTarget(project, assignment);
-      recordLink.textContent = "查看完整任务记录";
-      recordLink.addEventListener("click", () => {
-        const target = document.querySelector(recordLink.getAttribute("href"));
-        const parent = target?.closest("details");
-        if (parent) parent.open = true;
-      });
-      copy.append(recordLink);
-    }
+    appendTaskRecordLink(
+      copy,
+      taskRecordTarget(project, assignment),
+      progress.truncated ? "查看完整任务记录" : "查看依据",
+      "work",
+    );
     const currentUserCanRespond = assignment.run_status === "waiting_human"
       && [project.owner_human_user_id, assignment.responsible_human_user_id]
         .map(String).includes(String(currentUserId));
@@ -1184,23 +1269,120 @@ function renderProjectDetail() {
     row.append(avatar, copy);
     elements.projectCollaborationList.append(row);
   });
-  if (!visibleAssignments.length) {
+  const collaborationUpdates = taskCollaborationUpdates(project);
+  if (collaborationUpdates.length) {
+    const updates = document.createElement("section");
+    updates.className = "task-collaboration-updates";
+    const title = document.createElement("h4");
+    title.textContent = "近期协作更新";
+    const note = document.createElement("p");
+    note.textContent = "来自任务讨论，不代表已经形成执行结果或通过验收。";
+    updates.append(title, note);
+    collaborationUpdates.forEach(({ root, latest, count }) => {
+      const item = document.createElement("article");
+      item.className = `task-collaboration-update human-tone-${humanColorTone(latest.actor_human_user_id)}`;
+      const heading = document.createElement("div");
+      const actor = document.createElement("strong");
+      actor.textContent = latest.actor_display_name || "Human 待确认";
+      const time = document.createElement("time");
+      time.textContent = dateText(latest.created_at);
+      const badge = document.createElement("span");
+      badge.textContent = count > 1 ? `讨论更新 · ${count - 1} 条回复` : "协作更新";
+      heading.append(actor, time, badge);
+      const agent = document.createElement("small");
+      agent.textContent = latest.actor_agent_display_name
+        ? `通过 AI：${latest.actor_agent_display_name}`
+        : "Human 直接发布";
+      const body = document.createElement("p");
+      const format = latest.metadata?.content_format || "text";
+      body.textContent = ["markdown", "json", "html"].includes(format)
+        ? `已提交 ${format.toUpperCase()} 内容，请在任务记录中按需打开。`
+        : String(latest.metadata?.body || activityText(latest)).slice(0, 240);
+      item.append(heading, agent, body);
+      appendTaskRecordLink(item, root.activity_id, "查看讨论", "discussion");
+      updates.append(item);
+    });
+    elements.projectCollaborationList.append(updates);
+  }
+  if (!visibleAssignments.length && !collaborationUpdates.length) {
     const empty = document.createElement("p");
     empty.className = "prototype-inline-empty";
-    empty.textContent = "参与 Agent 加入后会在这里显示送达、执行、阻塞和结果。";
+    empty.textContent = "还没有明确工作、执行结果或协作更新。";
     elements.projectCollaborationList.append(empty);
   }
+  const execution = document.createElement("details");
+  execution.className = "task-execution-state";
+  const executionSummary = document.createElement("summary");
+  const activeExecutionCount = operationalAssignments.filter(
+    (assignment) => !["completed", "cancelled"].includes(assignment.status),
+  ).length;
+  executionSummary.textContent = `AI 执行状态 · ${activeExecutionCount} 个未结束`;
+  const executionNote = document.createElement("p");
+  executionNote.textContent = "这里显示领取、唤醒和心跳等技术状态，不等同于业务进展或 Human 验收。";
+  execution.append(executionSummary, executionNote);
+  operationalAssignments.forEach((assignment) => {
+    const item = document.createElement("div");
+    item.className = "task-execution-state-row";
+    const owner = document.createElement("strong");
+    owner.textContent = assignment.responsible_human_display_name;
+    const agent = document.createElement("span");
+    agent.textContent = assignment.assignee_agent_display_name;
+    const status = document.createElement("span");
+    status.textContent = `${assignment.assignment_kind === "participant_start" ? "参与协同" : "明确工作"} · ${taskExecutionStatusLabel(assignment.run_status || assignment.status)}`;
+    const heartbeat = document.createElement("time");
+    heartbeat.textContent = assignment.run_last_heartbeat_at
+      ? `心跳 ${dateText(assignment.run_last_heartbeat_at)}`
+      : "尚无心跳";
+    item.append(owner, agent, status, heartbeat);
+    execution.append(item);
+  });
+  if (!operationalAssignments.length) {
+    const empty = document.createElement("p");
+    empty.textContent = "当前没有 AI 执行单元。";
+    execution.append(empty);
+  }
+  elements.projectCollaborationList.append(execution);
 
   elements.projectActivityList.replaceChildren();
-  const recordView = document.createElement("button");
-  recordView.type = "button";
-  recordView.className = "quiet-button";
-  recordView.textContent = state.taskRecordView === "time" ? "按讨论查看" : "按时间查看";
-  recordView.addEventListener("click", () => {
-    state.taskRecordView = state.taskRecordView === "time" ? "discussion" : "time";
-    renderProjectDetail();
+  const recordToolbar = document.createElement("div");
+  recordToolbar.className = "task-record-toolbar";
+  const recordFilters = [
+    ["discussion", "讨论"],
+    ["work", "工作与结果"],
+    ["system", "系统记录"],
+    ["all", "全部"],
+  ];
+  recordFilters.forEach(([value, label]) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = value === state.taskRecordFilter ? "active" : "";
+    button.setAttribute("aria-pressed", String(value === state.taskRecordFilter));
+    button.textContent = label;
+    button.addEventListener("click", () => {
+      state.taskRecordFilter = value;
+      renderProjectDetail();
+    });
+    recordToolbar.append(button);
   });
-  elements.projectActivityList.append(recordView);
+  if (project.activities_truncated) {
+    const more = document.createElement("button");
+    more.type = "button";
+    more.className = "quiet-button task-record-more";
+    const reachedLimit = state.taskActivityLimit >= 2000;
+    more.textContent = reachedLimit
+      ? `已显示最近 2000 条（共 ${project.activity_total} 条）`
+      : `加载更早记录（共 ${project.activity_total} 条）`;
+    more.disabled = reachedLimit;
+    if (!reachedLimit) {
+      more.addEventListener("click", async () => {
+        state.taskActivityLimit = Math.min(Math.max(state.taskActivityLimit + 200, 400), 2000);
+        more.disabled = true;
+        await loadProjectDetail(project.task_id);
+      });
+    }
+    recordToolbar.append(more);
+  }
+  elements.projectActivityList.append(recordToolbar);
   const assignmentsById = new Map(
     (project.assignments || []).map((assignment) => [String(assignment.assignment_id), assignment]),
   );
@@ -1213,6 +1395,21 @@ function renderProjectDetail() {
         || assignment.cancellation_reason === "legacy_pre_0_1_44_backlog");
     (historicalAutomatic ? legacyActivities : currentActivities).push(activity);
   });
+  const discussionKinds = new Set(["task_message"]);
+  const workKinds = new Set([
+    "assignment_created", "run_leased", "run_progress", "run_waiting_human",
+    "human_run_response", "assignment_result", "final_submitted", "accepted",
+    "changes_requested",
+  ]);
+  const recordActivities = state.taskRecordFilter === "discussion"
+    ? currentActivities.filter((activity) => discussionKinds.has(activity.kind))
+    : (state.taskRecordFilter === "work"
+      ? currentActivities.filter((activity) => workKinds.has(activity.kind))
+      : (state.taskRecordFilter === "system"
+        ? currentActivities.filter((activity) => (
+          !discussionKinds.has(activity.kind) && !workKinds.has(activity.kind)
+        ))
+        : currentActivities));
   const renderActivitiesInto = (activities, container) => activities.forEach((activity) => {
     const row = document.createElement("article");
     row.className = "project-activity-row";
@@ -1234,6 +1431,14 @@ function renderProjectDetail() {
       link.addEventListener("click", (event) => { event.preventDefault(); revealTaskRecord(id); });
       copy.append(link);
     });
+    if (parentId && activity.metadata?.reply_relation_source) {
+      const relation = document.createElement("small");
+      relation.className = "task-reply-relation-source";
+      relation.textContent = activity.metadata.reply_relation_source === "human_confirmed"
+        ? "回复关系由 Human 确认"
+        : "回复关系由任务桥接记录还原";
+      copy.append(relation);
+    }
     const heading = document.createElement("div");
     heading.className = "project-activity-heading";
     const actor = document.createElement("strong");
@@ -1264,6 +1469,52 @@ function renderProjectDetail() {
       copy.append(agent);
     }
     copy.append(textNode);
+    const suggestedParent = ownerAccess ? suggestedTaskReplyParent(project, activity) : null;
+    if (suggestedParent) {
+      const suggestion = document.createElement("div");
+      suggestion.className = "task-reply-suggestion";
+      const message = document.createElement("span");
+      message.textContent = `可能回应 ${suggestedParent.actor_display_name} · ${dateText(suggestedParent.created_at)}`;
+      const confirm = document.createElement("button");
+      confirm.type = "button";
+      confirm.className = "quiet-button";
+      confirm.textContent = "确认关联";
+      confirm.addEventListener("click", async () => {
+        confirm.disabled = true;
+        try {
+          await decideTaskReplyRelation(
+            activity.activity_id,
+            suggestedParent.activity_id,
+            "confirm",
+          );
+        } catch (error) {
+          confirm.disabled = false;
+          message.textContent = error.message;
+        }
+      });
+      const dismiss = document.createElement("button");
+      dismiss.type = "button";
+      dismiss.className = "quiet-button";
+      dismiss.textContent = "不是回复";
+      dismiss.addEventListener("click", async () => {
+        dismiss.disabled = true;
+        try {
+          await decideTaskReplyRelation(
+            activity.activity_id,
+            suggestedParent.activity_id,
+            "dismiss",
+          );
+        } catch (error) {
+          dismiss.disabled = false;
+          message.textContent = error.message;
+        }
+      });
+      const actions = document.createElement("span");
+      actions.className = "task-reply-suggestion-actions";
+      actions.append(confirm, dismiss);
+      suggestion.append(message, actions);
+      copy.append(suggestion);
+    }
     if (activity.kind === "assignment_created" && activity.metadata?.instruction) {
       const instruction = document.createElement("p");
       instruction.className = "task-activity-text-body";
@@ -1371,7 +1622,7 @@ function renderProjectDetail() {
     "run_leased", "run_progress", "run_waiting_human", "assignment_result", "human_run_response",
   ]);
   const lifecycleGroups = new Map();
-  currentActivities.forEach((activity) => {
+  recordActivities.forEach((activity) => {
     const assignmentId = String(activity.metadata?.assignment_id || "");
     if (assignmentId && lifecycleKinds.has(activity.kind)) {
       const group = lifecycleGroups.get(assignmentId) || [];
@@ -1380,15 +1631,15 @@ function renderProjectDetail() {
     }
   });
   const renderedLifecycleAssignments = new Set();
-  const discussions = taskDiscussionGroups(currentActivities);
+  const discussions = taskDiscussionGroups(recordActivities);
   const discussionByActivity = new Map();
-  if (state.taskRecordView !== "time") {
+  if (state.taskRecordFilter === "discussion" || state.taskRecordFilter === "all") {
     discussions.filter((group) => group.length > 1).forEach((group) => {
       group.forEach((item) => discussionByActivity.set(item.activity_id, group));
     });
   }
   const renderedDiscussions = new Set();
-  currentActivities.forEach((activity) => {
+  recordActivities.forEach((activity) => {
     const discussion = discussionByActivity.get(activity.activity_id);
     if (discussion) {
       if (renderedDiscussions.has(discussion)) return;
@@ -1432,7 +1683,7 @@ function renderProjectDetail() {
     details.append(summary, list);
     elements.projectActivityList.append(details);
   });
-  if (legacyActivities.length) {
+  if (legacyActivities.length && ["system", "all"].includes(state.taskRecordFilter)) {
     const legacy = document.createElement("details");
     legacy.className = "task-legacy-activity";
     const summary = document.createElement("summary");
@@ -1443,10 +1694,11 @@ function renderProjectDetail() {
     legacy.append(summary, list);
     elements.projectActivityList.append(legacy);
   }
-  if (!project.activities.length) {
+  if (!recordActivities.length
+      && !(legacyActivities.length && ["system", "all"].includes(state.taskRecordFilter))) {
     const empty = document.createElement("p");
     empty.className = "prototype-inline-empty";
-    empty.textContent = "任务暂时没有动态。";
+    empty.textContent = "这个分类下暂时没有记录。";
     elements.projectActivityList.append(empty);
   }
 }

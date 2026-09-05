@@ -348,3 +348,55 @@ class TaskActivity(Base):
         DateTime(timezone=True), nullable=False, default=utc_now, index=True
     )
     task: Mapped[Task] = relationship(back_populates="activities")
+
+
+class TaskActivityRelation(Base):
+    """Human-confirmed semantic relation without rewriting immutable activities."""
+
+    __tablename__ = "task_activity_relations"
+    __table_args__ = (
+        UniqueConstraint(
+            "child_activity_id",
+            "relation_type",
+            name="uq_task_activity_relations_child_type",
+        ),
+        CheckConstraint(
+            "child_activity_id <> parent_activity_id",
+            name="ck_task_activity_relations_distinct_activities",
+        ),
+        CheckConstraint(
+            "relation_type IN ('reply', 'dismissed_reply_suggestion')",
+            name="ck_task_activity_relations_type",
+        ),
+        CheckConstraint(
+            "source IN ('human_confirmed')",
+            name="ck_task_activity_relations_source",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    task_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    child_activity_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("task_activities.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    parent_activity_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("task_activities.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    relation_type: Mapped[str] = mapped_column(String(16), nullable=False, default="reply")
+    source: Mapped[str] = mapped_column(String(32), nullable=False, default="human_confirmed")
+    confirmed_by_human_user_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("human_users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )

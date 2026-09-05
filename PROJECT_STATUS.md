@@ -1,13 +1,13 @@
 # AgentPost Project Status
 
-Last updated: 2026-09-03
+Last updated: 2026-09-05
 
-Current handoff stage: `v0.1.49-task-scoped-agent-messages-deployed`
+Current handoff stage: `v0.1.52-task-progress-local-verified`
 
 ## Current local candidate
 
-- Version: `0.1.49`
-- Schema: `0036_cancel_auto_ack_runs`
+- Version: `0.1.52`
+- Schema: `0037_task_activity_relations`
 - Collaboration model: Task is the only multi-Human collaboration scope.
 - Human navigation: 任务、好友、AI、设置。
 - Task identity: one stable `task_id`, one main `thread_id`, with a Human-facing copy action.
@@ -30,6 +30,9 @@ Current handoff stage: `v0.1.49-task-scoped-agent-messages-deployed`
 - Protocol compatibility: canonical Task message and Run result fields are `content_format` and `checkpoint`; legacy `format` and `output` remain accepted.
 - Client-created taskless Agent messaging: rejected with `task_context_required`; old-Connector compatibility is limited to server-generated Task bridge delivery, read, ACK, and Task-linked reply.
 - Canonical design: `docs/TASK_CORE_MODEL.md` and `AGENTS.md`.
+- Discussion relations: explicit replies remain immutable activity metadata; legacy Connector replies are reconstructed from the verified Task bridge; uncertain historical relations require a Human-owner confirmation stored separately from the original activity.
+- Human progress projection: explicit work/results and recent discussion updates are presented separately from collapsible Agent lease/wake/heartbeat state. Automatic `participant_start` work is de-duplicated and excluded from business-progress cards.
+- Task records: discussion, work/results, system, and all-record filters replace one mixed stream. The Human UI can request older records up to 2,000 items, while referenced roots outside the current window are fetched automatically.
 
 Removed from runtime and future rules: the former parallel multi-user container, group-channel transport, invitation and
 role system, domain verification, enterprise SSO, and all corresponding server, UI, SDK, MCP, OpenClaw, Manus adapter,
@@ -39,10 +42,10 @@ configuration, and test paths.
 
 - Ruff check: passed.
 - Ruff format check: passed.
-- Browser JavaScript: 37 passed; TypeScript Connector: 8 passed; OpenClaw adapter: 4 passed.
+- Browser JavaScript: 36 passed; TypeScript Connector: 8 passed; OpenClaw adapter: 4 passed.
 - TypeScript compile: passed.
-- Non-PostgreSQL Pytest: 457 passed, one expected loopback sandbox skip, five PostgreSQL tests deselected.
-- Alembic graph: one head at `0036_cancel_auto_ack_runs`.
+- Non-PostgreSQL Pytest: 463 passed, one expected loopback sandbox skip, five PostgreSQL tests deselected.
+- Alembic graph: one head at `0037_task_activity_relations`.
 - Fresh SQLite Alembic chain: blocked at the pre-existing 0019 constraint-alter limitation before reaching 0036.
 - PostgreSQL 0030 → 0034 → 0030 → 0034 rehearsal and production upgrade: passed in the protected release switch.
 - Authenticated isolated desktop and 390px Task list/detail: passed with zero horizontal overflow and no console errors; waiting-Human question, Human response, same-Assignment requeue, status/heartbeat labels, unified task Agent names, grouped execution history, Run routing/wake labels and copyable Task ID were visible. A real production task attachment card remains `待确认`.
@@ -52,16 +55,18 @@ configuration, and test paths.
 
 ## Production
 
-- Current production commit: `770fcac`
-- Current production version/schema: `0.1.49 / 0036_cancel_auto_ack_runs`
+- Current production commit: `2a6b464`
+- Current production version/schema: `0.1.51 / 0036_cancel_auto_ack_runs`
 - State: `deployed_https_verified`, not `production_accepted`.
 - Protected switch reported `deploy_status=ok`; independent full postflight reported `postflight_status=ok`.
-- Public health/ready and Connector release config report 0.1.49; the protocol contract is 0.4 and requires task context for Agent sends while preserving legacy Task bridge compatibility, the public wheel SHA-256 is `5acf653829825e23abc83d1fc970110eb29a9b621dcb98987a66d59ff6b2fd3c`, and an unknown wheel URL returns 404.
+- Public health/ready and Connector release config report 0.1.51; the protocol contract requires task context for Agent sends while preserving legacy Task bridge compatibility. Production remains `deployed_https_verified`, not `production_accepted`.
 - The authenticated production “测试任务” page exposes the waiting-Human question and response control. Its long-progress link expands the matching lifecycle group, updates the activity anchor, and reveals the complete Task record; the console had no warnings/errors.
 
 ## Next release gates
 
-1. Complete the real-Agent waiting-Human response → reclaim → result cross-device loop.
-2. Complete authenticated visual acceptance of a real Task attachment card and Connector runtime details.
-3. Complete real-user cross-device acceptance before changing the state to `production_accepted`.
-4. Keep the two unrelated untracked management-report files untouched.
+1. Rehearse PostgreSQL schema 0036 → 0037 → 0036 → 0037 before release.
+2. Verify the deterministic legacy-reply reconstruction against the real “小孔成像” task without rewriting production activity.
+3. Complete the real-Agent waiting-Human response → reclaim → result cross-device loop.
+4. Complete authenticated visual acceptance of a real Task attachment card and Connector runtime details.
+5. Complete real-user cross-device acceptance before changing the state to `production_accepted`.
+6. Keep the two unrelated untracked management-report files untouched.
