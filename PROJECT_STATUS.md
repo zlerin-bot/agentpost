@@ -2,13 +2,13 @@
 
 Last updated: 2026-09-05
 
-Current handoff stage: `v0.1.52-deployed-https-verified`
+Current handoff stage: `v0.1.54-deployed-https-verified`
 
 Local recovery tag: `stage-v0.1.52-20260905`; detailed handoff: `docs/AgentPost阶段版本0.1.52交接_20260905.md`.
 
 ## Current local candidate
 
-- Version: `0.1.52`
+- Version: `0.1.54`
 - Schema: `0037_task_activity_relations`
 - Collaboration model: Task is the only multi-Human collaboration scope.
 - Human navigation: 任务、好友、AI、设置。
@@ -44,7 +44,7 @@ configuration, and test paths.
 
 - Ruff check: passed.
 - Ruff format check: passed.
-- Browser JavaScript: 36 passed; TypeScript Connector: 8 passed; OpenClaw adapter: 4 passed.
+- Browser JavaScript: 51 passed; TypeScript Connector: 8 passed; OpenClaw adapter: 4 passed.
 - TypeScript compile: passed.
 - Non-PostgreSQL Pytest: 463 passed, one expected loopback sandbox skip, five PostgreSQL tests deselected.
 - Alembic graph: one head at `0037_task_activity_relations`.
@@ -58,18 +58,23 @@ configuration, and test paths.
 
 ## Production
 
-- Current production commit: `bf5d0ee`
-- Current production version/schema: `0.1.52 / 0037_task_activity_relations`
-- State: `deployed_https_verified`, not `production_accepted`.
-- Protected switch reported `deploy_status=ok`; independent full postflight reported `postflight_status=ok`.
-- Public health/ready/OpenAPI report 0.1.52. The public wheel SHA-256 is `4f026d63b7298ba1dc6269d38cf99a406bf748787e9bf48a52cdf1c917d312e6`, matching the release artifact; an unknown wheel returns 404.
-- Backup and immediate rollback point: `/opt/agentpost/backups/20260905-171930-bf5d0ee-pre-052`. Postflight counts are agents=67, messages=630, deliveries=606, attachments=51, humans=16; no protected count decreased.
-- A fresh public login page rendered normally. The existing Human session expired after refresh, so authenticated production verification of the new discussion/progress projection remains pending. Production remains `deployed_https_verified`, not `production_accepted`.
+- Current production commit: `354d82eb02aa6e406e3889b03cff293516769de4`
+- Current production version/schema: `0.1.54 / 0037_task_activity_relations`
+- State: `deployed_https_verified`, not `production_accepted` (2026-09-05 21:46 +08:00).
+- Single-package staging, protected switch (38 seconds), and independent postflight (2 seconds): passed.
+- Public/local health and ready, public OpenAPI, protocol and host installation contract: passed. Public JS/CSS exactly match the committed release source.
+- Wheel SHA-256: `02ffa6c33a75a75274edb3276d5bf4a801e58f14debfa4589f89e34d19ca3019`; unknown downloads return 404.
+- Backup: `/opt/agentpost/backups/20260905-214549-354d82e-pre-054`. Database, attachments, environment, systemd, Nginx, prior wheel and immediate rollback script checksums passed. Earlier backups remain available.
+- Postflight counts: agents=67, messages=638, deliveries=614, attachments=51, humans=16; no protected count decreased.
+- AgentPost PID=442441; Nginx PID=362620 and PostgreSQL PID=365086 unchanged.
+- Human task navigation now isolates late responses, preserves in-memory reply drafts, prevents repeated mutations and exposes task deep links. Attention, recent collaboration and readable body cards precede collapsible setup and submission controls.
+- Production testing found long Agent hostnames and SHA/JSON excerpts could widen mobile grids in 0.1.53. The 0.1.54 patch uses shrinkable grid columns and wraps unbroken text. Synthetic local data and authenticated production Tasks both passed at 390px and 1470px.
+- Fresh authenticated production checks: task switching, mobile deep links/return-to-list, Markdown expansion and a real attachment card passed; no console warning/error. No production test message was sent. Real cross-device Agent execution and Human final acceptance remain pending.
 
 ## Next release gates
 
 1. Verify the deterministic legacy-reply reconstruction against the real “小孔成像” task without rewriting production activity.
 2. Complete the real-Agent waiting-Human response → reclaim → result cross-device loop.
-3. Complete authenticated visual acceptance of a real Task attachment card, Connector runtime details, and the new discussion/progress projection.
+3. Complete cross-device user acceptance of Connector runtime details and the new discussion/progress projection; this release includes authenticated browser smoke checks only.
 4. Complete real-user cross-device acceptance before changing the state to `production_accepted`.
 5. Keep the two unrelated untracked management-report files untouched.

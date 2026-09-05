@@ -2,6 +2,11 @@
 
 ## 当前接续摘要
 
+- 当前生产已更新为 **0.1.54 / 354d82e / 0037_task_activity_relations / deployed_https_verified**（2026-09-05 21:46 +08:00）。本轮 Human 任务导航、进展与讨论阅读改进，以及真实长 AI 名称/SHA/JSON 的手机换行补丁均已上线。下列“本地未发布/发布候选”均为过程记录，已被本条最终状态覆盖；仍不是 production_accepted。
+- 0.1.54 单包 stage/deploy/postflight 全部 ok，切换 38 秒、后检 2 秒；备份 `/opt/agentpost/backups/20260905-214549-354d82e-pre-054`，即时回退脚本及数据库/附件/配置/旧 wheel 校验通过。0.1.52 和 0.1.53 恢复资料仍保留。
+- 公网及本机 health/ready 正常，公网 OpenAPI 版本 0.1.54；wheel SHA-256 `02ffa6c33a75a75274edb3276d5bf4a801e58f14debfa4589f89e34d19ca3019`，未知下载 404；公开 JS/CSS 与本地提交字节完全一致。后检 agents=67、messages=638、deliveries=614、attachments=51、humans=16，关键计数未减少。AgentPost PID=442441；Nginx=362620、PostgreSQL=365086 保持原进程。
+- 最终回归：463 Python passed、1 loopback 沙箱 skip、5 PostgreSQL deselected；63 JavaScript/Connector/OpenClaw passed；Ruff check/format、TypeScript build、JS syntax、diff check 通过。本次 schema 无变化，生产副本执行 upgrade/downgrade/upgrade 均保持 0037；不是新增迁移覆盖。生产新认证页面实看“测试任务”“小孔成像”，桌面 1470px/手机 390px 均无横向溢出，Markdown 展开、真实附件卡、任务切换、手机深链接及返回列表可用，控制台无 warning/error。未发送生产测试消息；跨设备真实 Agent 执行和 Human 最终验收仍待确认。
+
 - 0.1.53 发布过程记录（2026-09-05 21:37 +08:00）：`bd1655f / 0037_task_activity_relations`；stage/deploy/postflight 全部 ok（切换 38 秒、后检 2 秒）。备份 `/opt/agentpost/backups/20260905-213706-bd1655f-pre-053`；wheel SHA `7993c32d611eeab1e7c961c8fffe0cf3455bc86266501fadfbcab2bb8ba582ca`。agents=67、messages=634、deliveries=610、attachments=51、humans=16，关键计数未减少；AgentPost=441013、Nginx=362620、PostgreSQL=365086。公网 health/ready/OpenAPI 与 JS/CSS 字节验证通过；新 Chrome 会话成功进入任务并显示新功能。生产手机实看暴露长内容溢出，由 0.1.54 补丁修复，真实跨设备验收仍待确认。
 
 - 0.1.54 发布候选：0.1.53 已完成部署后检，但生产 390px 实看发现长 AI 主机名及 SHA/JSON 摘要撑宽网格；补充可收缩网格列与任意长文本换行。合成长主机名、64 位哈希及 JSON 窄屏验证 scrollWidth=390，正在复核后发布补丁。
@@ -27,9 +32,9 @@
 - 0.1.51 发布候选：整合任务页标题/接收方降噪与显式回复串；server/SDK/MCP/OpenClaw/插件/锁文件版本已同步。schema 保持 `0036_cancel_auto_ack_runs`。已获部署授权，按单上传包 Workbench 流程执行，生产切换与后检结果待记录。
 - 本地待发布回复关联切片：Task 消息支持 `reply_to_activity_id`、`referenced_activity_ids`，服务端验证同任务并生成 `discussion_root_activity_id`；无回复参数的旧连接与既有幂等哈希保持兼容，不推断历史关联。Python SDK/MCP/OpenClaw/机器合同同步新增可选参数。Human 可在任务记录直接回复，使用 Human 会话、CSRF、幂等键与真实 Human 身份，写入共享 TaskActivity，不代替 Run/Human 验收；该入口不产生旧 Inbox 投递或唤醒工单，Agent 通过 Task API 读取。页面默认按讨论折叠、可切换时间视图，支持原文定位；附加引用目前由 Agent API 提供，网站回复入口只选择一条直接回复对象。462 项非 PostgreSQL 测试通过、1 沙箱 skip、5 PostgreSQL deselected；35 项导航测试通过，Ruff/format/JS syntax 通过。隔离 Chrome 实测两级 Human 回复、讨论/时间切换、原文定位、390px 无横向溢出与控制台错误。未部署、未修改历史生产消息。
 - 本地待发布 UI 小切片：任务记录接收范围默认折叠为“共享给 N 人”，按 Human ID 去重；展开后查看 Human/AI 与简短状态，兼容投递及未知状态在摘要提示。只调整展示，不改变投递、已读或 Run 状态。前端导航测试 34 项、JS 语法及 diff check 通过；隔离浏览器因本地 Chrome 沙箱启动失败，桌面/390px 交互验证待确认；未部署。
-- 交接阶段：`0.1.52-deployed-https-verified`
-- 本地与生产：`bf5d0ee / 0.1.52 / 0037_task_activity_relations`；保留完整 0.1.51 即时回退点。
-- 当前生产：`bf5d0ee / 0.1.52 / 0037_task_activity_relations / deployed_https_verified`（2026-09-05 17:20 +08:00 完成后检）。
+- 交接阶段：`0.1.54-deployed-https-verified`
+- 本地发布提交与生产：`354d82e / 0.1.54 / 0037_task_activity_relations`；保留历史版本即时回退点。
+- 当前生产：`354d82e / 0.1.54 / 0037_task_activity_relations / deployed_https_verified`（2026-09-05 21:46 +08:00 完成后检）。
 - 生产接受状态：不是 `production_accepted`
 - 本切片：修复旧 Thread 列表/详情混入无 Delivery 的 Task 源消息导致 500；保留当前 Agent 的实际投递视图，并要求 TaskMembership 与 Agent 参与资格均有效。共享完整上下文继续使用 Task API，不恢复无任务私信。
 - OpenAPI 版本使用实际包版本；意外异常返回安全 JSON 和 request_id，不输出异常正文或凭据。心跳显式返回 version_status、原因、推荐与最低版本，未上报保持 unknown；Python SDK 兼容旧响应缺少这些字段。
