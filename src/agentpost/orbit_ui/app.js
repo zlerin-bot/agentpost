@@ -51,6 +51,9 @@ const state = {
   projectFilter: "active",
   taskRecordFilter: "discussion",
   taskActivityLimit: 200,
+  taskRequestSequence: 0,
+  taskLoadError: "",
+  taskReplyDrafts: new Map(),
   friends: [],
   friendsLoaded: false,
   selectedFriendId: "",
@@ -562,17 +565,22 @@ async function loadProjects({ preserveSelection = true } = {}) {
   if (!state.dashboard) {
     return;
   }
+  const selectionAtRequest = state.selectedProjectId;
+  const firstLoad = !state.projectsLoaded;
   try {
     const payload = await requestJson("/api/v1/tasks");
+    if (state.selectedProjectId !== selectionAtRequest) return;
     state.projects = Array.isArray(payload?.items) ? payload.items : [];
     state.projectsLoaded = true;
     const requestedTaskId = new URL(window.location.href).searchParams.get("task") || "";
-    if (requestedTaskId && projectById(requestedTaskId)) {
+    if (requestedTaskId && preserveSelection && !state.selectedProjectId) {
       state.selectedProjectId = requestedTaskId;
     } else if (!preserveSelection || !projectById(state.selectedProjectId)) {
       state.selectedProjectId = isMobileWorkspace() ? "" : (state.projects[0]?.task_id || "");
     }
     renderProjectBrowser();
+    updateCollaborationWorkspaceMode();
+    if (firstLoad && !window.location.hash) window.scrollTo({ top: 0, left: 0, behavior: "auto" });
     if (state.selectedProjectId) {
       await loadProjectDetail(state.selectedProjectId);
     } else {
@@ -581,6 +589,7 @@ async function loadProjects({ preserveSelection = true } = {}) {
     }
     renderFriendDetail();
   } catch (error) {
+    if (state.selectedProjectId !== selectionAtRequest) return;
     state.projectsLoaded = true;
     state.projects = [];
     state.selectedProject = null;
@@ -590,6 +599,8 @@ async function loadProjects({ preserveSelection = true } = {}) {
 }
 
 async function loadProjectDetail(projectId) {
+  const sequence = ++state.taskRequestSequence;
+  state.taskLoadError = "";
   if (!projectId) {
     state.selectedProject = null;
     renderProjectDetail();
@@ -598,17 +609,70 @@ async function loadProjectDetail(projectId) {
   try {
     const project = await requestJson("/api/v1/tasks/" + encodeURIComponent(projectId)
       + "?activity_limit=" + encodeURIComponent(state.taskActivityLimit));
-    if (state.selectedProjectId !== projectId) {
+    if (state.selectedProjectId !== projectId || sequence !== state.taskRequestSequence) {
       return;
     }
+    if (project.task_id !== projectId) throw new Error("任务信息不匹配，请重新读取。");
     state.selectedProject = project;
+    const url = new URL(window.location.href);
+    if (state.activeModule === "projects" && url.searchParams.get("task") !== projectId) {
+      history.replaceState({ task: projectId }, "", taskRouteUrl(projectId) + url.hash);
+    }
     renderProjectDetail();
   } catch (error) {
-    if (error.status === 404) {
-      await loadProjects({ preserveSelection: false });
-      return;
-    }
-    elements.projectActionResult.textContent = error.message;
+    if (state.selectedProjectId !== projectId || sequence !== state.taskRequestSequence) return;
+    state.selectedProject = null;
+    state.taskLoadError = error.status === 404 ? "任务不可用，或你当前没有访问权限。" : error.message;
+    renderProjectDetail();
+  }
+}
+
+function taskRouteUrl(taskId) {
+  const url = new URL(window.location.href);
+  url.searchParams.set("module", "projects");
+  url.searchParams.set("view", "board");
+  if (taskId) url.searchParams.set("task", taskId);
+  else url.searchParams.delete("task");
+  url.hash = "";
+  return `${url.pathname}${url.search}`;
+}
+
+function currentTaskForAction() {
+  return state.selectedProject?.task_id === state.selectedProjectId ? state.selectedProject : null;
+}
+
+function acceptTaskUpdate(taskId, updated) {
+  if (state.selectedProjectId !== taskId || updated?.task_id !== taskId) return false;
+  ++state.taskRequestSequence;
+  state.selectedProject = updated;
+  return true;
+}
+
+function bindTaskAction(element, eventName, action) {
+  let pending = false;
+  element.addEventListener(eventName, async (event) => {
+    if (pending) { event.preventDefault(); return; }
+    pending = true;
+    try { await action(event); } finally { pending = false; }
+  });
+}
+
+async function selectTask(taskId, { updateHistory = true } = {}) {
+  state.selectedProjectId = taskId;
+  state.selectedProject = null;
+  state.taskLoadError = "";
+  state.taskActivityLimit = 200;
+  state.taskRecordFilter = "discussion";
+  elements.taskAssignmentForm.reset();
+  elements.projectActionResult.textContent = "";
+  document.querySelectorAll(".task-settings, .task-compose-panel").forEach((item) => { item.open = false; });
+  if (updateHistory) history.pushState({ task: taskId }, "", taskRouteUrl(taskId));
+  renderProjectBrowser();
+  updateCollaborationWorkspaceMode();
+  window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  await loadProjectDetail(taskId);
+  if (state.selectedProjectId === taskId && state.selectedProject) {
+    elements.projectDetailTitle.focus({ preventScroll: true });
   }
 }
 
@@ -642,31 +706,17 @@ async function loadFriends() {
 
 function renderProjectBrowser() {
   const projects = filteredProjects();
-  if (!projects.some((project) => project.task_id === state.selectedProjectId)) {
-    state.selectedProjectId = isMobileWorkspace() ? "" : (projects[0]?.task_id || "");
-    state.selectedProject = null;
-  }
   elements.projectBrowserCount.textContent = projects.length + " 个";
   elements.projectBrowserList.replaceChildren();
   projects.forEach((project) => {
     const pending = project.membership_status === "invited" ? "待确认" : "";
     elements.projectBrowserList.append(createCollaborationListButton({
       title: project.title,
-      meta: projectKind(project) + " · " + project.owner_display_name + "负责",
+      meta: project.owner_display_name + "负责 · 更新 " + dateText(project.updated_at),
       badge: pending || projectStatusLabel(project),
       active: state.selectedProjectId === project.task_id,
       avatar: projectKind(project) === "一对一任务" ? "1" : "任",
-      onClick: async () => {
-        state.selectedProjectId = project.task_id;
-        state.selectedProject = null;
-        state.taskActivityLimit = 200;
-        state.taskRecordFilter = "discussion";
-        renderProjectBrowser();
-        updateCollaborationWorkspaceMode();
-        await loadProjectDetail(project.task_id);
-        elements.projectDetailTitle.focus({ preventScroll: true });
-        resetMobileLayerScroll();
-      },
+      onClick: () => selectTask(project.task_id),
     }));
   });
   renderProjectDetail();
@@ -712,11 +762,67 @@ function activityText(activity) {
   return labels[activity.kind] || "任务状态已更新";
 }
 
-function taskActivityFilename(activity, format) {
-  const extensions = { markdown: "md", json: "json", html: "html" };
-  const extension = extensions[format] || "txt";
-  const subject = String(activity.metadata?.subject || "协作内容").trim() || "协作内容";
-  return subject.toLowerCase().endsWith(`.${extension}`) ? subject : `${subject}.${extension}`;
+function plainTaskExcerpt(value, limit = 180) {
+  const text = (typeof value === "string" ? value : JSON.stringify(value ?? ""))
+    .replace(/<[^>]*>/g, " ")
+    .replace(/^\s{0,3}(?:#{1,6}\s+|>\s?)/gm, "")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/\*\*([^*\n]+)\*\*/g, "$1").replace(/`([^`\n]+)`/g, "$1")
+    .replace(/\s+/g, " ").trim();
+  return text.length > limit ? `${text.slice(0, limit).trimEnd()}…` : text;
+}
+
+function taskContentTitle(activity) {
+  const raw = activity.metadata?.subject || activity.metadata?.body
+    || activity.metadata?.instruction || activity.metadata?.summary || activityText(activity);
+  const title = typeof raw === "string" ? raw.split(/\r?\n/).find((line) => line.trim()) : raw;
+  return plainTaskExcerpt(title, 72) || "未命名内容";
+}
+
+function appendSafeTaskInline(container, text) {
+  // Deliberately no HTML, link, image or script evaluation. Only text and emphasis.
+  const parts = String(text).split(/(\*\*[^*\n]+\*\*|`[^`\n]+`)/g);
+  parts.forEach((part) => {
+    if ((part.startsWith("**") && part.endsWith("**")) || (part.startsWith("`") && part.endsWith("`"))) {
+      const bold = part.startsWith("**");
+      const node = document.createElement(bold ? "strong" : "code");
+      node.textContent = part.slice(bold ? 2 : 1, bold ? -2 : -1);
+      container.append(node);
+    } else container.append(document.createTextNode(part));
+  });
+}
+
+function createSafeTaskReading(body) {
+  const reading = document.createElement("div");
+  reading.className = "task-readable-body";
+  let list = null;
+  let code = null;
+  for (const line of String(body ?? "").split(/\r?\n/)) {
+    if (/^\s*```/.test(line)) {
+      if (code) code = null;
+      else { code = document.createElement("pre"); reading.append(code); }
+      list = null;
+      continue;
+    }
+    if (code) { code.textContent += `${line}\n`; continue; }
+    if (!line.trim()) { list = null; continue; }
+    const heading = line.match(/^\s{0,3}(#{1,6})\s+(.*)$/);
+    const bullet = line.match(/^\s*(?:([-+*])|\d+[.)])\s+(.*)$/);
+    if (bullet) {
+      const tag = bullet[1] ? "UL" : "OL";
+      if (!list || list.tagName !== tag) { list = document.createElement(tag.toLowerCase()); reading.append(list); }
+      const item = document.createElement("li");
+      appendSafeTaskInline(item, bullet[2]);
+      list.append(item);
+      continue;
+    }
+    list = null;
+    const quote = line.match(/^>\s?(.*)$/);
+    const node = document.createElement(heading ? `h${Math.min(heading[1].length + 2, 6)}` : quote ? "blockquote" : "p");
+    appendSafeTaskInline(node, heading ? heading[2] : quote ? quote[1] : line);
+    reading.append(node);
+  }
+  return reading;
 }
 
 function createTaskActivityAttachment(activity, format, body) {
@@ -728,9 +834,9 @@ function createTaskActivityAttachment(activity, format, body) {
   icon.textContent = format === "json" ? "{}" : "⌑";
   const copy = document.createElement("span");
   const name = document.createElement("strong");
-  name.textContent = taskActivityFilename(activity, format);
+  name.textContent = taskContentTitle(activity);
   const hint = document.createElement("small");
-  hint.textContent = `${format.toUpperCase()} 附件 · 点击查看`;
+  hint.textContent = `${format.toUpperCase()} 正文 · 展开阅读`;
   copy.append(name, hint);
   summary.append(icon, copy);
   const preview = document.createElement("pre");
@@ -738,7 +844,18 @@ function createTaskActivityAttachment(activity, format, body) {
   preview.textContent = format === "json" && typeof body !== "string"
     ? JSON.stringify(body, null, 2)
     : String(body ?? "");
-  details.append(summary, preview);
+  const excerpt = document.createElement("p");
+  excerpt.className = "task-content-excerpt";
+  excerpt.textContent = format === "html" ? "HTML 原文，按安全文本查看。" : plainTaskExcerpt(body);
+  copy.append(excerpt);
+  const original = document.createElement("details");
+  original.className = "task-original-source";
+  const originalLabel = document.createElement("summary");
+  originalLabel.textContent = "查看原始正文";
+  original.append(originalLabel, preview);
+  details.append(summary);
+  if (format === "markdown" || format === "text") details.append(createSafeTaskReading(body), original);
+  else details.append(preview);
   return details;
 }
 
@@ -762,7 +879,8 @@ function operationalTaskAssignments(project) {
 
 function visibleTaskAssignments(project) {
   return operationalTaskAssignments(project).filter((assignment) => (
-    ["human_directed", "revision"].includes(assignment.assignment_kind)
+    (["human_directed", "revision"].includes(assignment.assignment_kind)
+      || assignment.run_status === "waiting_human")
       && assignment.status !== "cancelled"
   ));
 }
@@ -927,7 +1045,7 @@ function appendTaskRecordLink(container, activityId, label = "查看任务记录
   if (!activityId) return;
   const link = document.createElement("a");
   link.className = "task-record-link";
-  link.href = `#task-activity-${activityId}`;
+  link.href = `${taskRouteUrl(state.selectedProjectId)}#task-activity-${activityId}`;
   link.textContent = label;
   link.addEventListener("click", (event) => {
     event.preventDefault();
@@ -983,20 +1101,6 @@ function taskStateAxesLabel(project) {
   if (!axes) {
     return "状态待同步";
   }
-  const counts = axes.run_counts || {};
-  const runParts = [];
-  if (counts.queued) runParts.push(`${counts.queued} 待领取`);
-  if (counts.active) runParts.push(`${counts.active} 执行中`);
-  if (counts.waiting_human) runParts.push(`${counts.waiting_human} 等待 Human`);
-  if (!runParts.length) runParts.push("执行单元已结束");
-  const resultLabels = {
-    none: "尚无 Agent 结果",
-    completed: "Agent 结果完成",
-    partial: "Agent 部分完成",
-    failed: "Agent 执行失败",
-    cancelled: "Agent 执行取消",
-    mixed: "部分执行单元已有结果",
-  };
   const acceptanceLabels = {
     not_ready: "尚未提交",
     pending: "等待 Human 验收",
@@ -1004,7 +1108,81 @@ function taskStateAxesLabel(project) {
     changes_requested: "Human 要求修改",
     cancelled: "验收已取消",
   };
-  return `${runParts.join("、")} · ${resultLabels[axes.agent_result_status] || "结果待同步"} · ${acceptanceLabels[axes.human_acceptance_status] || "验收待同步"}`;
+  return acceptanceLabels[axes.human_acceptance_status] || "验收待同步";
+}
+
+function showTaskSection(id) {
+  const section = document.getElementById(id);
+  if (!section || section.hidden) return;
+  if (section.tagName === "DETAILS") section.open = true;
+  if (id === "task-submission-blockers") section.querySelector("details")?.setAttribute("open", "");
+  let parent = section.parentElement;
+  while (parent) {
+    if (parent.tagName === "DETAILS") parent.open = true;
+    parent = parent.parentElement;
+  }
+  section.querySelector(".task-compose-panel")?.setAttribute("open", "");
+  section.scrollIntoView({ block: "start", behavior: "auto" });
+  if (!section.hasAttribute("tabindex")) section.setAttribute("tabindex", "-1");
+  section.focus({ preventScroll: true });
+}
+
+function taskSubmissionBlockers(project) {
+  // Match the server's submit gate; do not hide unfinished participation or history.
+  return (project.assignments || []).filter((item) => !["completed", "cancelled"].includes(item.status));
+}
+
+function renderTaskAttention(project, ownerAccess) {
+  const attention = document.querySelector("#task-attention");
+  attention.replaceChildren();
+  const userId = String(state.dashboard?.user?.id || "");
+  const questions = visibleTaskAssignments(project).filter((item) => item.run_status === "waiting_human"
+    && [project.owner_human_user_id, item.responsible_human_user_id].map(String).includes(userId));
+  const actions = [];
+  questions.forEach((item) => actions.push([`${item.responsible_human_display_name} 的工作需要你回答`, `task-work-${item.assignment_id}`]));
+  if (ownerAccess && project.status === "awaiting_acceptance") actions.push(["任务结果等待你验收", "task-review-controls"]);
+  if (ownerAccess && project.status === "active" && taskSubmissionBlockers(project).length) {
+    actions.push([`提交前待处理：${taskSubmissionBlockers(project).length} 项`, "task-submission-blockers"]);
+  }
+  attention.hidden = !actions.length;
+  const title = document.createElement("strong");
+  title.textContent = "需要我处理";
+  attention.append(title);
+  actions.forEach(([label, target]) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "text-button";
+    button.textContent = label;
+    button.addEventListener("click", () => showTaskSection(target));
+    attention.append(button);
+  });
+  const blockers = document.querySelector("#task-submission-blockers");
+  blockers.replaceChildren();
+  const pending = taskSubmissionBlockers(project);
+  if (pending.length) {
+    const details = document.createElement("details");
+    const summary = document.createElement("summary");
+    summary.textContent = `提交前待处理 · ${pending.length} 项`;
+    const note = document.createElement("p");
+    note.textContent = "当前提交规则要求以下执行全部结束。参与准备与明确工作分别列出；日报或讨论中的完成自述不会替代执行结果。";
+    details.append(summary, note);
+    pending.forEach((item) => {
+      const row = document.createElement("p");
+      row.textContent = `${item.responsible_human_display_name} · ${item.assignment_kind === "participant_start" ? "参与准备" : "工作"} · ${taskExecutionStatusLabel(item.run_status || item.status)}\n${taskProgressSummary(item).text}`;
+      appendTaskRecordLink(row, taskRecordTarget(project, item), "查看相关记录", "all");
+      details.append(row);
+    });
+    blockers.append(details);
+  }
+  document.querySelectorAll("[data-task-target]").forEach((button) => {
+    let target = button.dataset.taskTarget;
+    if (target === "task-submission-controls") {
+      target = project.status === "awaiting_acceptance" ? "task-review-controls"
+        : project.status === "completed" ? "task-completed-result" : target;
+    }
+    button.hidden = Boolean(document.getElementById(target)?.hidden);
+    button.onclick = () => showTaskSection(target);
+  });
 }
 
 function renderProjectDetail() {
@@ -1013,6 +1191,14 @@ function renderProjectDetail() {
     : null;
   elements.projectEmpty.hidden = Boolean(state.selectedProjectId);
   elements.projectDetail.hidden = !state.selectedProjectId;
+  const content = document.querySelector("#task-detail-content");
+  const loading = document.querySelector("#task-detail-loading");
+  content.hidden = !project;
+  content.inert = !project;
+  loading.hidden = Boolean(project);
+  loading.querySelector("p").textContent = state.taskLoadError || "正在读取任务…";
+  loading.querySelector("button").hidden = !state.taskLoadError;
+  elements.projectDetail.setAttribute("aria-busy", String(!project && !state.taskLoadError));
   if (!state.selectedProjectId) {
     return;
   }
@@ -1054,12 +1240,12 @@ function renderProjectDetail() {
   elements.taskAssignmentOutputInherited.textContent = project.expected_output;
   const operationalAssignments = operationalTaskAssignments(project);
   const visibleAssignments = visibleTaskAssignments(project);
-  const unfinishedAssignments = operationalAssignments.filter(
+  const unfinishedAssignments = (project.assignments || []).filter(
     (assignment) => !["completed", "cancelled"].includes(assignment.status),
   ).length;
   elements.taskSubmitFinal.disabled = unfinishedAssignments > 0;
   elements.taskSubmissionHelp.textContent = unfinishedAssignments > 0
-    ? `还有 ${unfinishedAssignments} 个 AI 执行单元未完成，完成或取消后才能提交任务结果。`
+    ? `还有 ${unfinishedAssignments} 个 AI 执行单元未完成。查看“提交前待处理”了解具体原因。`
     : "提交后任务进入“待验收”，不能再创建新的 AI 执行单元。";
   elements.taskAssignmentAgent.replaceChildren();
   project.members.filter((member) => member.status === "active").forEach((member) => {
@@ -1174,10 +1360,19 @@ function renderProjectDetail() {
   }
 
   elements.projectCollaborationList.replaceChildren();
-  visibleAssignments.forEach((assignment) => {
+  const renderedWorkRequirements = new Set();
+  visibleAssignments.sort((left, right) => Number(right.run_status === "waiting_human")
+    - Number(left.run_status === "waiting_human")
+    || String(assignmentStatusChangedAt(project, right)).localeCompare(String(assignmentStatusChangedAt(project, left))))
+    .forEach((assignment) => {
+    const requirementKey = JSON.stringify([assignment.responsible_human_user_id,
+      assignment.assignee_agent_id, assignment.instruction]);
+    const repeatedRequirement = renderedWorkRequirements.has(requirementKey);
+    renderedWorkRequirements.add(requirementKey);
     const row = document.createElement("article");
     const humanTone = humanColorTone(assignment.responsible_human_user_id);
     row.className = `project-collaboration-row human-tone-${humanTone}`;
+    row.id = `task-work-${assignment.assignment_id}`;
     const avatar = document.createElement("span");
     avatar.className = "project-progress-avatar";
     avatar.textContent = assignment.responsible_human_display_name.slice(0, 1);
@@ -1235,7 +1430,24 @@ function renderProjectDetail() {
         ? `AI 反馈：${progress.text}`
         : `工作要求：${progress.text}\n${assignment.run_status === "queued" ? "等待 AI 领取。" : "AI 尚未提交结果。"}`;
     }
-    copy.append(heading, agent, route, heartbeat, summary);
+    const workTitle = document.createElement("h4");
+    workTitle.textContent = assignment.assignment_kind === "participant_start"
+      ? "参与准备需要你回答"
+      : plainTaskExcerpt(assignment.instruction, 100) || "明确工作";
+    const technical = document.createElement("details");
+    technical.className = "task-work-technical";
+    const technicalLabel = document.createElement("summary");
+    technicalLabel.textContent = "执行详情与来源";
+    const identity = document.createElement("small");
+    identity.textContent = `所属任务：${project.title} · 工作 ID：${assignment.assignment_id}`;
+    technical.append(technicalLabel, identity, route, heartbeat);
+    copy.append(heading, workTitle, agent, summary, technical);
+    if (repeatedRequirement) {
+      const note = document.createElement("p");
+      note.className = "task-field-help";
+      note.textContent = "同一执行对象还有相同要求的工作。此项保留独立状态，请按工作 ID 核对来源。";
+      copy.append(note);
+    }
     appendTaskRecordLink(
       copy,
       taskRecordTarget(project, assignment),
@@ -1249,6 +1461,7 @@ function renderProjectDetail() {
       const responseForm = document.createElement("form");
       responseForm.className = "task-human-response-form";
       responseForm.dataset.assignmentId = assignment.assignment_id;
+      responseForm.dataset.taskId = project.task_id;
       const responseLabel = document.createElement("label");
       responseLabel.textContent = "回复 AI 并继续执行";
       const response = document.createElement("textarea");
@@ -1260,14 +1473,21 @@ function renderProjectDetail() {
       const submit = document.createElement("button");
       submit.type = "submit";
       submit.className = "primary-action";
-      submit.textContent = "发送回复并重新唤醒 AI";
+    submit.textContent = "保存回答，等待 AI 继续";
       responseLabel.append(response);
       responseForm.append(responseLabel, submit);
       responseForm.addEventListener("submit", respondToWaitingAgent);
       copy.append(responseForm);
     }
     row.append(avatar, copy);
-    elements.projectCollaborationList.append(row);
+    if ((assignment.status === "completed" || repeatedRequirement) && assignment.run_status !== "waiting_human") {
+      const history = document.createElement("details");
+      history.className = "task-earlier-work";
+      const label = document.createElement("summary");
+      label.textContent = `${targetHuman} · ${taskExecutionStatusLabel(assignment.run_status || assignment.status)} · ${plainTaskExcerpt(assignment.instruction, 80)} · ${dateText(assignment.created_at)}`;
+      history.append(label, row);
+      elements.projectCollaborationList.append(history);
+    } else elements.projectCollaborationList.append(row);
   });
   const collaborationUpdates = taskCollaborationUpdates(project);
   if (collaborationUpdates.length) {
@@ -1295,14 +1515,15 @@ function renderProjectDetail() {
         : "Human 直接发布";
       const body = document.createElement("p");
       const format = latest.metadata?.content_format || "text";
-      body.textContent = ["markdown", "json", "html"].includes(format)
-        ? `已提交 ${format.toUpperCase()} 内容，请在任务记录中按需打开。`
-        : String(latest.metadata?.body || activityText(latest)).slice(0, 240);
-      item.append(heading, agent, body);
+      body.textContent = format === "html" ? "HTML 内容，打开后按安全文本查看。"
+        : plainTaskExcerpt(latest.metadata?.body || activityText(latest), 180);
+      const subject = document.createElement("h4");
+      subject.textContent = taskContentTitle(latest);
+      item.append(heading, subject, agent, body);
       appendTaskRecordLink(item, root.activity_id, "查看讨论", "discussion");
       updates.append(item);
     });
-    elements.projectCollaborationList.append(updates);
+    elements.projectCollaborationList.prepend(updates);
   }
   if (!visibleAssignments.length && !collaborationUpdates.length) {
     const empty = document.createElement("p");
@@ -1342,6 +1563,7 @@ function renderProjectDetail() {
     execution.append(empty);
   }
   elements.projectCollaborationList.append(execution);
+  renderTaskAttention(project, ownerAccess);
 
   elements.projectActivityList.replaceChildren();
   const recordToolbar = document.createElement("div");
@@ -1352,6 +1574,7 @@ function renderProjectDetail() {
     ["system", "系统记录"],
     ["all", "全部"],
   ];
+  if (ownerAccess) recordFilters.push(["relations", "整理历史回复关系"]);
   recordFilters.forEach(([value, label]) => {
     const button = document.createElement("button");
     button.type = "button";
@@ -1401,7 +1624,9 @@ function renderProjectDetail() {
     "human_run_response", "assignment_result", "final_submitted", "accepted",
     "changes_requested",
   ]);
-  const recordActivities = state.taskRecordFilter === "discussion"
+  const recordActivities = state.taskRecordFilter === "relations"
+    ? currentActivities.filter((activity) => ownerAccess && suggestedTaskReplyParent(project, activity))
+    : state.taskRecordFilter === "discussion"
     ? currentActivities.filter((activity) => discussionKinds.has(activity.kind))
     : (state.taskRecordFilter === "work"
       ? currentActivities.filter((activity) => workKinds.has(activity.kind))
@@ -1469,12 +1694,15 @@ function renderProjectDetail() {
       copy.append(agent);
     }
     copy.append(textNode);
-    const suggestedParent = ownerAccess ? suggestedTaskReplyParent(project, activity) : null;
+    const suggestedParent = ownerAccess && state.taskRecordFilter === "relations"
+      ? suggestedTaskReplyParent(project, activity) : null;
     if (suggestedParent) {
       const suggestion = document.createElement("div");
       suggestion.className = "task-reply-suggestion";
       const message = document.createElement("span");
       message.textContent = `可能回应 ${suggestedParent.actor_display_name} · ${dateText(suggestedParent.created_at)}`;
+      const comparison = document.createElement("blockquote");
+      comparison.textContent = `候选原文：${plainTaskExcerpt(suggestedParent.metadata?.body || activityText(suggestedParent), 360)}`;
       const confirm = document.createElement("button");
       confirm.type = "button";
       confirm.className = "quiet-button";
@@ -1512,7 +1740,7 @@ function renderProjectDetail() {
       const actions = document.createElement("span");
       actions.className = "task-reply-suggestion-actions";
       actions.append(confirm, dismiss);
-      suggestion.append(message, actions);
+      suggestion.append(message, comparison, actions);
       copy.append(suggestion);
     }
     if (activity.kind === "assignment_created" && activity.metadata?.instruction) {
@@ -1558,6 +1786,8 @@ function renderProjectDetail() {
       const format = String(activity.metadata.content_format || "text").toLowerCase();
       if (["markdown", "json", "html"].includes(format)) {
         copy.append(createTaskActivityAttachment(activity, format, activity.metadata.body));
+      } else if (String(activity.metadata.body).length > 600 || /^\s*#{1,6}\s/m.test(String(activity.metadata.body))) {
+        copy.append(createTaskActivityAttachment(activity, "text", activity.metadata.body));
       } else {
         const body = document.createElement("p");
         body.className = "task-activity-text-body";
@@ -1577,42 +1807,70 @@ function renderProjectDetail() {
       const replyLabel = document.createElement("summary");
       replyLabel.textContent = "回复";
       const form = document.createElement("form");
+      form.className = "task-reply-form";
+      const context = document.createElement("p");
+      context.textContent = `以 ${state.dashboard?.user?.display_name || "当前 Human"} 的身份回复 ${actorHuman}。回复进入共享讨论，需要执行时请另行安排明确工作。`;
+      const quote = document.createElement("blockquote");
+      quote.textContent = taskContentTitle(activity);
       const input = document.createElement("textarea");
+      input.rows = 3;
       input.required = true;
       input.maxLength = 20000;
+      input.placeholder = "写下你的回复…";
       input.setAttribute("aria-label", `回复 ${actorHuman}`);
+      const draftId = `${project.task_id}:${activity.activity_id}`;
+      const draft = state.taskReplyDrafts.get(draftId) || { body: "", key: crypto.randomUUID(), pending: false, submittedBody: null };
+      state.taskReplyDrafts.set(draftId, draft);
+      input.value = draft.body;
+      input.disabled = draft.pending || draft.submittedBody !== null;
+      input.addEventListener("input", () => { draft.body = input.value; });
       const send = document.createElement("button");
       send.type = "submit";
-      send.textContent = "发送回复";
+      send.className = "primary-action";
+      send.textContent = draft.submittedBody === null ? "发送回复" : "重试同一回复";
+      send.disabled = draft.pending;
+      const cancel = document.createElement("button");
+      cancel.type = "button";
+      cancel.className = "quiet-button";
+      cancel.textContent = "收起，保留草稿";
+      cancel.addEventListener("click", () => { reply.open = false; replyLabel.focus(); });
       const feedback = document.createElement("small");
       feedback.setAttribute("role", "status");
-      const key = crypto.randomUUID();
-      let sent = false;
+      const actions = document.createElement("div");
+      actions.className = "task-reply-actions";
+      actions.append(cancel, send);
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
-        if (sent || !input.value.trim()) return;
+        if (draft.pending || !input.value.trim() || state.selectedProjectId !== project.task_id) return;
+        draft.pending = true;
+        draft.submittedBody = draft.submittedBody ?? input.value;
+        input.disabled = true;
         send.disabled = true;
+        feedback.textContent = "正在发送…";
+        let sent = false;
         try {
           await requestJson(`/api/v1/tasks/${encodeURIComponent(project.task_id)}/messages`, {
             method: "POST",
-            headers: { "Content-Type": "application/json", "X-CSRF-Token": state.csrfToken, "Idempotency-Key": key },
-            body: JSON.stringify({ body: input.value, reply_to_activity_id: activity.activity_id }),
+            headers: { "Content-Type": "application/json", "X-CSRF-Token": state.csrfToken, "Idempotency-Key": draft.key },
+            body: JSON.stringify({ body: draft.submittedBody, reply_to_activity_id: activity.activity_id }),
           });
           sent = true;
-          input.disabled = true;
+          state.taskReplyDrafts.delete(draftId);
           feedback.textContent = "回复已保存";
-          const updated = await requestJson(`/api/v1/tasks/${encodeURIComponent(project.task_id)}`);
-          if (state.selectedProject?.task_id === project.task_id) {
-            state.selectedProject = updated;
-            renderProjectDetail();
-            revealTaskRecord(activity.activity_id);
+          if (state.selectedProjectId === project.task_id) {
+            await loadProjectDetail(project.task_id);
+            if (state.selectedProjectId === project.task_id) revealTaskRecord(activity.activity_id);
           }
         } catch (error) {
-          feedback.textContent = sent ? "回复已保存，请刷新查看。" : error.message;
+          // Unknown acceptance: keep the original body and key together for a safe retry.
+          feedback.textContent = sent ? "回复已保存，请刷新查看。" : `${error.message}。可重试同一回复，内容已保留。`;
+          send.textContent = "重试同一回复";
           send.disabled = sent;
+        } finally {
+          draft.pending = false;
         }
       });
-      form.append(input, send, feedback);
+      form.append(context, quote, input, actions, feedback);
       reply.append(replyLabel, form);
       copy.append(reply);
     }
@@ -1652,7 +1910,7 @@ function renderProjectDetail() {
       const title = root.metadata?.subject || String(root.metadata?.body || activityText(root)).slice(0, 80);
       summary.textContent = `${root.actor_display_name}：${title} · ${discussion.length - 1} 条回复 · ${dateText(latest.created_at)}`;
       const preview = document.createElement("p");
-      preview.textContent = `${latest.actor_display_name}：${String(latest.metadata?.body || activityText(latest)).slice(0, 120)}`;
+      preview.textContent = `${latest.actor_display_name}：${plainTaskExcerpt(latest.metadata?.body || activityText(latest), 120)}`;
       const list = document.createElement("div");
       renderActivitiesInto(discussion, list);
       summary.append(preview);
@@ -1946,10 +2204,11 @@ async function createProject(event) {
     state.selectedProjectId = project.task_id;
     state.selectedProject = project;
     state.projectFilter = "active";
+    history.pushState({ task: project.task_id }, "", taskRouteUrl(project.task_id));
     closeProjectCreateDialog();
     activateRoute("projects", "board", { focusContent: true });
     await loadProjects();
-    elements.projectActionResult.textContent = "任务已经创建，每个任务固定使用一条 Thread。";
+    elements.projectActionResult.textContent = "任务已创建，可以安排工作或邀请好友参与。";
   } catch (error) {
     elements.projectCreateResult.textContent = error.message;
   }
@@ -2036,13 +2295,13 @@ async function inviteProjectFriends(event) {
 }
 
 async function updateSelectedProjectStatus() {
-  const project = state.selectedProject;
+  const project = currentTaskForAction();
   if (!project) {
     return;
   }
   const action = project.status === "paused" ? "resume" : "pause";
   try {
-    state.selectedProject = await requestJson(
+    const updated = await requestJson(
       "/api/v1/tasks/" + encodeURIComponent(project.task_id) + "/status",
       {
         method: "POST",
@@ -2053,6 +2312,7 @@ async function updateSelectedProjectStatus() {
         body: JSON.stringify({ action }),
       },
     );
+    if (!acceptTaskUpdate(project.task_id, updated)) return;
     state.projectFilter = "active";
     elements.projectFilters.forEach((button) => {
       const active = button.dataset.projectFilter === state.projectFilter;
@@ -2062,7 +2322,7 @@ async function updateSelectedProjectStatus() {
     await loadProjects();
     elements.projectActionResult.textContent = action === "pause" ? "任务已经暂停。" : "任务已经继续。";
   } catch (error) {
-    elements.projectActionResult.textContent = error.message;
+    if (state.selectedProjectId === project?.task_id) elements.projectActionResult.textContent = error.message;
   }
 }
 
@@ -2104,7 +2364,7 @@ async function decideSelectedProjectInvitation(accept) {
 
 async function saveMyTaskAgent(event) {
   event.preventDefault();
-  const project = state.selectedProject;
+  const project = currentTaskForAction();
   const agentIds = Array.from(
     elements.taskMyAgentOptions.querySelectorAll('input[name="task-my-agent"]:checked'),
   ).map((input) => input.value);
@@ -2117,7 +2377,7 @@ async function saveMyTaskAgent(event) {
     return;
   }
   try {
-    state.selectedProject = await requestJson(
+    const updated = await requestJson(
       `/api/v1/tasks/${encodeURIComponent(project.task_id)}/my-agents`,
       {
         method: "PUT",
@@ -2125,23 +2385,24 @@ async function saveMyTaskAgent(event) {
         body: JSON.stringify({ agent_ids: agentIds, primary_agent_id: primaryAgentId }),
       },
     );
+    if (!acceptTaskUpdate(project.task_id, updated)) return;
     renderProjectDetail();
     elements.projectActionResult.textContent = `已保存 ${agentIds.length} 个参与 AI；新加入的 AI 已进入协同队列。`;
   } catch (error) {
-    elements.projectActionResult.textContent = error.message;
+    if (state.selectedProjectId === project?.task_id) elements.projectActionResult.textContent = error.message;
   }
 }
 
 async function createTaskAssignment(event) {
   event.preventDefault();
-  const project = state.selectedProject;
+  const project = currentTaskForAction();
   const option = elements.taskAssignmentAgent.selectedOptions[0];
   if (!project || !option) {
     elements.projectActionResult.textContent = "没有可分配的参与 AI。";
     return;
   }
   try {
-    state.selectedProject = await requestJson(`/api/v1/tasks/${encodeURIComponent(project.task_id)}/assignments`, {
+    const updated = await requestJson(`/api/v1/tasks/${encodeURIComponent(project.task_id)}/assignments`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-CSRF-Token": state.csrfToken },
       body: JSON.stringify({
@@ -2151,28 +2412,29 @@ async function createTaskAssignment(event) {
         expected_output: elements.taskAssignmentOutput.value.trim() || null,
       }),
     });
+    if (!acceptTaskUpdate(project.task_id, updated)) return;
     elements.taskAssignmentForm.reset();
     renderProjectDetail();
     elements.projectActionResult.textContent = "执行单元已进入可靠队列，等待指定 AI 领取。";
   } catch (error) {
-    elements.projectActionResult.textContent = error.message;
+    if (state.selectedProjectId === project?.task_id) elements.projectActionResult.textContent = error.message;
   }
 }
 
 async function respondToWaitingAgent(event) {
   event.preventDefault();
-  const project = state.selectedProject;
+  const project = currentTaskForAction();
   const form = event.currentTarget;
   const assignmentId = form.dataset.assignmentId;
   const response = form.elements.response.value.trim();
   const submit = form.querySelector('button[type="submit"]');
-  if (!project || !assignmentId || !response) {
+  if (!project || form.dataset.taskId !== project.task_id || !assignmentId || !response) {
     elements.projectActionResult.textContent = "请先填写要回复 AI 的内容。";
     return;
   }
   submit.disabled = true;
   try {
-    state.selectedProject = await requestJson(
+    const updated = await requestJson(
       `/api/v1/tasks/${encodeURIComponent(project.task_id)}`
         + `/assignments/${encodeURIComponent(assignmentId)}/human-response`,
       {
@@ -2181,37 +2443,39 @@ async function respondToWaitingAgent(event) {
         body: JSON.stringify({ response }),
       },
     );
+    if (!acceptTaskUpdate(project.task_id, updated)) return;
     renderProjectDetail();
     elements.projectActionResult.textContent = "回复已记录，AI 执行已重新进入可靠队列。";
   } catch (error) {
     submit.disabled = false;
-    elements.projectActionResult.textContent = error.message;
+    if (state.selectedProjectId === project?.task_id) elements.projectActionResult.textContent = error.message;
   }
 }
 
 async function submitTaskForAcceptance(event) {
   event.preventDefault();
-  const project = state.selectedProject;
+  const project = currentTaskForAction();
   const summary = elements.taskFinalSummary.value.trim();
   if (!project || !summary) {
     elements.projectActionResult.textContent = "请先填写最终交付汇总。";
     return;
   }
   try {
-    state.selectedProject = await requestJson(`/api/v1/tasks/${encodeURIComponent(project.task_id)}/submit`, {
+    const updated = await requestJson(`/api/v1/tasks/${encodeURIComponent(project.task_id)}/submit`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-CSRF-Token": state.csrfToken },
       body: JSON.stringify({ summary }),
     });
+    if (!acceptTaskUpdate(project.task_id, updated)) return;
     renderProjectDetail();
     elements.projectActionResult.textContent = "任务已提交，等待 Human 验收。";
   } catch (error) {
-    elements.projectActionResult.textContent = error.message;
+    if (state.selectedProjectId === project?.task_id) elements.projectActionResult.textContent = error.message;
   }
 }
 
 async function decideTaskAcceptance(decision) {
-  const project = state.selectedProject;
+  const project = currentTaskForAction();
   const note = elements.taskReviewNote.value.trim();
   if (!project) {
     return;
@@ -2222,19 +2486,25 @@ async function decideTaskAcceptance(decision) {
     return;
   }
   try {
-    state.selectedProject = await requestJson(`/api/v1/tasks/${encodeURIComponent(project.task_id)}/acceptance`, {
+    const updated = await requestJson(`/api/v1/tasks/${encodeURIComponent(project.task_id)}/acceptance`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-CSRF-Token": state.csrfToken },
       body: JSON.stringify({ decision, note: note || null }),
     });
+    if (!acceptTaskUpdate(project.task_id, updated)) return;
     renderProjectDetail();
     elements.projectActionResult.textContent = decision === "accept" ? "Human 已验收通过。" : "已退回修改。";
   } catch (error) {
-    elements.projectActionResult.textContent = error.message;
+    if (state.selectedProjectId === project?.task_id) elements.projectActionResult.textContent = error.message;
   }
 }
 
 function initializeCollaborationModules() {
+  document.querySelector("#task-detail-retry").addEventListener("click", () => {
+    state.taskLoadError = "";
+    renderProjectDetail();
+    void loadProjectDetail(state.selectedProjectId);
+  });
   renderProjectBrowser();
   renderFriendBrowser();
   elements.projectSearchInput.addEventListener("input", () => {
@@ -2249,10 +2519,10 @@ function initializeCollaborationModules() {
         item.classList.toggle("active", active);
         item.setAttribute("aria-pressed", String(active));
       });
-      renderProjectBrowser();
-      if (state.selectedProjectId) {
-        void loadProjectDetail(state.selectedProjectId);
-      }
+      const projects = filteredProjects();
+      if (!projects.some((project) => project.task_id === state.selectedProjectId)) {
+        void selectTask(isMobileWorkspace() ? "" : (projects[0]?.task_id || ""));
+      } else renderProjectBrowser();
     });
   });
   elements.friendSearchInput.addEventListener("input", () => {
@@ -2285,7 +2555,7 @@ function initializeCollaborationModules() {
   [elements.projectInvite, elements.projectMemberInvite].forEach((button) => {
     button.addEventListener("click", openProjectInviteDialog);
   });
-  elements.projectArchive.addEventListener("click", updateSelectedProjectStatus);
+  bindTaskAction(elements.projectArchive, "click", updateSelectedProjectStatus);
   elements.projectAccept.addEventListener("click", () => decideSelectedProjectInvitation(true));
   elements.projectDecline.addEventListener("click", () => decideSelectedProjectInvitation(false));
   elements.projectCreateForm.addEventListener("submit", createProject);
@@ -2294,8 +2564,8 @@ function initializeCollaborationModules() {
   elements.projectInviteForm.addEventListener("submit", inviteProjectFriends);
   elements.projectInviteClose.addEventListener("click", closeProjectInviteDialog);
   elements.projectInviteCancel.addEventListener("click", closeProjectInviteDialog);
-  elements.taskAssignmentForm.addEventListener("submit", createTaskAssignment);
-  elements.taskMyAgentForm.addEventListener("submit", saveMyTaskAgent);
+  bindTaskAction(elements.taskAssignmentForm, "submit", createTaskAssignment);
+  bindTaskAction(elements.taskMyAgentForm, "submit", saveMyTaskAgent);
   elements.taskAddAgent.addEventListener("click", () => {
     activateRoute("relay", "agents", { focusContent: true });
   });
@@ -2314,15 +2584,12 @@ function initializeCollaborationModules() {
       elements.projectActionResult.textContent = "浏览器未允许自动复制，请手动选择任务 ID。";
     }
   });
-  elements.taskSubmissionForm.addEventListener("submit", submitTaskForAcceptance);
-  elements.taskAcceptFinal.addEventListener("click", () => decideTaskAcceptance("accept"));
-  elements.taskRequestChanges.addEventListener("click", () => decideTaskAcceptance("request_changes"));
+  bindTaskAction(elements.taskSubmissionForm, "submit", submitTaskForAcceptance);
+  bindTaskAction(elements.taskAcceptFinal, "click", () => decideTaskAcceptance("accept"));
+  bindTaskAction(elements.taskRequestChanges, "click", () => decideTaskAcceptance("request_changes"));
   elements.projectMobileBack.addEventListener("click", () => {
     if (isMobileWorkspace()) {
-      state.selectedProjectId = "";
-      state.selectedProject = null;
-      updateCollaborationWorkspaceMode();
-      resetMobileLayerScroll();
+      void selectTask("");
       return;
     }
     elements.projectBrowser.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -2755,6 +3022,7 @@ function validReauthenticationCandidate(candidate) {
 }
 
 function clearSensitiveInputs() {
+  state.taskReplyDrafts.clear();
   [
     elements.loginPassword,
     elements.loginMfa,
@@ -5927,6 +6195,8 @@ window.addEventListener("popstate", () => {
     }
   } else if (state.activeModule === "relay" && state.activeSection === "agents") {
     renderAgents(state.dashboard?.agents || []);
+  } else if (state.activeModule === "projects") {
+    void selectTask(parameters.get("task") || "", { updateHistory: false });
   }
 });
 

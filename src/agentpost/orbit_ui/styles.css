@@ -4796,6 +4796,58 @@ footer {
   display: none;
 }
 
+/* Task reading and editing share one stable, Human-facing layout. */
+.task-loading { padding: 48px 24px; min-height: 240px; }
+#task-detail-content[hidden], #task-detail-loading[hidden] { display: none; }
+.task-attention { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; padding: 16px; background: #fff8e6; border: 1px solid #e9d8a2; border-radius: 12px; }
+.task-attention[hidden] { display: none; }
+.task-jump-nav { display: flex; flex-wrap: wrap; gap: 8px; }
+.task-jump-nav button { border: 1px solid #d9e2ef; border-radius: 20px; padding: 9px 14px; background: #fff; color: #24549a; cursor: pointer; }
+.task-jump-nav button[hidden] { display: none; }
+.task-settings > summary, .task-compose-panel > summary { font-size: 1rem; font-weight: 650; cursor: pointer; padding: 8px 0; }
+.task-settings[open] > summary, .task-compose-panel[open] > summary { margin-bottom: 16px; }
+.task-settings > .prototype-card { box-shadow: none; margin-top: 12px; }
+#project-action-result:empty { display: none; }
+#project-detail-description { white-space: pre-line; }
+.task-work-technical { margin-top: 10px; color: #606b7a; font-size: .8rem; }
+.task-work-technical summary { cursor: pointer; }
+.task-earlier-work { border: 1px solid #e1e7ef; border-radius: 12px; padding: 12px; }
+.task-earlier-work > summary { cursor: pointer; font-size: .88rem; line-height: 1.6; overflow-wrap: anywhere; }
+.task-earlier-work[open] > summary { margin-bottom: 12px; }
+.task-work-technical small { display: block; margin-top: 8px; overflow-wrap: anywhere; }
+.project-progress-copy > h4, .task-collaboration-update h4 { font-size: 1rem; margin: 8px 0; overflow-wrap: anywhere; }
+.task-content-excerpt { margin: 6px 0 0; font-weight: 400; color: #596777; line-height: 1.6; font-size: .86rem; }
+.task-readable-body { padding: 18px; font-size: .96rem; line-height: 1.85; color: #253348; overflow-wrap: anywhere; }
+.task-readable-body p { margin: 8px 0; white-space: pre-wrap; }
+.task-readable-body h3, .task-readable-body h4, .task-readable-body h5, .task-readable-body h6 { margin: 20px 0 8px; line-height: 1.5; }
+.task-readable-body ul, .task-readable-body ol { padding-left: 24px; }
+.task-readable-body pre, .task-readable-body code { white-space: pre-wrap; overflow-wrap: anywhere; background: #f3f5f8; }
+.task-readable-body blockquote, .task-reply-form blockquote { border-left: 3px solid #c8d8ee; margin: 10px 0; padding: 8px 14px; color: #596777; background: #f6f8fc; }
+.task-original-source { margin: 0 18px 16px; }
+.task-original-source summary { cursor: pointer; color: #596777; font-size: .8rem; }
+.task-record-reply > summary { color: #24549a; cursor: pointer; padding: 8px 0; font-size: .88rem; }
+.task-reply-form { display: grid; gap: 12px; padding: 16px; border: 1px solid #dce5f1; border-radius: 12px; background: #f8faff; }
+.task-reply-form p { margin: 0; color: #596777; line-height: 1.6; font-size: .85rem; }
+.task-reply-form textarea { box-sizing: border-box; width: 100%; min-height: 100px; resize: vertical; border: 1px solid #c7d4e5; border-radius: 8px; padding: 12px; font: inherit; line-height: 1.6; background: #fff; }
+.task-reply-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
+#task-submission-blockers details { padding: 12px; margin: 12px 0; border: 1px solid #ead8ac; border-radius: 10px; }
+#task-submission-blockers p { white-space: pre-line; overflow-wrap: anywhere; line-height: 1.7; }
+.task-jump-nav button:focus-visible, .task-reply-form textarea:focus-visible, .task-record-reply summary:focus-visible { outline: 3px solid #86ace6; outline-offset: 3px; }
+@media (min-width: 1101px) {
+  .workspace.project-workspace-mode { grid-template-columns: 150px 290px minmax(0, 1fr); }
+}
+@media (max-width: 600px) {
+  .task-readable-body { padding: 12px; }
+  .task-reply-form { padding: 12px; }
+  .task-attention { align-items: flex-start; flex-direction: column; }
+  .task-reply-actions > button { min-height: 42px; }
+  #project-detail .prototype-metrics article { min-height: 0; padding: 10px 12px; gap: 4px; }
+  #project-detail .prototype-metrics strong { font-size: .88rem; }
+}
+@media (max-width: 860px) {
+  .workspace.project-workspace-mode.project-detail-open .context-sidebar { display: none; }
+}
+
 #project-invitation-actions {
   align-items: center;
   justify-content: space-between;

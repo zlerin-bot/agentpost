@@ -121,7 +121,7 @@ test("task progress is Human-first and structured content stays collapsed as a s
   assert.match(script, /AI 需要 Human 确认/);
   assert.match(script, /run_checkpoint/);
   assert.match(script, /human-response/);
-  assert.match(script, /发送回复并重新唤醒 AI/);
+  assert.match(script, /保存回答，等待 AI 继续/);
   assert.match(script, /查看完整任务记录/);
   assert.match(script, /近期协作更新/);
   assert.match(script, /不代表已经形成执行结果或通过验收/);
@@ -244,7 +244,7 @@ test("task detail exposes its stable ID, automatic Agent participation, and Huma
   const ownedTaskAgentsSource = script.match(/function ownedTaskAgents\(\) \{[\s\S]*?\n\}/)?.[0] || "";
   assert.doesNotMatch(ownedTaskAgentsSource, /agent\.access_source === "direct"/);
   assert.match(script, /\/my-agents/);
-  assert.match(html, /任务成员中的 AI 已经自动参与协同/);
+  assert.match(html, /参与 AI 可以读取任务上下文/);
   assert.match(html, /id="project-collaboration-list"/);
   assert.match(script, /等待领取/);
   assert.match(script, /邮件通知已安排发送/);

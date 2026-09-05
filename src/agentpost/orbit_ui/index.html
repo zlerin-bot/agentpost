@@ -436,6 +436,8 @@
               <button id="project-empty-new" type="button" class="primary-action">创建任务</button>
             </div>
             <div id="project-detail" class="prototype-detail">
+              <div id="task-detail-loading" class="task-loading" role="status" hidden><p>正在读取任务…</p><button id="task-detail-retry" type="button" class="quiet-button" hidden>重新读取</button></div>
+              <div id="task-detail-content" class="prototype-detail">
               <div id="project-invitation-actions" class="truth-notice" hidden>
                 <div><strong>你收到了一份任务邀请</strong><span>加入前必须明确选择至少一个自己的 AI。</span></div>
                 <div id="project-accept-agent-options" class="project-invite-options"></div>
@@ -458,33 +460,29 @@
                 <article><span>任务负责人</span><strong id="project-owner">—</strong></article>
                 <article><span>参与 Human</span><strong id="project-member-count">0 人</strong></article>
                 <article><span>计划完成</span><strong id="project-due">—</strong></article>
-                <article><span>执行与验收</span><strong id="project-state-axes">—</strong></article>
+                <article><span>结果验收</span><strong id="project-state-axes">—</strong></article>
               </div>
-              <section class="prototype-card">
-                <div class="prototype-card-heading"><div><span>Human 与 AI</span><h3>任务成员</h3></div><button id="project-member-invite" type="button" class="text-button">邀请好友</button></div>
-                <div id="project-member-list" class="project-member-list"></div>
-                <p id="project-action-result" class="form-status" role="status"></p>
-              </section>
-              <section class="prototype-card">
-                <div class="prototype-card-heading"><div><span>代表我参与</span><h3>我的参与 AI</h3></div><button id="task-add-agent" type="button" class="text-button">添加 AI</button></div>
-                <form id="task-my-agent-form" class="task-agent-choice-row">
-                  <div id="task-my-agent-options" class="task-agent-option-list" role="group" aria-label="选择参与本任务的 AI"></div>
-                  <div class="task-agent-primary-row">
-                    <label for="task-my-primary-agent">主要 AI</label>
-                    <select id="task-my-primary-agent" required></select>
-                    <button type="submit" class="quiet-button">保存选择</button>
-                  </div>
-                </form>
-                <p id="task-my-agent-help" class="task-field-help">可选择多个自己的 AI 共同参与，并指定其中一个作为主要 AI。</p>
+              <p id="project-action-result" class="form-status" role="status"></p>
+              <section id="task-attention" class="task-attention" aria-label="需要我处理" hidden></section>
+              <nav id="task-jump-nav" class="task-jump-nav" aria-label="当前任务内容">
+                <button type="button" data-task-target="task-progress">进展</button>
+                <button type="button" data-task-target="task-records">讨论与记录</button>
+                <button type="button" data-task-target="task-owner-controls">安排工作</button>
+                <button type="button" data-task-target="task-submission-controls">提交与验收</button>
+                <button type="button" data-task-target="task-settings">成员与 AI</button>
+              </nav>
+              <section id="task-progress" class="prototype-card project-collaboration-card" tabindex="-1">
+                <div class="prototype-card-heading"><div><span>工作、结果与最新协作</span><h3>任务进展</h3></div></div>
+                <div id="project-collaboration-list" class="project-collaboration-list"></div>
               </section>
               <section id="task-owner-controls" class="prototype-card" hidden>
-                <div class="prototype-card-heading"><div><span>可选点名</span><h3>追加一项明确工作</h3></div></div>
+                <details class="task-compose-panel"><summary>安排一项明确工作</summary>
                 <form id="task-assignment-form" class="entry-form">
                   <label for="task-assignment-agent">执行 AI</label>
                   <select id="task-assignment-agent" required></select>
                   <label for="task-assignment-instruction">让 AI 做什么</label>
                   <textarea id="task-assignment-instruction" rows="3" maxlength="10000" placeholder="例如：分析现有资料，列出主要风险并提出处理建议" required></textarea>
-                  <p class="task-field-help">任务成员中的 AI 已经自动参与协同；这里只在需要明确点名追加工作时使用。</p>
+                  <p class="task-field-help">参与 AI 可以读取任务上下文。需要执行时，请在这里明确工作要求和执行对象。</p>
                   <details class="task-optional-field">
                     <summary>单独设置本次交付要求（可选）</summary>
                     <p>留空时沿用整个任务的预期交付：<strong id="task-assignment-output-inherited">—</strong></p>
@@ -493,15 +491,18 @@
                   </details>
                   <button type="submit" class="primary-action">交给 AI 执行</button>
                 </form>
+                </details>
               </section>
               <section id="task-submission-controls" class="prototype-card" hidden>
-                <div class="prototype-card-heading"><div><span>交付任务</span><h3>提交任务结果</h3></div></div>
+                <details class="task-compose-panel"><summary>提交整个任务的结果</summary>
+                <div id="task-submission-blockers"></div>
                 <form id="task-submission-form" class="entry-form">
                   <label for="task-final-summary">交付说明</label>
                   <textarea id="task-final-summary" rows="4" maxlength="20000" placeholder="说明已经完成了什么、交付物在哪里，以及验收时需要重点查看什么" required></textarea>
                   <p id="task-submission-help" class="task-field-help">提交后任务进入“待验收”，不能再创建新的 AI 执行单元。</p>
                   <button id="task-submit-final" type="submit" class="primary-action">提交任务结果</button>
                 </form>
+                </details>
               </section>
               <section id="task-review-controls" class="prototype-card" hidden>
                 <div class="prototype-card-heading"><div><span>Human 决策</span><h3>验收任务结果</h3></div></div>
@@ -525,14 +526,29 @@
                   <p id="task-completed-summary">—</p>
                 </div>
               </section>
-              <section class="prototype-card project-collaboration-card">
-                <div class="prototype-card-heading"><div><span>工作、结果与最新协作</span><h3>任务进展</h3></div></div>
-                <div id="project-collaboration-list" class="project-collaboration-list"></div>
+              <details id="task-settings" class="task-settings prototype-card"><summary>成员与我的参与 AI</summary>
+              <section class="prototype-card">
+                <div class="prototype-card-heading"><div><span>Human 与 AI</span><h3>任务成员</h3></div><button id="project-member-invite" type="button" class="text-button">邀请好友</button></div>
+                <div id="project-member-list" class="project-member-list"></div>
               </section>
+              <section class="prototype-card">
+                <div class="prototype-card-heading"><div><span>代表我参与</span><h3>我的参与 AI</h3></div><button id="task-add-agent" type="button" class="text-button">添加 AI</button></div>
+                <form id="task-my-agent-form" class="task-agent-choice-row">
+                  <div id="task-my-agent-options" class="task-agent-option-list" role="group" aria-label="选择参与本任务的 AI"></div>
+                  <div class="task-agent-primary-row">
+                    <label for="task-my-primary-agent">主要 AI</label>
+                    <select id="task-my-primary-agent" required></select>
+                    <button type="submit" class="quiet-button">保存选择</button>
+                  </div>
+                </form>
+                <p id="task-my-agent-help" class="task-field-help">可选择多个自己的 AI 共同参与，并指定其中一个作为主要 AI。</p>
+              </section>
+              </details>
               <section id="task-records" class="prototype-card project-activity-card" tabindex="-1">
                 <div class="prototype-card-heading"><div><span>原始事实与审计记录</span><h3>任务记录</h3></div></div>
                 <div id="project-activity-list" class="project-activity-list"></div>
               </section>
+              </div>
             </div>
           </section>
 
