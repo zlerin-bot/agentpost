@@ -4,6 +4,8 @@ Last updated: 2026-09-05
 
 Current handoff stage: `v0.1.52-deployed-https-verified`
 
+Local recovery tag: `stage-v0.1.52-20260905`; detailed handoff: `docs/AgentPost阶段版本0.1.52交接_20260905.md`.
+
 ## Current local candidate
 
 - Version: `0.1.52`

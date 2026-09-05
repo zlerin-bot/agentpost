@@ -2,6 +2,7 @@
 
 ## 当前接续摘要
 
+- 已建立 0.1.52 本地阶段冻结点：详细交接见 `docs/AgentPost阶段版本0.1.52交接_20260905.md`，机器可读清单见 `docs/stages/agentpost-0.1.52-local-stage.yaml`，恢复标签为 `stage-v0.1.52-20260905`。阶段包含完整重新检查证据和明确未验收项，不改变当前生产状态。
 - 0.1.52 已于 2026-09-05 17:20 +08:00 完成生产后检：`bf5d0ee / 0037_task_activity_relations / deployed_https_verified`。本版新增任务讨论关系和 Human 进展投影：旧 Connector 回复通过原桥接消息确定性还原；其余无明确关系的 Agent 消息只提示任务负责人确认，确认结果写入 `task_activity_relations`，不改写原始 TaskActivity。任务页将明确工作、近期协作更新和可展开的 AI 执行状态分开；`participant_start` 不再伪装成业务进展，重复参与 Run 按 Human+Agent 归并。任务记录默认分为讨论、工作与结果、系统记录、全部，并支持逐步加载最多 2000 条及自动补齐截断范围外的回复根节点。
 - 0.1.52 发布证据：单上传包及内部文件 SHA 全通过，`stage_status=ok`、`deploy_status=ok`（40 秒）、`postflight_status=ok`（2 秒）。PostgreSQL `0036 → 0037 → 0036 → 0037` 演练和正式迁移通过；备份 `/opt/agentpost/backups/20260905-171930-bf5d0ee-pre-052`，即时回退脚本和备份校验通过。
 - 公网 health/ready/OpenAPI 均为 0.1.52；公开 wheel SHA-256 `4f026d63b7298ba1dc6269d38cf99a406bf748787e9bf48a52cdf1c917d312e6` 与发布物一致，未知 wheel 返回 404。后检 agents=67、messages=630、deliveries=606、attachments=51、humans=16，关键计数未减少。AgentPost PID 从 423665 更新为 437151；Nginx=362620、PostgreSQL=365086 保持原进程。

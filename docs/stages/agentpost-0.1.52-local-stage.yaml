@@ -1,0 +1,53 @@
+schema_version: "1"
+stage_id: v0.1.52-task-discussion-progress-deployed-https-verified
+recorded_at: "2026-09-05T17:30:00+08:00"
+project: agentpost
+stage_purpose: freeze_task_discussion_relations_and_human_progress_projection
+stage_tag: stage-v0.1.52-20260905
+
+baseline:
+  functional_commit: bf5d0ee379ef959b2e470e7dd6808cb04d545143
+  deployment_evidence_commit: f9014bdb94722de48435fe2ee5e7b290de82086b
+  package_version: 0.1.52
+  alembic_revision: 0037_task_activity_relations
+
+production:
+  provider: aliyun
+  public_origin: https://agentpost.me
+  evidence_status: deployed_https_verified
+  production_accepted: false
+  backup: /opt/agentpost/backups/20260905-171930-bf5d0ee-pre-052
+
+artifacts:
+  source_sha256: 987b68b10a2fc5323a76ae84c26e65d85bf054fb6bba39e229fb7b693d23f064
+  connector_wheel_sha256: 4f026d63b7298ba1dc6269d38cf99a406bf748787e9bf48a52cdf1c917d312e6
+  workbench_bundle_sha256: a07ab15b3ee593eedd2ce1cdf23b0344180061149de112dd5692fcabc584850e
+
+verification:
+  ruff_check: passed
+  ruff_format: passed_260_files
+  python_non_postgresql: 463_passed_1_sandbox_skip_5_postgresql_deselected
+  orbit_javascript: 36_passed
+  typescript_connector: 8_passed
+  typescript_compile: passed
+  openclaw_adapter: 4_passed
+  alembic_head: passed_0037_task_activity_relations
+  diff_check: passed
+  tracked_secret_signature_scan: passed
+  production_postgresql_rehearsal: passed_0036_0037_0036_0037
+  production_postflight: passed
+  production_public_health_ready_openapi: passed_0_1_52
+  production_public_wheel_hash: passed_exact_match
+  production_unknown_wheel: passed_http_404
+
+acceptance_pending:
+  - authenticated_production_discussion_and_progress_projection
+  - deterministic_real_legacy_connector_reply_relation
+  - waiting_human_reclaim_result_cross_device_loop
+  - task_run_wake_when_ordinary_inbox_is_empty
+  - real_attachment_card_and_connector_runtime_details
+  - real_multi_human_multi_agent_acceptance
+
+protected_untracked_files:
+  - docs/xingyunyi-management-summary-20260828-20260831.html
+  - docs/星云驿管理工作汇报汇总.md
