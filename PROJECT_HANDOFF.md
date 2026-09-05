@@ -2,6 +2,8 @@
 
 ## 当前接续摘要
 
+- 0.1.53 发布候选：已获 Human 部署授权；包含下述 Human 任务界面切片，server/SDK/MCP/TypeScript/OpenClaw/插件/锁文件同步到 0.1.53，schema 保持 0037_task_activity_relations。本地发布回归 463 Python passed、1 loopback 沙箱 skip、5 PostgreSQL deselected；63 JavaScript/Connector/OpenClaw passed；Ruff check/format、JS syntax、TypeScript build、diff check 通过。生产切换及后检待记录。
+
 - 2026-09-05 本地未发布 Human 任务界面切片：从 0.1.52 冻结点继续，未改 server/SDK/schema/包版本。任务切换整块隐藏并 inert 旧详情，按请求序号隔离迟到响应，404 不再递归重载；选择任务写入 task 深链接，支持后退/前进和手机直接进入详情，创建任务不会被旧 URL 拉回原任务。
 - Human 首屏前置待处理、近期更新及任务进展；成员/AI 选择、派工和最终提交默认折叠。工作显示归属与 ID，已完成及同对象同要求的较早工作折叠但不合并状态；历史不确定回复建议放入负责人专用筛选，确认前可对照候选原文。
 - 正文卡展示主题和摘要，区分正文与真实附件；Markdown/长文本使用只创建文本节点及标题、列表、强调等安全元素的阅读视图，不执行 HTML、脚本、图片或链接，原始正文仍可查看。Human 回复显示发言身份和引用，草稿只保存在当前页面内存；未知发送结果用同一内容及幂等键重试，退出/页面离开清除草稿。主要写操作防重复点击，迟到写响应不覆盖别的任务。
