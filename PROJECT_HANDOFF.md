@@ -2,6 +2,9 @@
 
 ## 当前接续摘要
 
+- 本地待发布字号统一切片（0.1.54 之后）：用共享 rem 字号变量替换历史小数散值；PC/手机页面标题 28/24px，板块 18px、内容标题 16px、正文 15px、操作 14px、辅助信息 13px，状态标签/任务 ID 12px；输入控件 16px。任务、好友、AI、设置与弹窗共用层级，任务进展/记录/折叠板块标题一致，普通正文/进展/阅读卡摘要不再混用 10–16px。长正文卡标题换行、图标顶部对齐，手机卡片缩小头像占位以保留阅读宽度。
+- 字号切片验证：51 JavaScript tests、JS syntax、diff check 通过；本地真实计算字号与上述层级一致，桌面 1470px 与手机 390px 无横向溢出；手机任务/好友/AI/设置、创建窗口 Tab/Escape、16px 输入、合成长主机名/64 位哈希/JSON 换行实测通过，控制台无 warning/error。本轮只改 CSS，未重跑 Python/PostgreSQL；未部署此字号切片，当前生产仍是下述 0.1.54。
+
 - 当前生产已更新为 **0.1.54 / 354d82e / 0037_task_activity_relations / deployed_https_verified**（2026-09-05 21:46 +08:00）。本轮 Human 任务导航、进展与讨论阅读改进，以及真实长 AI 名称/SHA/JSON 的手机换行补丁均已上线。下列“本地未发布/发布候选”均为过程记录，已被本条最终状态覆盖；仍不是 production_accepted。
 - 0.1.54 单包 stage/deploy/postflight 全部 ok，切换 38 秒、后检 2 秒；备份 `/opt/agentpost/backups/20260905-214549-354d82e-pre-054`，即时回退脚本及数据库/附件/配置/旧 wheel 校验通过。0.1.52 和 0.1.53 恢复资料仍保留。
 - 公网及本机 health/ready 正常，公网 OpenAPI 版本 0.1.54；wheel SHA-256 `02ffa6c33a75a75274edb3276d5bf4a801e58f14debfa4589f89e34d19ca3019`，未知下载 404；公开 JS/CSS 与本地提交字节完全一致。后检 agents=67、messages=638、deliveries=614、attachments=51、humans=16，关键计数未减少。AgentPost PID=442441；Nginx=362620、PostgreSQL=365086 保持原进程。
