@@ -2,8 +2,10 @@
 
 ## 当前接续摘要
 
-- 0.1.52 本地候选新增任务讨论关系和 Human 进展投影：旧 Connector 回复通过原桥接消息确定性还原；其余无明确关系的 Agent 消息只提示任务负责人确认，确认结果写入 `task_activity_relations`，不改写原始 TaskActivity。任务页将明确工作、近期协作更新和可展开的 AI 执行状态分开；`participant_start` 不再伪装成业务进展，重复参与 Run 按 Human+Agent 归并。任务记录默认分为讨论、工作与结果、系统记录、全部，并支持逐步加载最多 2000 条及自动补齐截断范围外的回复根节点。
-- 0.1.52 本地验证：Alembic 单 head `0037_task_activity_relations`；463 Python passed、1 沙箱 skip、5 PostgreSQL deselected；36 项前端导航测试、TypeScript Connector 8 项、OpenClaw 4 项、JS syntax、TypeScript build、Ruff check/format 和 diff check 通过。隔离认证页面桌面与 390px 无横向溢出，任务进展、讨论筛选和 AI 执行状态可读，控制台无 warning/error。最终 wheel SHA-256 为 `4f026d63b7298ba1dc6269d38cf99a406bf748787e9bf48a52cdf1c917d312e6`。尚未运行 PostgreSQL 0036↔0037 迁移演练，未部署。
+- 0.1.52 已于 2026-09-05 17:20 +08:00 完成生产后检：`bf5d0ee / 0037_task_activity_relations / deployed_https_verified`。本版新增任务讨论关系和 Human 进展投影：旧 Connector 回复通过原桥接消息确定性还原；其余无明确关系的 Agent 消息只提示任务负责人确认，确认结果写入 `task_activity_relations`，不改写原始 TaskActivity。任务页将明确工作、近期协作更新和可展开的 AI 执行状态分开；`participant_start` 不再伪装成业务进展，重复参与 Run 按 Human+Agent 归并。任务记录默认分为讨论、工作与结果、系统记录、全部，并支持逐步加载最多 2000 条及自动补齐截断范围外的回复根节点。
+- 0.1.52 发布证据：单上传包及内部文件 SHA 全通过，`stage_status=ok`、`deploy_status=ok`（40 秒）、`postflight_status=ok`（2 秒）。PostgreSQL `0036 → 0037 → 0036 → 0037` 演练和正式迁移通过；备份 `/opt/agentpost/backups/20260905-171930-bf5d0ee-pre-052`，即时回退脚本和备份校验通过。
+- 公网 health/ready/OpenAPI 均为 0.1.52；公开 wheel SHA-256 `4f026d63b7298ba1dc6269d38cf99a406bf748787e9bf48a52cdf1c917d312e6` 与发布物一致，未知 wheel 返回 404。后检 agents=67、messages=630、deliveries=606、attachments=51、humans=16，关键计数未减少。AgentPost PID 从 423665 更新为 437151；Nginx=362620、PostgreSQL=365086 保持原进程。
+- 0.1.52 本地验证：Alembic 单 head `0037_task_activity_relations`；463 Python passed、1 沙箱 skip、5 PostgreSQL deselected；36 项前端导航测试、TypeScript Connector 8 项、OpenClaw 4 项、JS syntax、TypeScript build、Ruff check/format 和 diff check 通过。隔离认证页面桌面与 390px 无横向溢出，任务进展、讨论筛选和 AI 执行状态可读，控制台无 warning/error。刷新生产页面后既有 Human 会话已过期，公开登录页视觉正常；登录后真实任务页仍待用户验收。
 - 0.1.51 已于 2026-09-04 18:19 +08:00 完成生产后检：`2a6b464 / 0036_cancel_auto_ack_runs / deployed_https_verified`。下列“待发布”条目为本次发布前记录，现已随 0.1.51 上线；历史消息未补写回复关联。
 - 发布证据：单上传包和内部文件 SHA 全通过，`stage_status=ok`、`deploy_status=ok`（39 秒）、`postflight_status=ok`（3 秒）。备份 `/opt/agentpost/backups/20260904-181757-2a6b464-pre-051`，已验证 `rollback-immediate-0.1.51.sh` 与 0.1.50 回退资料。
 - 公网 health/ready/OpenAPI 均为 0.1.51，公开 wheel SHA-256 `41b236f5a6dcb0e2bc464e82769f6a9df09e57814b581b2a48111ec0e4571008`；后检 agents=65、messages=606、deliveries=588、attachments=51、humans=16，关键计数未减少。AgentPost PID=423665，Nginx=362620、PostgreSQL=365086 保持原进程；schema 未变化。
@@ -11,9 +13,9 @@
 - 0.1.51 发布候选：整合任务页标题/接收方降噪与显式回复串；server/SDK/MCP/OpenClaw/插件/锁文件版本已同步。schema 保持 `0036_cancel_auto_ack_runs`。已获部署授权，按单上传包 Workbench 流程执行，生产切换与后检结果待记录。
 - 本地待发布回复关联切片：Task 消息支持 `reply_to_activity_id`、`referenced_activity_ids`，服务端验证同任务并生成 `discussion_root_activity_id`；无回复参数的旧连接与既有幂等哈希保持兼容，不推断历史关联。Python SDK/MCP/OpenClaw/机器合同同步新增可选参数。Human 可在任务记录直接回复，使用 Human 会话、CSRF、幂等键与真实 Human 身份，写入共享 TaskActivity，不代替 Run/Human 验收；该入口不产生旧 Inbox 投递或唤醒工单，Agent 通过 Task API 读取。页面默认按讨论折叠、可切换时间视图，支持原文定位；附加引用目前由 Agent API 提供，网站回复入口只选择一条直接回复对象。462 项非 PostgreSQL 测试通过、1 沙箱 skip、5 PostgreSQL deselected；35 项导航测试通过，Ruff/format/JS syntax 通过。隔离 Chrome 实测两级 Human 回复、讨论/时间切换、原文定位、390px 无横向溢出与控制台错误。未部署、未修改历史生产消息。
 - 本地待发布 UI 小切片：任务记录接收范围默认折叠为“共享给 N 人”，按 Human ID 去重；展开后查看 Human/AI 与简短状态，兼容投递及未知状态在摘要提示。只调整展示，不改变投递、已读或 Run 状态。前端导航测试 34 项、JS 语法及 diff check 通过；隔离浏览器因本地 Chrome 沙箱启动失败，桌面/390px 交互验证待确认；未部署。
-- 交接阶段：`0.1.52-local-verified`
-- 本地候选：`0.1.52 / 0037_task_activity_relations`；生产仍为 `0.1.51 / 0036_cancel_auto_ack_runs`，保留 0.1.50 回退点。
-- 当前生产：`2a6b464 / 0.1.51 / 0036_cancel_auto_ack_runs / deployed_https_verified`（2026-09-04 18:19 +08:00 完成后检）。
+- 交接阶段：`0.1.52-deployed-https-verified`
+- 本地与生产：`bf5d0ee / 0.1.52 / 0037_task_activity_relations`；保留完整 0.1.51 即时回退点。
+- 当前生产：`bf5d0ee / 0.1.52 / 0037_task_activity_relations / deployed_https_verified`（2026-09-05 17:20 +08:00 完成后检）。
 - 生产接受状态：不是 `production_accepted`
 - 本切片：修复旧 Thread 列表/详情混入无 Delivery 的 Task 源消息导致 500；保留当前 Agent 的实际投递视图，并要求 TaskMembership 与 Agent 参与资格均有效。共享完整上下文继续使用 Task API，不恢复无任务私信。
 - OpenAPI 版本使用实际包版本；意外异常返回安全 JSON 和 request_id，不输出异常正文或凭据。心跳显式返回 version_status、原因、推荐与最低版本，未上报保持 unknown；Python SDK 兼容旧响应缺少这些字段。
@@ -111,12 +113,11 @@ Task，不能再建立平行容器、另一套成员角色或共享通信规则�
 
 ## 待完成
 
-1. 在 PostgreSQL 完成 0036 → 0037 → 0036 → 0037 迁移演练。
-2. 生产发布前用真实“小孔成像”数据确认 Zoe 旧版桥接回复能确定性归入 Mars 原讨论；不直接修改生产活动。
-3. 在真实 Agent 上完成 waiting_human 回复后的重新领取、执行和结果回写跨设备验收。
-4. 完成真实任务附件卡和连接详情的认证视觉验收。
-5. 完成真实用户跨设备验收；此前不得标记为 `production_accepted`。
-6. 不要纳入两个无关的未跟踪管理汇报文件。
+1. 登录生产 Human 页面，用真实“小孔成像”数据确认 Zoe 旧版桥接回复能确定性归入 Mars 原讨论；不直接修改生产活动。
+2. 在真实 Agent 上完成 waiting_human 回复后的重新领取、执行和结果回写跨设备验收。
+3. 完成真实任务附件卡、连接详情和任务讨论关系的认证视觉验收。
+4. 完成真实用户跨设备验收；此前不得标记为 `production_accepted`。
+5. 不要纳入两个无关的未跟踪管理汇报文件。
 
 ## 0.1.49 生产发布证据
 

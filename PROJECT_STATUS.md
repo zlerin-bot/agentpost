@@ -2,7 +2,7 @@
 
 Last updated: 2026-09-05
 
-Current handoff stage: `v0.1.52-task-progress-local-verified`
+Current handoff stage: `v0.1.52-deployed-https-verified`
 
 ## Current local candidate
 
@@ -52,21 +52,22 @@ configuration, and test paths.
 - Authenticated desktop and 390px production 0.1.45: passed for multi-Agent selection, primary-Agent controls, add-Agent navigation, Human colors, timestamps, mobile list/detail navigation, zero horizontal overflow, and zero console errors.
 - PostgreSQL 0034 → 0035 → 0034 → 0035 rehearsal and production upgrade: passed. The migration cancelled 43 obsolete Assignments and 49 associated historical Runs; zero targeted pre-0.1.44 nonterminal Assignments remain.
 - PostgreSQL 0036 production cleanup cancelled 5 nonterminal automatic acknowledgement Assignments and 5 associated Runs; zero nonterminal `task_message` / `result_sync` Assignments remain.
+- PostgreSQL 0036 → 0037 → 0036 → 0037 release rehearsal and production upgrade: passed. Independent postflight verified schema `0037_task_activity_relations`, backup checksums and the immediate rollback script.
 
 ## Production
 
-- Current production commit: `2a6b464`
-- Current production version/schema: `0.1.51 / 0036_cancel_auto_ack_runs`
+- Current production commit: `bf5d0ee`
+- Current production version/schema: `0.1.52 / 0037_task_activity_relations`
 - State: `deployed_https_verified`, not `production_accepted`.
 - Protected switch reported `deploy_status=ok`; independent full postflight reported `postflight_status=ok`.
-- Public health/ready and Connector release config report 0.1.51; the protocol contract requires task context for Agent sends while preserving legacy Task bridge compatibility. Production remains `deployed_https_verified`, not `production_accepted`.
-- The authenticated production “测试任务” page exposes the waiting-Human question and response control. Its long-progress link expands the matching lifecycle group, updates the activity anchor, and reveals the complete Task record; the console had no warnings/errors.
+- Public health/ready/OpenAPI report 0.1.52. The public wheel SHA-256 is `4f026d63b7298ba1dc6269d38cf99a406bf748787e9bf48a52cdf1c917d312e6`, matching the release artifact; an unknown wheel returns 404.
+- Backup and immediate rollback point: `/opt/agentpost/backups/20260905-171930-bf5d0ee-pre-052`. Postflight counts are agents=67, messages=630, deliveries=606, attachments=51, humans=16; no protected count decreased.
+- A fresh public login page rendered normally. The existing Human session expired after refresh, so authenticated production verification of the new discussion/progress projection remains pending. Production remains `deployed_https_verified`, not `production_accepted`.
 
 ## Next release gates
 
-1. Rehearse PostgreSQL schema 0036 → 0037 → 0036 → 0037 before release.
-2. Verify the deterministic legacy-reply reconstruction against the real “小孔成像” task without rewriting production activity.
-3. Complete the real-Agent waiting-Human response → reclaim → result cross-device loop.
-4. Complete authenticated visual acceptance of a real Task attachment card and Connector runtime details.
-5. Complete real-user cross-device acceptance before changing the state to `production_accepted`.
-6. Keep the two unrelated untracked management-report files untouched.
+1. Verify the deterministic legacy-reply reconstruction against the real “小孔成像” task without rewriting production activity.
+2. Complete the real-Agent waiting-Human response → reclaim → result cross-device loop.
+3. Complete authenticated visual acceptance of a real Task attachment card, Connector runtime details, and the new discussion/progress projection.
+4. Complete real-user cross-device acceptance before changing the state to `production_accepted`.
+5. Keep the two unrelated untracked management-report files untouched.
