@@ -76,6 +76,7 @@ def launch_doubao_work(config_path: Path) -> int:
     environment = os.environ.copy()
     environment["AGENTPOST_SERVER"] = server
     environment["AGENTPOST_PROFILE"] = profile
+    environment["AGENTPOST_HOST"] = "doubao_work"
     completed = subprocess.run([str(mcp)], env=environment, check=False)
     return completed.returncode
 

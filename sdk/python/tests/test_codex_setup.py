@@ -90,6 +90,8 @@ def test_configure_codex_mcp_is_idempotent_and_stores_only_profile_reference(
         "AGENTPOST_SERVER=https://agentpost.me",
         "--env",
         "AGENTPOST_PROFILE=codex:test-device",
+        "--env",
+        "AGENTPOST_HOST=codex",
         "--",
         str(executable),
     )

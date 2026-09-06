@@ -64,6 +64,7 @@ def test_configure_openclaw_uses_validated_cli_and_profile_reference(
         "env": {
             "AGENTPOST_SERVER": "https://agentpost.me",
             "AGENTPOST_PROFILE": "openclaw:test-device",
+            "AGENTPOST_HOST": "openclaw",
         },
     }
     assert "AGENTPOST_API_KEY" not in calls[2][4]
@@ -93,6 +94,7 @@ def test_configure_openclaw_passes_only_non_secret_session_collection_hint(
     assert definition["env"] == {
         "AGENTPOST_SERVER": "https://agentpost.me",
         "AGENTPOST_PROFILE": "openclaw:headless-linux",
+        "AGENTPOST_HOST": "openclaw",
         "AGENTPOST_KEYRING_COLLECTION": "session",
     }
     assert "agt_" not in calls[2][4]

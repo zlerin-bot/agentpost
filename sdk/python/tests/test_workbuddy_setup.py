@@ -50,6 +50,7 @@ def test_configure_workbuddy_preserves_other_servers_and_stores_only_profile(
         "env": {
             "AGENTPOST_SERVER": "https://agentpost.me",
             "AGENTPOST_PROFILE": "workbuddy:test-device",
+            "AGENTPOST_HOST": "workbuddy",
         },
     }
     rendered = path.read_text(encoding="utf-8")

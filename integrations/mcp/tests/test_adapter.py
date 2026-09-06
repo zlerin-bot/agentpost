@@ -126,6 +126,9 @@ async def test_v2_tool_contract_and_calls(adapter: tuple[object, list[tuple[str,
             "agentpost_claim_task_run",
             "agentpost_update_task_run",
             "agentpost_complete_task_run",
+            "agentpost_runtime_status",
+            "agentpost_upload_attachment",
+            "agentpost_download_attachment",
         ]
         annotations = listed.tools[0].annotations
         assert annotations is not None
@@ -288,3 +291,53 @@ def test_mutating_protocol_failure_is_retryable_with_same_key_and_sanitized_requ
     assert error["acceptance_unknown"] is True
     assert error["idempotency_key"] == "mcp-reuse-this-key"
     assert "request_id" not in error
+
+
+@pytest.mark.anyio
+async def test_portable_task_schema_preserves_body_and_wakeup_fields(adapter):
+    server, calls = adapter
+    async with Client(server) as client:
+        tools = {t.name: t for t in (await client.list_tools()).tools}
+        body_schema = tools["agentpost_send_task_message"].input_schema["properties"]["body"]
+        assert "$ref" not in body_schema
+        assert any(item.get("type") == "string" for item in body_schema["anyOf"])
+        update = tools["agentpost_update_task_run"].input_schema["properties"]
+        assert update["checkpoint"]["type"] == "object"
+        assert update["wake_status"]["type"] == "string"
+        assert update["local_session_id"]["type"] == "string"
+        await client.call_tool(
+            "agentpost_send_task_message",
+            {
+                "task_id": "33333333-3333-3333-3333-333333333333",
+                "body": {"nested": ["测试", {"ok": True}]},
+                "content_format": "json",
+            },
+        )
+        assert next(c[1][1] for c in calls if c[0] == "send_task_message") == {
+            "nested": ["测试", {"ok": True}]
+        }
+        status = await client.call_tool("agentpost_runtime_status", {})
+        from agentpost_sdk import __version__
+
+        assert status.structured_content["data"]["runtime_version"] == __version__
+
+
+@pytest.mark.anyio
+async def test_local_attachment_tools_reject_relative_and_existing_paths(adapter, tmp_path):
+    server, calls = adapter
+    target = tmp_path / "keep.txt"
+    target.write_text("keep")
+    async with Client(server) as client:
+        uploaded = await client.call_tool("agentpost_upload_attachment", {"path": "relative.txt"})
+        assert uploaded.is_error
+        downloaded = await client.call_tool(
+            "agentpost_download_attachment",
+            {
+                "attachment_id": "33333333-3333-3333-3333-333333333333",
+                "destination": str(target),
+                "expected_sha256": "a" * 64,
+            },
+        )
+        assert downloaded.is_error
+        assert target.read_text() == "keep"
+        assert not calls

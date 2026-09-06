@@ -112,6 +112,7 @@ def configure_hermes_mcp(
         f"mcp_servers.{MCP_SERVER_NAME}.command": str(executable),
         f"mcp_servers.{MCP_SERVER_NAME}.env.AGENTPOST_SERVER": cleaned_server,
         f"mcp_servers.{MCP_SERVER_NAME}.env.AGENTPOST_PROFILE": cleaned_profile,
+        f"mcp_servers.{MCP_SERVER_NAME}.env.AGENTPOST_HOST": "hermes",
         f"mcp_servers.{MCP_SERVER_NAME}.env.AGENTPOST_KEYRING_COLLECTION": (
             keyring_collection or ""
         ),

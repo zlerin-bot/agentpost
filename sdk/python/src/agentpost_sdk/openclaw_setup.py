@@ -149,6 +149,7 @@ def configure_openclaw_mcp(
     environment = {
         "AGENTPOST_SERVER": cleaned_server,
         "AGENTPOST_PROFILE": cleaned_profile,
+        "AGENTPOST_HOST": "openclaw",
     }
     if keyring_collection:
         environment["AGENTPOST_KEYRING_COLLECTION"] = keyring_collection

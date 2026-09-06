@@ -11,7 +11,13 @@ from agentpost.db import Database
 from agentpost.identity.models import utc_now
 from agentpost.main import create_app
 from agentpost.onboarding.models import AgentConnectorBinding, ConnectorInstance
-from agentpost.tasks.models import AgentRun, TaskActivity, TaskAgentParticipant, TaskAssignment
+from agentpost.tasks.models import (
+    AgentRun,
+    TaskActivity,
+    TaskAgentParticipant,
+    TaskAssignment,
+    TaskMembership,
+)
 
 PASSWORD = "correct horse battery staple"
 ADMIN_KEY = "admin-secret-admin-secret-admin-secret"
@@ -1237,6 +1243,21 @@ def test_task_messages_use_legacy_inbox_and_native_run_without_breaking_old_conn
                     )
                 )
             )
+
+        # Even a stale active Agent selection must not bypass revoked Human membership.
+        with database.session_factory() as session:
+            membership = session.get(TaskMembership, (UUID(task_id), UUID(member["user"]["id"])))
+            membership.status = "declined"
+            session.commit()
+        _login(client, "message-member")
+        assert client.get(f"/api/v1/orbit/attachments/{attachment_id}").status_code == 404
+        assert (
+            client.get(
+                f"/api/v1/attachments/{attachment_id}",
+                headers={"Authorization": f"Bearer {member_agent['api_key']}"},
+            ).status_code
+            == 404
+        )
 
 
 def test_agent_resolves_only_its_participating_tasks_by_exact_title(

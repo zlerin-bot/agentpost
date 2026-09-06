@@ -187,7 +187,11 @@ def test_real_mcp_v2_server_exports_exact_schemas_and_sync_tool_contracts() -> N
         )
     )
     tools = {tool.name: tool for tool in server._tool_manager.list_tools()}
-    assert set(tools) == EXPECTED_TOOLS
+    assert set(tools) == EXPECTED_TOOLS | {
+        "agentpost_runtime_status",
+        "agentpost_upload_attachment",
+        "agentpost_download_attachment",
+    }
     # MCP v2 executes registered synchronous functions via its worker-thread path.
     assert all(tool.is_async is False for tool in tools.values())
 

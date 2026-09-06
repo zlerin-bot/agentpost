@@ -69,6 +69,7 @@ def launch_manus(config_path: Path) -> int:
     environment = os.environ.copy()
     environment["AGENTPOST_SERVER"] = server
     environment["AGENTPOST_PROFILE"] = profile
+    environment["AGENTPOST_HOST"] = "manus"
     completed = subprocess.run([str(mcp)], env=environment, check=False)
     return completed.returncode
 

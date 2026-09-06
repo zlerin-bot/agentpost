@@ -9,7 +9,7 @@ from uuid import UUID
 
 from agentpost_sdk import AgentPost
 from mcp.types import CallToolResult, ToolAnnotations
-from pydantic import AfterValidator, Field, JsonValue
+from pydantic import AfterValidator, Field, JsonValue, WithJsonSchema
 
 from agentpost_mcp.config import Settings
 from agentpost_mcp.results import failure, success
@@ -155,7 +155,7 @@ def register_tools(mcp: Any, create_client: ClientFactory) -> None:
     )
     def send_task_message(
         task_id: UUID,
-        body: JsonValue,
+        body: str | dict[str, Any] | list[Any] | int | float | bool | None,
         subject: Annotated[str, Field(max_length=500)] = "",
         content_format: ContentFormat = "text",
         attachment_ids: AttachmentIds = None,
@@ -233,7 +233,7 @@ def register_tools(mcp: Any, create_client: ClientFactory) -> None:
     )
     def reply(
         message_id: MessageId,
-        body: JsonValue,
+        body: str | dict[str, Any] | list[Any] | int | float | bool | None,
         subject: Annotated[str, Field(max_length=500)] = "",
         message_type: ReplyType = "message",
         content_format: ContentFormat = "text",
@@ -352,9 +352,18 @@ def register_tools(mcp: Any, create_client: ClientFactory) -> None:
         run_id: UUID,
         lease_token: Annotated[str, Field(min_length=20, max_length=500)],
         status: Literal["starting", "running", "waiting_human"],
-        checkpoint: Mapping[str, JsonValue] | None = None,
-        wake_status: Literal["mapped", "woken"] | None = None,
-        local_session_id: Annotated[str | None, Field(max_length=255)] = None,
+        checkpoint: Annotated[
+            dict[str, Any] | None, WithJsonSchema({"type": "object", "additionalProperties": True})
+        ] = None,
+        wake_status: Annotated[
+            Literal["mapped", "woken"] | None,
+            WithJsonSchema({"type": "string", "enum": ["mapped", "woken"]}),
+        ] = None,
+        local_session_id: Annotated[
+            str | None,
+            Field(max_length=255),
+            WithJsonSchema({"type": "string", "maxLength": 255}),
+        ] = None,
     ) -> CallToolResult:
         try:
             with create_client() as client:
@@ -384,7 +393,9 @@ def register_tools(mcp: Any, create_client: ClientFactory) -> None:
         lease_token: Annotated[str, Field(min_length=20, max_length=500)],
         status: Literal["completed", "partial", "failed", "cancelled"],
         summary: Annotated[str, Field(min_length=1, max_length=20000)],
-        checkpoint: Mapping[str, JsonValue] | None = None,
+        checkpoint: Annotated[
+            dict[str, Any] | None, WithJsonSchema({"type": "object", "additionalProperties": True})
+        ] = None,
         idempotency_key: IdempotencyKey = None,
     ) -> CallToolResult:
         try:

@@ -2776,7 +2776,7 @@ def update_agent_run(
                 "run_id": str(run.id),
                 "status": payload.status,
                 "wake_status": payload.wake_status,
-                "checkpoint": payload.checkpoint,
+                "checkpoint": run.checkpoint,
             },
         )
     session.commit()
@@ -2818,8 +2818,15 @@ def complete_agent_run(
     payload: AgentRunResult,
     idempotency_key: str | None = None,
 ) -> None:
+    hash_payload = payload.model_dump(mode="json")
+    if "checkpoint" not in payload.model_fields_set:
+        current_run = session.get(AgentRun, run_id)
+        if current_run is not None and current_run.agent_id == agent.id:
+            # Hash the effective preserved value, so retry is stable and an explicit
+            # clear is not silently treated as the same result submission.
+            hash_payload["checkpoint"] = current_run.checkpoint
     request_hash = hashlib.sha256(
-        json.dumps(payload.model_dump(mode="json"), sort_keys=True, separators=(",", ":")).encode()
+        json.dumps(hash_payload, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
     if idempotency_key is not None:
         existing_by_key = session.scalar(

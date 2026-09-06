@@ -94,6 +94,7 @@ def configure_workbuddy_mcp(
         "env": {
             "AGENTPOST_SERVER": cleaned_server,
             "AGENTPOST_PROFILE": cleaned_profile,
+            "AGENTPOST_HOST": "workbuddy",
         },
     }
     _atomic_write(path, payload)

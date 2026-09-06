@@ -9,6 +9,7 @@ import json
 import mimetypes
 import os
 import platform
+import secrets
 import sys
 import time
 from pathlib import Path
@@ -145,6 +146,7 @@ def _parser() -> argparse.ArgumentParser:
         required=True,
         help="stable task ID or exact task title; ambiguous matches require confirmation",
     )
+    send.add_argument("--idempotency-key", help="reuse this key for an unchanged send retry")
     send.add_argument("--subject", default="")
     send.add_argument("--body", required=True)
     send.add_argument(
@@ -568,13 +570,28 @@ def _run(args: argparse.Namespace) -> int:
             task_id = _resolve_task(client, args.task)
             if task_id is None:
                 return 2
-            attachment_ids = _upload_attachments(client, args.attachment)
+            from agentpost_sdk.send_receipt import prepared_attachments
+
+            send_key = args.idempotency_key or secrets.token_hex(16)
+            if args.idempotency_key:
+                attachment_ids = prepared_attachments(
+                    scope=f"{connector.client.server}|{connector.profile}",
+                    key=send_key,
+                    task_id=str(task_id),
+                    subject=args.subject,
+                    body=args.body,
+                    paths=args.attachment,
+                    upload=lambda paths: _upload_attachments(client, paths),
+                )
+            else:
+                attachment_ids = _upload_attachments(client, args.attachment)
             sent = client.send_task_message(
                 task_id,
                 args.body,
                 subject=args.subject,
                 attachments=attachment_ids,
                 publication_origin="human_delegated",
+                idempotency_key=send_key,
             )
             result = {
                 "status": "accepted",
@@ -584,6 +601,7 @@ def _run(args: argparse.Namespace) -> int:
                 "queued_run_count": sent.queued_run_count,
                 "legacy_delivery_count": sent.legacy_delivery_count,
                 "attachment_count": len(attachment_ids),
+                "idempotency_key": send_key,
             }
             if configured is not None:
                 result.update(

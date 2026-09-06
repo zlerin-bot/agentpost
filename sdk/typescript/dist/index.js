@@ -1,5 +1,5 @@
 const RUNTIME_CAPABILITIES = ["task_context_read", "task_message_send", "durable_task_run"];
-const RUNTIME_VERSION = "agentpost-connect/0.1.55";
+const RUNTIME_VERSION = "agentpost-connect/0.1.56";
 const RUNTIME_SESSION_STARTED_AT = new Date().toISOString();
 export class AgentPostError extends Error {
     code;
@@ -244,7 +244,7 @@ export class AgentPostClient {
             body: {
                 lease_token: options.leaseToken,
                 status: options.status,
-                checkpoint: options.checkpoint ?? {},
+                checkpoint: options.checkpoint,
                 wake_status: options.wakeStatus,
                 local_session_id: options.localSessionId,
             },
@@ -258,7 +258,7 @@ export class AgentPostClient {
                 lease_token: options.leaseToken,
                 status: options.status,
                 summary: options.summary,
-                checkpoint: options.checkpoint ?? {},
+                checkpoint: options.checkpoint,
             },
         });
     }

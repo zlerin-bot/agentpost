@@ -164,6 +164,8 @@ def configure_codex_mcp(
         f"AGENTPOST_SERVER={cleaned_server}",
         "--env",
         f"AGENTPOST_PROFILE={cleaned_profile}",
+        "--env",
+        "AGENTPOST_HOST=codex",
         "--",
         str(executable),
     )

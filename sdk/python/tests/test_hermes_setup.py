@@ -42,6 +42,7 @@ def test_configure_hermes_uses_official_cli_and_only_non_secret_environment(
         ["config", "set"],
         ["config", "set"],
         ["config", "set"],
+        ["config", "set"],
         ["mcp", "test"],
     ]
     assert calls[2][0] == [
@@ -60,11 +61,11 @@ def test_configure_hermes_uses_official_cli_and_only_non_secret_environment(
         "mcp_servers.agentpost.env.AGENTPOST_PROFILE",
         "hermes:test-device",
     ]
-    assert calls[5][0][-2:] == [
+    assert calls[6][0][-2:] == [
         "mcp_servers.agentpost.env.AGENTPOST_KEYRING_COLLECTION",
         "session",
     ]
-    assert calls[6][0] == ["/opt/hermes/bin/hermes", "mcp", "test", "agentpost"]
+    assert calls[7][0] == ["/opt/hermes/bin/hermes", "mcp", "test", "agentpost"]
     assert result.server_name == "agentpost"
     assert result.config_path == tmp_path / "hermes-home" / "config.yaml"
     assert result.restart_required is False

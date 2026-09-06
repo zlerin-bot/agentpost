@@ -39,25 +39,33 @@ def visible_attachment(session: Session, *, agent_id: UUID, attachment_id: UUID)
         if attachment.uploader_agent_id != agent_id:
             raise AttachmentNotFoundError(attachment_id)
         return attachment
-    if attachment.uploader_agent_id == agent_id:
-        return attachment
     primary_message = session.get(Message, attachment.message_id) if attachment.message_id else None
-    if primary_message is not None and primary_message.message_metadata.get(
-        "agentpost_task_source"
+    if primary_message is not None and (
+        primary_message.message_metadata.get("agentpost_task_source")
+        or primary_message.message_metadata.get("agentpost_task_bridge")
     ):
-        from agentpost.tasks.models import Task, TaskAgentParticipant
+        from agentpost.tasks.models import Task, TaskAgentParticipant, TaskMembership
 
         task_access = session.scalar(
             select(TaskAgentParticipant.agent_id)
             .join(Task, Task.id == TaskAgentParticipant.task_id)
+            .join(
+                TaskMembership,
+                (TaskMembership.task_id == Task.id)
+                & (TaskMembership.human_user_id == TaskAgentParticipant.human_user_id),
+            )
             .where(
                 Task.thread_id == primary_message.thread_id,
                 TaskAgentParticipant.agent_id == agent_id,
                 TaskAgentParticipant.active.is_(True),
+                TaskMembership.status == "active",
             )
         )
-        if task_access is not None:
-            return attachment
+        if task_access is None:
+            raise AttachmentNotFoundError(attachment_id)
+        return attachment
+    if attachment.uploader_agent_id == agent_id:
+        return attachment
     allowed = session.scalar(
         select(Message.id)
         .join(message_attachments, message_attachments.c.message_id == Message.id)

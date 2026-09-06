@@ -314,6 +314,8 @@ def test_send_can_resume_after_codex_setup_resolve_task_and_upload_attachment(
     assert calls["upload"] == (report, {"content_type": "application/pdf"})
     send_args, send_kwargs = calls["send"]
     assert send_args == (str(task_id), "请查收附件。")
+    sent_key = send_kwargs.pop("idempotency_key")
+    assert len(sent_key) == 32
     assert send_kwargs == {
         "subject": "季度报告",
         "attachments": ["30000000-0000-0000-0000-000000000001"],

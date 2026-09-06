@@ -37,4 +37,7 @@ def create_server(
         log_level=settings.log_level,
     )
     register_tools(mcp, create_client or client_factory(settings))
+    from agentpost_mcp.local_tools import register_local_tools
+
+    register_local_tools(mcp, create_client or client_factory(settings))
     return mcp

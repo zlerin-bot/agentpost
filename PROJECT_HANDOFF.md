@@ -2,6 +2,13 @@
 
 ## 当前接续摘要
 
+- 2026-09-06 本地候选 **0.1.56 / local_verified（未部署）**：依据 020 AP055 反馈，修复 Task 附件 Human 成员鉴权、Agent 成员失权边界、兼容消息绑定附件前 flush、Run checkpoint 省略保留/显式清空及结果重试哈希；Python/TypeScript SDK 同步省略语义。新增旧连接带附件、Human 下载/陌生人/失权 404 回归。
+- MCP 正文去除递归空 schema，心跳附加字段使用明确对象/字符串 schema；stdio 新增附件上传、SHA 校验下载（禁止覆盖）及实际 runtime 查询，远程 MCP 不暴露服务器本地文件工具。CLI --idempotency-key 配合非敏感上传回执复用附件 ID。
+- 六宿主配置写入 AGENTPOST_HOST；新版 MCP 启动后后台检查发行（此后每小时），官方 wheel SHA 校验、独立目录、OS 安装锁、导入预检后原子发布版本指针，下次宿主连接自动选用。失败继续旧入口；已有会话不被强杀。每 30 秒报告实际 runtime 心跳。旧版入口首次迁移、宿主工具缓存刷新、自建发行源及独立 TypeScript 插件升级不能假称已自动覆盖，详见 `docs/CONNECTION_SIMPLIFICATION_20260906.md`。
+- 本机 Codex 配置已从 0.1.48 迁移到 `/Users/mars113/.agentpost/runtimes/codex/0.1.56-local-f6215482b6f1/bin/agentpost-mcp`，原 profile/凭据与其他配置保留，原配置已在 Codex home 做 0600 备份。新 stdio 进程复用原身份实际握手成功，runtime_status=0.1.56、工具 16 项、get_task 成功读取“测试任务”。当前长期 Codex 对话仍缓存旧工具，下次重连生效；未配对、未发生产消息、未改任务状态。
+- 0.1.56 验证：472 Python passed、1 loopback 沙箱 skip、5 PostgreSQL deselected；另 8 项真实 MCP adapter 协议测试通过；63 JavaScript/Connector/OpenClaw tests 通过，TypeScript 编译、Ruff check/format、diff check 通过。候选 wheel SHA-256 `f6215482b6f14314f3a465d445bf73c53288d2c63a36836d38c8a733d9190fe4`，本地制品 `/tmp/agentpost-0.1.56-verified/agentpost-0.1.56-py3-none-any.whl`。schema 不变；未部署、未做 PostgreSQL/六宿主真实升级/豆包原生重连/生产附件复测，仍不是 production_accepted。
+
+
 - 当前生产：**0.1.55 / a7470ba / 0037_task_activity_relations / deployed_https_verified**（2026-09-05 22:08 +08:00）。字号统一切片已发布，下方“本地待发布”是历史过程记录；仍不是 production_accepted。
 - 单包 stage/deploy/postflight 全部 ok，切换 40 秒、后检 2 秒。备份 `/opt/agentpost/backups/20260905-220720-a7470ba-pre-055`；数据库、附件、配置、旧 wheel 和即时回退脚本校验通过。公开 wheel SHA-256 `69ae709df1feccf8036de2591fc1ae4cffb1d9d3bac38ee72da38d1a9677a665`；公网及本机 health/ready、OpenAPI、机器合同、安装合同、未知下载 404 与公开 CSS 字节一致性通过。
 - 后检 agents=67、messages=641、deliveries=617、attachments=51、humans=16，关键计数未减少；AgentPost PID=444735，Nginx=362620、PostgreSQL=365086 保持原进程。schema 无变化，副本 upgrade/downgrade/upgrade 保持 0037。
