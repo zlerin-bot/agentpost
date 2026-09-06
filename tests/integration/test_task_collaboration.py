@@ -809,13 +809,25 @@ def test_task_messages_use_legacy_inbox_and_native_run_without_breaking_old_conn
         )
         assert hidden.status_code == 404
 
+        legacy_upload = client.post(
+            "/api/v1/attachments",
+            headers={"Authorization": f"Bearer {owner_agent['api_key']}"},
+            files={"file": ("legacy.txt", b"legacy attachment", "text/plain")},
+        )
+        assert legacy_upload.status_code == 201
+        legacy_attachment_id = legacy_upload.json()["id"]
         legacy = client.post(
             f"/api/v1/agent/tasks/{task_id}/messages",
             headers={
                 "Authorization": f"Bearer {owner_agent['api_key']}",
                 "Idempotency-Key": "legacy-task-message",
             },
-            json={"subject": "兼容测试", "format": "text", "body": "请确认收到"},
+            json={
+                "subject": "兼容测试",
+                "format": "text",
+                "body": "请确认收到",
+                "attachments": [legacy_attachment_id],
+            },
         )
         assert legacy.status_code == 201, legacy.text
         assert legacy.json()["legacy_delivery_count"] == 1
@@ -826,7 +838,12 @@ def test_task_messages_use_legacy_inbox_and_native_run_without_breaking_old_conn
                 "Authorization": f"Bearer {owner_agent['api_key']}",
                 "Idempotency-Key": "legacy-task-message",
             },
-            json={"subject": "兼容测试", "content_format": "text", "body": "请确认收到"},
+            json={
+                "subject": "兼容测试",
+                "content_format": "text",
+                "body": "请确认收到",
+                "attachments": [legacy_attachment_id],
+            },
         )
         assert replay.status_code == 201, replay.text
         assert replay.json()["replayed"] is True
@@ -999,6 +1016,17 @@ def test_task_messages_use_legacy_inbox_and_native_run_without_breaking_old_conn
             headers={"Authorization": f"Bearer {outsider_agent['api_key']}"},
         )
         assert outsider_download.status_code == 404
+
+        for username, expected in (
+            ("message-owner", 200),
+            ("message-member", 200),
+            ("message-outsider", 404),
+        ):
+            _login(client, username)
+            download = client.get(f"/api/v1/orbit/attachments/{attachment_id}")
+            assert download.status_code == expected, download.text
+            if expected == 200:
+                assert download.content == b"# task attachment"
 
         owner_csrf = _login(client, "message-owner")
         task_detail = client.get(
@@ -1188,6 +1216,18 @@ def test_task_messages_use_legacy_inbox_and_native_run_without_breaking_old_conn
             },
         )
         assert completed.status_code == 204, completed.text
+        detail_after = client.get(
+            f"/api/v1/agent/tasks/{task_id}",
+            headers={"Authorization": f"Bearer {member_agent['api_key']}"},
+        ).json()
+        finished = next(
+            a
+            for a in detail_after["assignments"]
+            if a["assignment_id"] == directed_assignment["assignment_id"]
+        )
+        assert (
+            finished["run_checkpoint"]["human_response"] == "覆盖新版和旧版 Connector，并继续执行"
+        )
         with database.session_factory() as session:
             assert not list(
                 session.scalars(

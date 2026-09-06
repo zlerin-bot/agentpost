@@ -415,7 +415,7 @@ class _TaskRunsResource:
         body: dict[str, Any] = {
             "lease_token": lease_token,
             "status": status,
-            "checkpoint": dict(checkpoint or {}),
+            **({"checkpoint": dict(checkpoint)} if checkpoint is not None else {}),
         }
         if wake_status is not None:
             body["wake_status"] = wake_status
@@ -455,7 +455,11 @@ class _TaskRunsResource:
                 "lease_token": lease_token,
                 "status": status,
                 "summary": summary,
-                "checkpoint": dict(resolved_checkpoint or {}),
+                **(
+                    {"checkpoint": dict(resolved_checkpoint)}
+                    if resolved_checkpoint is not None
+                    else {}
+                ),
             },
             idempotency_key=idempotency_key or _idempotency_key(),
         )

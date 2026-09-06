@@ -1199,6 +1199,27 @@ def get_orbit_attachment(
     if attachment is None or attachment.state != "attached" or attachment.message_id is None:
         raise OrbitAttachmentNotFoundError(str(attachment_id))
 
+    # Task attachments follow Human membership, never legacy delivery presence.
+    from agentpost.tasks.models import Task, TaskMembership
+
+    source = session.get(Message, attachment.message_id)
+    if source is not None and (
+        source.message_metadata.get("agentpost_task_source")
+        or source.message_metadata.get("agentpost_task_bridge")
+    ):
+        member = session.scalar(
+            select(TaskMembership.task_id)
+            .join(Task, Task.id == TaskMembership.task_id)
+            .where(
+                Task.thread_id == source.thread_id,
+                TaskMembership.human_user_id == user.id,
+                TaskMembership.status == "active",
+            )
+        )
+        if member is None:
+            raise OrbitAttachmentNotFoundError(str(attachment_id))
+        return attachment
+
     entries = list_agent_access(session, user)
     role_map = {entry.agent.id: entry.role for entry in entries}
     entries_by_agent = {entry.agent.id: entry for entry in entries}

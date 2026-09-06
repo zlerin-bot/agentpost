@@ -2752,7 +2752,8 @@ def update_agent_run(
     run.status = payload.status
     run.last_heartbeat_at = now
     run.lease_expires_at = now + timedelta(seconds=RUN_LEASE_SECONDS)
-    run.checkpoint = payload.checkpoint
+    if "checkpoint" in payload.model_fields_set:
+        run.checkpoint = payload.checkpoint
     if payload.local_session_id is not None:
         run.local_session_id = payload.local_session_id
     if payload.wake_status in {"mapped", "woken"} and run.session_mapped_at is None:
@@ -2841,7 +2842,8 @@ def complete_agent_run(
     run.last_heartbeat_at = now
     run.lease_expires_at = None
     run.lease_token_digest = None
-    run.checkpoint = payload.checkpoint
+    if "checkpoint" in payload.model_fields_set:
+        run.checkpoint = payload.checkpoint
     run.result_idempotency_key = idempotency_key
     run.result_request_hash = request_hash if idempotency_key is not None else None
     assignment.status = payload.status

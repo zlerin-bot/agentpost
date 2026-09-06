@@ -100,6 +100,8 @@ def bind_attachments(
         )
         if result.rowcount != 1:
             raise AttachmentUnavailableError("attachment is not available for this sender")
+    # Core inserts do not flush pending ORM bridge messages with autoflush=False.
+    session.flush()
     session.execute(
         insert(message_attachments),
         [
