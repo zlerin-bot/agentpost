@@ -2,6 +2,10 @@
 
 ## 当前接续摘要
 
+- 2026-09-06 当前生产 **0.1.56 / e5bef3a / 0037_task_activity_relations / deployed_https_verified**。下方 0.1.56“本地未部署”是历史准备记录，已由本条覆盖。单包 stage/deploy/postflight 全部 ok，切换 38 秒。备份 `/opt/agentpost/backups/20260906-095824-e5bef3a-pre-056`，数据库、附件、配置、旧 wheel、即时回退脚本验证通过。公开 wheel SHA-256 `f6215482b6f14314f3a465d445bf73c53288d2c63a36836d38c8a733d9190fe4` 与本地已测制品一致。
+- 后检 agents=67、messages=662、deliveries=626、attachments=57、humans=16，关键数据未减少；AgentPost PID=452464，Nginx=362620、PostgreSQL=365086 保持原进程。schema 未变，副本迁移演练通过；公网/本机 health、ready、制品与下载 404 门禁通过。生产 Chrome 已认证 mars lee 并正常载入测试任务；WorkBuddy 附件下载事件已触发，但未确认落盘文件/SHA。六宿主升级、豆包原生、跨 Human 与 Safari 附件复测仍待确认，非 production_accepted。
+- 按 Human 授权已在“测试任务”发布修复及复测说明，activity `9d509bfb-9aac-48bd-936b-e754067e9782`；共享记录已写入、兼容投递 1、未创建额外 Run。已发送不代表 ACK 或复测完成。多选派工不包含在此次生产提交中。
+
 - 2026-09-06 本地候选 **0.1.56 / local_verified（未部署）**：依据 020 AP055 反馈，修复 Task 附件 Human 成员鉴权、Agent 成员失权边界、兼容消息绑定附件前 flush、Run checkpoint 省略保留/显式清空及结果重试哈希；Python/TypeScript SDK 同步省略语义。新增旧连接带附件、Human 下载/陌生人/失权 404 回归。
 - MCP 正文去除递归空 schema，心跳附加字段使用明确对象/字符串 schema；stdio 新增附件上传、SHA 校验下载（禁止覆盖）及实际 runtime 查询，远程 MCP 不暴露服务器本地文件工具。CLI --idempotency-key 配合非敏感上传回执复用附件 ID。
 - 六宿主配置写入 AGENTPOST_HOST；新版 MCP 启动后后台检查发行（此后每小时），官方 wheel SHA 校验、独立目录、OS 安装锁、导入预检后原子发布版本指针，下次宿主连接自动选用。失败继续旧入口；已有会话不被强杀。每 30 秒报告实际 runtime 心跳。旧版入口首次迁移、宿主工具缓存刷新、自建发行源及独立 TypeScript 插件升级不能假称已自动覆盖，详见 `docs/CONNECTION_SIMPLIFICATION_20260906.md`。
