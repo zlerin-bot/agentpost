@@ -2,6 +2,11 @@
 
 ## 当前接续摘要
 
+- 2026-09-06 **多选派工切片 local_verified，未部署**：在“安排一项明确工作”按 Human 分组显示复选框，可勾选 1–64 个参与 AI；每个所选 AI 收到同一工作要求，分别建立独立 Assignment/Run/来源活动，进展与结果继续各自追踪。分工由 Human 在要求中写明，不宣称系统自动拆解。
+- 新 Human API `POST /api/v1/tasks/{task_id}/assignments/batch` 要求 CSRF 与 Idempotency-Key：校验整批有效成员/所选 AI 后一次事务创建；批次回执绑定 Task、Human、幂等键及规范化请求哈希。相同请求（含顺序变化）不重复创建，更改正文同键 409；保留旧单选 API。未新增 schema。
+- 前端草稿仅保存在当前页面内存，按 Task 隔离；空选择/空要求拒绝，提交期间禁改防重入，网络结果未知时保留原内容和幂等键供重试；迟到响应不覆盖另一个任务。手机触控区域至少 44px、复选框 18px，支持键盘勾选与清晰焦点。
+- 验证：473 Python passed、1 loopback 沙箱 skip、5 PostgreSQL deselected；最终新增跨 Human/非负责人权限覆盖后 Task 集成测试 10 passed；前端共 52 tests（含 Orbit 导航 37）通过，Ruff check/format、JS syntax、diff check 通过。隔离预览 `http://127.0.0.1:8777/orbit` 已实测桌面 1470px 与手机 390px 双 AI 提交、独立工作记录、返回列表、Tab/Space/Escape、弹窗关闭；无横向溢出或 warning/error。生产仍为下述 0.1.56，不把本地批量派工视为已上线；PostgreSQL 并发和真实 Agent 执行仍待确认。
+
 - 2026-09-06 当前生产 **0.1.56 / e5bef3a / 0037_task_activity_relations / deployed_https_verified**。下方 0.1.56“本地未部署”是历史准备记录，已由本条覆盖。单包 stage/deploy/postflight 全部 ok，切换 38 秒。备份 `/opt/agentpost/backups/20260906-095824-e5bef3a-pre-056`，数据库、附件、配置、旧 wheel、即时回退脚本验证通过。公开 wheel SHA-256 `f6215482b6f14314f3a465d445bf73c53288d2c63a36836d38c8a733d9190fe4` 与本地已测制品一致。
 - 后检 agents=67、messages=662、deliveries=626、attachments=57、humans=16，关键数据未减少；AgentPost PID=452464，Nginx=362620、PostgreSQL=365086 保持原进程。schema 未变，副本迁移演练通过；公网/本机 health、ready、制品与下载 404 门禁通过。生产 Chrome 已认证 mars lee 并正常载入测试任务；WorkBuddy 附件下载事件已触发，但未确认落盘文件/SHA。六宿主升级、豆包原生、跨 Human 与 Safari 附件复测仍待确认，非 production_accepted。
 - 按 Human 授权已在“测试任务”发布修复及复测说明，activity `9d509bfb-9aac-48bd-936b-e754067e9782`；共享记录已写入、兼容投递 1、未创建额外 Run。已发送不代表 ACK 或复测完成。多选派工不包含在此次生产提交中。

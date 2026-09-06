@@ -6131,3 +6131,57 @@ footer {
   }
   .task-activity-attachment-icon { width: 22px; height: 24px; }
 }
+
+
+.task-assignment-targets,
+.task-assignment-human {
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.task-assignment-targets > legend {
+  margin-bottom: 10px;
+  font-size: var(--font-body);
+}
+
+#task-assignment-agent {
+  display: grid;
+  gap: 12px;
+}
+
+.task-assignment-human {
+  display: grid;
+  gap: 8px;
+}
+
+.task-assignment-human > legend {
+  margin-bottom: 6px;
+  font-size: var(--font-meta);
+  color: #5f6368;
+  overflow-wrap: anywhere;
+}
+
+.task-assignment-human .task-agent-option {
+  min-height: 44px;
+  font-size: var(--font-control);
+  overflow-wrap: anywhere;
+}
+
+.task-assignment-human input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  min-height: 18px;
+  padding: 0;
+  margin: 0;
+}
+
+.task-assignment-human .task-agent-option:focus-within {
+  outline: 2px solid #1a73e8;
+  outline-offset: 2px;
+}
+
+#task-assignment-selection {
+  margin-top: 8px;
+}

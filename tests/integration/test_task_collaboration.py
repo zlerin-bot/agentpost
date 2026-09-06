@@ -1445,3 +1445,174 @@ def test_message_history_is_only_a_friend_suggestion(
         assert friends.json()["items"] == []
         suggestions = client.get("/api/v1/friends/suggestions")
         assert suggestions.json()["items"][0]["relation_status"] == "suggested"
+
+
+def test_batch_assignments_are_atomic_authorized_and_idempotent(
+    settings: Settings, database: Database
+) -> None:
+    with TestClient(create_app(settings=_runtime(settings), database=database)) as client:
+        owner = _register(client, "batch-owner")
+        other = _register(client, "batch-other")
+        owner_id = owner["user"]["id"]
+        other_id = other["user"]["id"]
+        agents = [
+            _create_owned_agent(client, human_id=owner_id, handle=f"batch-agent-{index}")
+            for index in range(2)
+        ]
+        outsider = _create_owned_agent(client, human_id=other_id, handle="batch-outsider")
+        ids = [item["agent"]["id"] for item in agents]
+        csrf = _login(client, "batch-owner")
+        created = client.post(
+            "/api/v1/tasks",
+            headers={"X-CSRF-Token": csrf},
+            json={
+                "title": "批量派工",
+                "goal": "独立执行",
+                "expected_output": "逐个反馈",
+                "agent_ids": ids,
+                "primary_agent_id": ids[0],
+            },
+        )
+        assert created.status_code == 201, created.text
+        task_id = created.json()["task_id"]
+        url = f"/api/v1/tasks/{task_id}/assignments/batch"
+        headers = {"X-CSRF-Token": csrf, "Idempotency-Key": "batch-one"}
+        targets = [{"responsible_human_user_id": owner_id, "assignee_agent_id": aid} for aid in ids]
+        payload = {"assignees": targets, "instruction": "分别评估并报告"}
+
+        def counts():
+            detail = client.get(f"/api/v1/tasks/{task_id}").json()
+            return len(detail["assignments"]), len(detail["activities"])
+
+        baseline = counts()
+        assert (
+            client.post(url, headers={"Idempotency-Key": "no-csrf"}, json=payload).status_code
+            == 403
+        )
+        assert client.post(url, headers={"X-CSRF-Token": csrf}, json=payload).status_code == 422
+        for invalid in ([], targets + [targets[0]]):
+            assert (
+                client.post(
+                    url, headers=headers, json={**payload, "assignees": invalid}
+                ).status_code
+                == 422
+            )
+        assert (
+            client.post(url, headers=headers, json={**payload, "instruction": "   "}).status_code
+            == 422
+        )
+        forbidden = targets + [
+            {"responsible_human_user_id": other_id, "assignee_agent_id": outsider["agent"]["id"]}
+        ]
+        assert (
+            client.post(url, headers=headers, json={**payload, "assignees": forbidden}).status_code
+            == 404
+        )
+        mismatched = [targets[0], {**targets[1], "responsible_human_user_id": other_id}]
+        assert (
+            client.post(url, headers=headers, json={**payload, "assignees": mismatched}).status_code
+            == 404
+        )
+        assert counts() == baseline
+        result = client.post(url, headers=headers, json=payload)
+        assert result.status_code == 200, result.text
+        work = [a for a in result.json()["assignments"] if a["assignment_kind"] == "human_directed"]
+        assert len(work) == 2
+        assert {a["assignee_agent_id"] for a in work} == set(ids)
+        assert {a["expected_output"] for a in work} == {"逐个反馈"}
+        assert len({a["source_activity_id"] for a in work}) == 2
+        after = counts()
+        assert after == (baseline[0] + 2, baseline[1] + 2)
+        replay = client.post(url, headers=headers, json={**payload, "assignees": targets[::-1]})
+        assert replay.status_code == 200, replay.text
+        assert counts() == after
+        assert (
+            client.post(
+                url, headers=headers, json={**payload, "instruction": "不同工作"}
+            ).status_code
+            == 409
+        )
+        assert counts() == after
+        with database.session_factory() as session:
+            work_ids = [UUID(a["assignment_id"]) for a in work]
+            runs = list(
+                session.scalars(select(AgentRun).where(AgentRun.assignment_id.in_(work_ids)))
+            )
+            assert len(runs) == 2
+            assert len({r.agent_id for r in runs}) == 2
+            assert all(r.status == "queued" for r in runs)
+            sources = list(
+                session.scalars(
+                    select(TaskActivity).where(
+                        TaskActivity.id.in_([UUID(a["source_activity_id"]) for a in work])
+                    )
+                )
+            )
+            assert len({s.activity_metadata["batch_id"] for s in sources}) == 1
+            selected = session.get(TaskAgentParticipant, (UUID(task_id), UUID(ids[1])))
+            selected.active = False
+            session.commit()
+        # A lost target rejects the whole new batch; the completed receipt remains replayable.
+        assert (
+            client.post(
+                url, headers={**headers, "Idempotency-Key": "batch-two"}, json=payload
+            ).status_code
+            == 404
+        )
+        assert client.post(url, headers=headers, json=payload).status_code == 200
+        assert counts() == after
+        other_csrf = _login(client, "batch-other")
+        assert (
+            client.post(
+                url,
+                headers={"X-CSRF-Token": other_csrf, "Idempotency-Key": "foreign"},
+                json=payload,
+            ).status_code
+            == 404
+        )
+        # A batch may span Humans, but participating members cannot assign work as the owner.
+        csrf = _login(client, "batch-owner")
+        friendship = client.post(
+            "/api/v1/friend-requests",
+            headers={"X-CSRF-Token": csrf},
+            json={"username": "batch-other"},
+        ).json()
+        other_csrf = _login(client, "batch-other")
+        accepted = client.post(
+            f"/api/v1/friend-requests/{friendship['friendship_id']}/decision",
+            headers={"X-CSRF-Token": other_csrf},
+            json={"decision": "accept"},
+        )
+        assert accepted.status_code == 200, accepted.text
+        csrf = _login(client, "batch-owner")
+        invited = client.post(
+            f"/api/v1/tasks/{task_id}/members",
+            headers={"X-CSRF-Token": csrf},
+            json={"human_user_ids": [other_id]},
+        )
+        assert invited.status_code == 200, invited.text
+        cross_payload = {
+            **payload,
+            "assignees": [targets[0], forbidden[-1]],
+            "instruction": "跨 Human 分别反馈",
+        }
+        cross = client.post(
+            url,
+            headers={"X-CSRF-Token": csrf, "Idempotency-Key": "cross-human"},
+            json=cross_payload,
+        )
+        assert cross.status_code == 200, cross.text
+        cross_work = [
+            a
+            for a in cross.json()["assignments"]
+            if a["instruction"] == cross_payload["instruction"]
+        ]
+        assert len(cross_work) == 2
+        assert {a["responsible_human_user_id"] for a in cross_work} == {owner_id, other_id}
+        other_csrf = _login(client, "batch-other")
+        denied = client.post(
+            url,
+            headers={"X-CSRF-Token": other_csrf, "Idempotency-Key": "member-dispatch"},
+            json=cross_payload,
+        )
+        assert denied.status_code == 403, denied.text

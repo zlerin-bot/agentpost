@@ -49,6 +49,7 @@ from agentpost.tasks.schemas import (
     TaskAcceptanceDecision,
     TaskActivityReplyRelationCreate,
     TaskActivityResponse,
+    TaskAssignmentBatchCreate,
     TaskAssignmentCreate,
     TaskAssignmentResponse,
     TaskCreate,
@@ -2168,19 +2169,9 @@ def decide_task_invitation(
     return _task_detail(session, task=task, viewer_membership=membership) if accept else None
 
 
-def create_assignment(
-    session: Session,
-    *,
-    user: HumanUser,
-    task_id: UUID,
-    payload: TaskAssignmentCreate,
-    human_session_id: UUID | None,
-    request_id: str,
-) -> TaskDetail:
-    task, membership = _task_context(session, task_id=task_id, user=user, lock=True)
-    _require_owner(task, membership)
-    if task.status != "active":
-        raise TaskStateConflictError
+def _validate_assignment_target(
+    session: Session, task_id: UUID, payload: TaskAssignmentCreate
+) -> None:
     target_membership = session.get(TaskMembership, (task_id, payload.responsible_human_user_id))
     participant = session.get(TaskAgentParticipant, (task_id, payload.assignee_agent_id))
     if (
@@ -2191,6 +2182,21 @@ def create_assignment(
         or participant.human_user_id != payload.responsible_human_user_id
     ):
         raise TaskAgentSelectionError
+
+
+def _create_assignment_work(
+    session: Session,
+    *,
+    task: Task,
+    user: HumanUser,
+    payload: TaskAssignmentCreate,
+    human_session_id: UUID | None,
+    request_id: str,
+    activity_id: UUID | None = None,
+    request_hash: str | None = None,
+    batch_id: UUID | None = None,
+) -> None:
+    task_id = task.id
     source_activity = _add_activity(
         session,
         task_id=task_id,
@@ -2200,6 +2206,10 @@ def create_assignment(
         target_human_id=payload.responsible_human_user_id,
         metadata={"assignee_agent_id": str(payload.assignee_agent_id)},
     )
+    if activity_id is not None:
+        source_activity.id = activity_id
+        source_activity.request_hash = request_hash
+        source_activity.activity_metadata["batch_id"] = str(batch_id)
     session.flush()
     assignment = _queue_collaboration_assignment(
         session,
@@ -2231,8 +2241,87 @@ def create_assignment(
         outcome="success",
         request_id=request_id,
     )
+
+
+def create_assignment(
+    session: Session,
+    *,
+    user: HumanUser,
+    task_id: UUID,
+    payload: TaskAssignmentCreate,
+    human_session_id: UUID | None,
+    request_id: str,
+) -> TaskDetail:
+    task, membership = _task_context(session, task_id=task_id, user=user, lock=True)
+    _require_owner(task, membership)
+    if task.status != "active":
+        raise TaskStateConflictError
+    _validate_assignment_target(session, task_id, payload)
+    _create_assignment_work(
+        session,
+        task=task,
+        user=user,
+        payload=payload,
+        human_session_id=human_session_id,
+        request_id=request_id,
+    )
     task.updated_at = utc_now()
     session.commit()
+    return _task_detail(session, task=task, viewer_membership=membership)
+
+
+def create_assignment_batch(
+    session: Session,
+    *,
+    user: HumanUser,
+    task_id: UUID,
+    payload: TaskAssignmentBatchCreate,
+    idempotency_key: str,
+    human_session_id: UUID | None,
+    request_id: str,
+) -> TaskDetail:
+    task, membership = _task_context(session, task_id=task_id, user=user, lock=True)
+    _require_owner(task, membership)
+    batch_id = uuid5(user.id, f"task-assignment-batch:{task_id}:{idempotency_key}")
+    request_hash = hashlib.sha256(payload.model_dump_json().encode()).hexdigest()
+    # The first work activity doubles as the atomic batch receipt, even after members change.
+    existing = session.get(TaskActivity, batch_id)
+    if existing is not None:
+        if existing.request_hash != request_hash:
+            raise TaskMessageIdempotencyConflictError
+        return _task_detail(session, task=task, viewer_membership=membership)
+    if task.status != "active":
+        raise TaskStateConflictError
+    common = payload.model_dump(exclude={"assignees"})
+    assignments = [
+        TaskAssignmentCreate(**common, **target.model_dump()) for target in payload.assignees
+    ]
+    for item in assignments:
+        _validate_assignment_target(session, task_id, item)
+    try:
+        for index, item in enumerate(assignments):
+            _create_assignment_work(
+                session,
+                task=task,
+                user=user,
+                payload=item,
+                human_session_id=human_session_id,
+                request_id=request_id,
+                activity_id=batch_id
+                if index == 0
+                else uuid5(batch_id, str(item.assignee_agent_id)),
+                request_hash=request_hash,
+                batch_id=batch_id,
+            )
+        task.updated_at = utc_now()
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        existing = session.get(TaskActivity, batch_id)
+        if existing is None:
+            raise
+        if existing.request_hash != request_hash:
+            raise TaskMessageIdempotencyConflictError from None
     return _task_detail(session, task=task, viewer_membership=membership)
 
 

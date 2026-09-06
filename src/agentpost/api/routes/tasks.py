@@ -27,6 +27,7 @@ from agentpost.tasks.schemas import (
     HumanTaskMessageCreate,
     TaskAcceptanceDecision,
     TaskActivityReplyRelationCreate,
+    TaskAssignmentBatchCreate,
     TaskAssignmentCreate,
     TaskCreate,
     TaskDetail,
@@ -52,6 +53,7 @@ from agentpost.tasks.service import (
     complete_agent_run,
     confirm_task_activity_reply,
     create_assignment,
+    create_assignment_batch,
     create_task,
     create_task_by_agent,
     decide_friendship,
@@ -520,6 +522,39 @@ def create_task_assignment(
         raise _not_found("agent_not_found") from exc
     except TaskStateConflictError as exc:
         raise _conflict() from exc
+
+
+@router.post("/tasks/{task_id}/assignments/batch", response_model=TaskDetail)
+def create_task_assignment_batch(
+    task_id: UUID,
+    payload: TaskAssignmentBatchCreate,
+    request: Request,
+    current_human: CurrentHumanDep,
+    session: SessionDep,
+    csrf: HumanCsrfDep,
+    idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=255)],
+) -> TaskDetail:
+    del csrf
+    try:
+        return create_assignment_batch(
+            session,
+            user=current_human,
+            task_id=task_id,
+            payload=payload,
+            idempotency_key=idempotency_key,
+            human_session_id=human_session_id_from_request(request),
+            request_id=request.state.request_id,
+        )
+    except TaskNotFoundError as exc:
+        raise _not_found() from exc
+    except TaskOwnerRequiredError as exc:
+        raise _forbidden() from exc
+    except TaskAgentSelectionError as exc:
+        raise _not_found("agent_not_found") from exc
+    except TaskStateConflictError as exc:
+        raise _conflict() from exc
+    except TaskMessageIdempotencyConflictError as exc:
+        raise _conflict("idempotency_conflict") from exc
 
 
 @router.post(

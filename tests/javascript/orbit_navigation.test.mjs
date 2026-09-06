@@ -224,7 +224,7 @@ test("task workspace removes duplicate shortcuts and separates assignment, submi
   assert.match(html, /id="task-submission-controls"/);
   assert.match(html, /id="task-review-controls"/);
   assert.match(html, /id="task-completed-result"/);
-  assert.match(script, /expected_output: elements\.taskAssignmentOutput\.value\.trim\(\) \|\| null/);
+  assert.match(script, /expected_output: draft\.expectedOutput\.trim\(\) \|\| null/);
   assert.match(script, /decision === "request_changes" && !note/);
   assert.match(script, /还有 \$\{unfinishedAssignments\} 个 AI 执行单元未完成/);
   assert.match(script, /elements\.taskSubmitFinal\.disabled = unfinishedAssignments > 0/);
@@ -571,4 +571,53 @@ test("task is the only multi-Human collaboration scope", () => {
   const combined = `${html}\n${script}\n${stylesheet}`;
   assert.match(html, /多人协作只发生在明确的任务内/);
   assert.doesNotMatch(combined, /organization|组织|群聊|oidc|SSO/i);
+});
+
+test("multi-AI assignment validates selection, reuses uncertain batches and isolates task switches", async () => {
+  const source = script.slice(script.indexOf("async function createTaskAssignment("),
+    script.indexOf("async function respondToWaitingAgent("));
+  let current = { task_id: "task-a" };
+  const draft = { instruction: "分别检查", expectedOutput: "", submittedBody: null,
+    key: "stable-batch-key", pending: false };
+  let targets = [];
+  const requests = [];
+  let fail = true;
+  const state = { selectedProjectId: "task-a", csrfToken: "csrf", taskAssignmentDrafts: new Map([["task-a", draft]]) };
+  const elements = {
+    taskAssignmentAgent: { querySelectorAll: () => targets, querySelector: () => ({ focus() {} }) },
+    taskAssignmentInstruction: { focus() {} }, taskAssignmentFeedback: {}, projectActionResult: {},
+  };
+  const submit = new Function("state", "elements", "currentTaskForAction", "taskAssignmentDraft",
+    "saveTaskAssignmentDraft", "renderTaskAssignmentForm", "requestJson", "acceptTaskUpdate",
+    "renderProjectDetail", `${source}; return createTaskAssignment;`)(
+    state, elements, () => current, () => draft, () => {}, () => {},
+    async (url, request) => {
+      requests.push({ url, ...request });
+      if (fail) throw new Error("network interrupted");
+      current = { task_id: "task-b" };
+      return { task_id: "task-a" };
+    },
+    (taskId) => current.task_id === taskId, () => { throw new Error("late task update"); },
+  );
+  await submit({ preventDefault() {} });
+  assert.equal(requests.length, 0);
+  assert.match(elements.taskAssignmentFeedback.textContent, /勾选/);
+  targets = [{ value: "a", dataset: { humanUserId: "h1" } }, { value: "b", dataset: { humanUserId: "h2" } }];
+  await submit({ preventDefault() {} });
+  assert.equal(requests.length, 1);
+  assert.equal(JSON.parse(requests[0].body).assignees.length, 2);
+  assert.match(draft.feedback, /结果尚未确认/);
+  assert.equal(draft.pending, false);
+  const original = draft.submittedBody;
+  draft.pending = true;
+  await submit({ preventDefault() {} });
+  assert.equal(requests.length, 1);
+  draft.pending = false;
+  fail = false;
+  targets = [];
+  await submit({ preventDefault() {} });
+  assert.equal(requests[1].body, original);
+  assert.equal(requests[1].headers["Idempotency-Key"], requests[0].headers["Idempotency-Key"]);
+  assert.equal(state.taskAssignmentDrafts.has("task-a"), false);
+  assert.equal(elements.projectActionResult.textContent, undefined);
 });

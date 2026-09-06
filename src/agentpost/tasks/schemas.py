@@ -196,9 +196,7 @@ class TaskStatusUpdate(TaskModel):
     reason: str | None = Field(default=None, max_length=2000)
 
 
-class TaskAssignmentCreate(TaskModel):
-    responsible_human_user_id: UUID
-    assignee_agent_id: UUID
+class TaskAssignmentInstructions(TaskModel):
     instruction: str = Field(min_length=1, max_length=10_000)
     expected_output: str | None = Field(default=None, max_length=10_000)
     due_at: datetime | None = None
@@ -207,7 +205,10 @@ class TaskAssignmentCreate(TaskModel):
     @field_validator("instruction")
     @classmethod
     def clean_assignment_text(cls, value: str) -> str:
-        return value.strip()
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("instruction cannot be blank")
+        return cleaned
 
     @field_validator("expected_output")
     @classmethod
@@ -220,6 +221,26 @@ class TaskAssignmentCreate(TaskModel):
     @classmethod
     def normalize_due_at(cls, value: datetime | None) -> datetime | None:
         return _aware(value)
+
+
+class TaskAssignmentTarget(TaskModel):
+    responsible_human_user_id: UUID
+    assignee_agent_id: UUID
+
+
+class TaskAssignmentCreate(TaskAssignmentInstructions, TaskAssignmentTarget):
+    pass
+
+
+class TaskAssignmentBatchCreate(TaskAssignmentInstructions):
+    assignees: list[TaskAssignmentTarget] = Field(min_length=1, max_length=64)
+
+    @field_validator("assignees")
+    @classmethod
+    def unique_assignees(cls, value: list[TaskAssignmentTarget]) -> list[TaskAssignmentTarget]:
+        if len({item.assignee_agent_id for item in value}) != len(value):
+            raise ValueError("assignees must be unique")
+        return sorted(value, key=lambda item: str(item.assignee_agent_id))
 
 
 class TaskFinalSubmission(TaskModel):

@@ -478,18 +478,22 @@
               <section id="task-owner-controls" class="prototype-card" hidden>
                 <details class="task-compose-panel"><summary>安排一项明确工作</summary>
                 <form id="task-assignment-form" class="entry-form">
-                  <label for="task-assignment-agent">执行 AI</label>
-                  <select id="task-assignment-agent" required></select>
+                  <fieldset class="task-assignment-targets">
+                    <legend>执行 AI（可多选）</legend>
+                    <div id="task-assignment-agent" aria-describedby="task-assignment-selection"></div>
+                    <p id="task-assignment-selection" class="task-field-help" role="status">请选择至少一个 AI。</p>
+                  </fieldset>
                   <label for="task-assignment-instruction">让 AI 做什么</label>
                   <textarea id="task-assignment-instruction" rows="3" maxlength="10000" placeholder="例如：分析现有资料，列出主要风险并提出处理建议" required></textarea>
-                  <p class="task-field-help">参与 AI 可以读取任务上下文。需要执行时，请在这里明确工作要求和执行对象。</p>
+                  <p class="task-field-help">参与 AI 可以读取任务上下文。每个勾选的 AI 都会收到这项工作，分别执行并反馈。需要分工时，请在要求中写清各自负责的内容。</p>
                   <details class="task-optional-field">
                     <summary>单独设置本次交付要求（可选）</summary>
                     <p>留空时沿用整个任务的预期交付：<strong id="task-assignment-output-inherited">—</strong></p>
                     <label for="task-assignment-output">本次交付要求</label>
                     <textarea id="task-assignment-output" rows="2" maxlength="10000" placeholder="仅在这次执行需要不同格式或内容时填写"></textarea>
                   </details>
-                  <button type="submit" class="primary-action">交给 AI 执行</button>
+                  <button id="task-assignment-submit" type="submit" class="primary-action">交给 AI 执行</button>
+                  <p id="task-assignment-feedback" class="task-field-help" role="status"></p>
                 </form>
                 </details>
               </section>

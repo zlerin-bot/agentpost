@@ -54,6 +54,7 @@ const state = {
   taskRequestSequence: 0,
   taskLoadError: "",
   taskReplyDrafts: new Map(),
+  taskAssignmentDrafts: new Map(),
   friends: [],
   friendsLoaded: false,
   selectedFriendId: "",
@@ -180,6 +181,9 @@ const elements = {
   taskOwnerControls: document.querySelector("#task-owner-controls"),
   taskAssignmentForm: document.querySelector("#task-assignment-form"),
   taskAssignmentAgent: document.querySelector("#task-assignment-agent"),
+  taskAssignmentSelection: document.querySelector("#task-assignment-selection"),
+  taskAssignmentSubmit: document.querySelector("#task-assignment-submit"),
+  taskAssignmentFeedback: document.querySelector("#task-assignment-feedback"),
   taskAssignmentInstruction: document.querySelector("#task-assignment-instruction"),
   taskAssignmentOutput: document.querySelector("#task-assignment-output"),
   taskAssignmentOutputInherited: document.querySelector("#task-assignment-output-inherited"),
@@ -1247,16 +1251,7 @@ function renderProjectDetail() {
   elements.taskSubmissionHelp.textContent = unfinishedAssignments > 0
     ? `还有 ${unfinishedAssignments} 个 AI 执行单元未完成。查看“提交前待处理”了解具体原因。`
     : "提交后任务进入“待验收”，不能再创建新的 AI 执行单元。";
-  elements.taskAssignmentAgent.replaceChildren();
-  project.members.filter((member) => member.status === "active").forEach((member) => {
-    (member.agents || []).forEach((agent) => {
-      const option = document.createElement("option");
-      option.value = agent.agent_id;
-      option.dataset.humanUserId = member.human_user_id;
-      option.textContent = `${member.display_name} · ${agent.display_name}${agent.role === "primary" ? "（主）" : ""}`;
-      elements.taskAssignmentAgent.append(option);
-    });
-  });
+  renderTaskAssignmentForm(project);
   elements.projectArchive.textContent = project.status === "paused" ? "继续任务" : "暂停任务";
 
   elements.projectAcceptAgentOptions.replaceChildren();
@@ -2393,31 +2388,121 @@ async function saveMyTaskAgent(event) {
   }
 }
 
+function taskAssignmentDraft(taskId) {
+  if (!state.taskAssignmentDrafts.has(taskId)) {
+    state.taskAssignmentDrafts.set(taskId, {
+      agentIds: [], instruction: "", expectedOutput: "", key: crypto.randomUUID(),
+      submittedBody: null, pending: false, feedback: "",
+    });
+  }
+  return state.taskAssignmentDrafts.get(taskId);
+}
+
+function renderTaskAssignmentForm(project) {
+  const draft = taskAssignmentDraft(project.task_id);
+  const locked = draft.pending || draft.submittedBody !== null;
+  elements.taskAssignmentAgent.replaceChildren();
+  project.members.filter((member) => member.status === "active").forEach((member) => {
+    if (!(member.agents || []).length) return;
+    const group = document.createElement("fieldset");
+    group.className = "task-assignment-human";
+    const legend = document.createElement("legend");
+    legend.textContent = member.display_name;
+    group.append(legend);
+    member.agents.forEach((agent) => {
+      const label = document.createElement("label");
+      label.className = "task-agent-option";
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.name = "assignment-agent";
+      input.value = agent.agent_id;
+      input.dataset.humanUserId = member.human_user_id;
+      input.checked = draft.agentIds.includes(agent.agent_id);
+      input.disabled = locked;
+      const name = document.createElement("span");
+      name.textContent = `${agent.display_name}${agent.role === "primary" ? "（主 AI）" : ""}`;
+      label.append(input, name);
+      group.append(label);
+    });
+    elements.taskAssignmentAgent.append(group);
+  });
+  elements.taskAssignmentInstruction.value = draft.instruction;
+  elements.taskAssignmentOutput.value = draft.expectedOutput;
+  elements.taskAssignmentInstruction.disabled = locked;
+  elements.taskAssignmentOutput.disabled = locked;
+  elements.taskAssignmentSubmit.disabled = draft.pending;
+  elements.taskAssignmentSubmit.textContent = draft.pending ? "正在安排…"
+    : draft.submittedBody !== null ? "重试确认这批工作" : "交给所选 AI 执行";
+  elements.taskAssignmentFeedback.textContent = draft.feedback;
+  updateTaskAssignmentSelection();
+}
+
+function updateTaskAssignmentSelection() {
+  const count = elements.taskAssignmentAgent.querySelectorAll('input:checked').length;
+  elements.taskAssignmentSelection.textContent = count
+    ? `已选 ${count} 个 AI，将分别执行并反馈。`
+    : "请选择至少一个 AI（最多 64 个）。";
+}
+
+function saveTaskAssignmentDraft() {
+  const project = currentTaskForAction();
+  if (!project) return;
+  const draft = taskAssignmentDraft(project.task_id);
+  if (draft.pending || draft.submittedBody !== null) return;
+  draft.agentIds = [...elements.taskAssignmentAgent.querySelectorAll('input:checked')].map(input => input.value);
+  draft.instruction = elements.taskAssignmentInstruction.value;
+  draft.expectedOutput = elements.taskAssignmentOutput.value;
+  updateTaskAssignmentSelection();
+}
+
 async function createTaskAssignment(event) {
   event.preventDefault();
   const project = currentTaskForAction();
-  const option = elements.taskAssignmentAgent.selectedOptions[0];
-  if (!project || !option) {
-    elements.projectActionResult.textContent = "没有可分配的参与 AI。";
-    return;
-  }
-  try {
-    const updated = await requestJson(`/api/v1/tasks/${encodeURIComponent(project.task_id)}/assignments`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-CSRF-Token": state.csrfToken },
-      body: JSON.stringify({
-        responsible_human_user_id: option.dataset.humanUserId,
-        assignee_agent_id: option.value,
-        instruction: elements.taskAssignmentInstruction.value.trim(),
-        expected_output: elements.taskAssignmentOutput.value.trim() || null,
-      }),
+  if (!project) return;
+  const draft = taskAssignmentDraft(project.task_id);
+  if (draft.pending) return;
+  if (draft.submittedBody === null) {
+    saveTaskAssignmentDraft();
+    const targets = [...elements.taskAssignmentAgent.querySelectorAll('input:checked')];
+    if (!targets.length || targets.length > 64 || !draft.instruction.trim()) {
+      elements.taskAssignmentFeedback.textContent = "请勾选 1 至 64 个 AI，并填写明确的工作要求。";
+      if (!targets.length) elements.taskAssignmentAgent.querySelector('input')?.focus();
+      else elements.taskAssignmentInstruction.focus();
+      return;
+    }
+    draft.submittedBody = JSON.stringify({
+      assignees: targets.map(input => ({
+        responsible_human_user_id: input.dataset.humanUserId,
+        assignee_agent_id: input.value,
+      })),
+      instruction: draft.instruction.trim(),
+      expected_output: draft.expectedOutput.trim() || null,
     });
+  }
+  const count = JSON.parse(draft.submittedBody).assignees.length;
+  draft.pending = true;
+  draft.feedback = `正在为 ${count} 个 AI 安排工作…`;
+  renderTaskAssignmentForm(project);
+  try {
+    const updated = await requestJson(`/api/v1/tasks/${encodeURIComponent(project.task_id)}/assignments/batch`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": state.csrfToken, "Idempotency-Key": draft.key },
+      body: draft.submittedBody,
+    });
+    state.taskAssignmentDrafts.delete(project.task_id);
     if (!acceptTaskUpdate(project.task_id, updated)) return;
-    elements.taskAssignmentForm.reset();
     renderProjectDetail();
-    elements.projectActionResult.textContent = "执行单元已进入可靠队列，等待指定 AI 领取。";
+    elements.projectActionResult.textContent = `已为 ${count} 个 AI 分别安排工作，可在任务进展中查看各自状态与结果。`;
   } catch (error) {
-    if (state.selectedProjectId === project?.task_id) elements.projectActionResult.textContent = error.message;
+    if ([400, 401, 403, 404, 409, 422].includes(error.status)) {
+      draft.submittedBody = null;
+      draft.feedback = `${error.message}。请检查任务状态与参与 AI 后重试。`;
+    } else {
+      draft.feedback = `${error.message}。结果尚未确认，请重试同一批工作；已保留原内容，避免重复派工。`;
+    }
+  } finally {
+    draft.pending = false;
+    if (currentTaskForAction()?.task_id === project.task_id) renderTaskAssignmentForm(currentTaskForAction());
   }
 }
 
@@ -2564,7 +2649,8 @@ function initializeCollaborationModules() {
   elements.projectInviteForm.addEventListener("submit", inviteProjectFriends);
   elements.projectInviteClose.addEventListener("click", closeProjectInviteDialog);
   elements.projectInviteCancel.addEventListener("click", closeProjectInviteDialog);
-  bindTaskAction(elements.taskAssignmentForm, "submit", createTaskAssignment);
+  elements.taskAssignmentForm.addEventListener("input", saveTaskAssignmentDraft);
+  elements.taskAssignmentForm.addEventListener("submit", createTaskAssignment);
   bindTaskAction(elements.taskMyAgentForm, "submit", saveMyTaskAgent);
   elements.taskAddAgent.addEventListener("click", () => {
     activateRoute("relay", "agents", { focusContent: true });
@@ -3023,6 +3109,7 @@ function validReauthenticationCandidate(candidate) {
 
 function clearSensitiveInputs() {
   state.taskReplyDrafts.clear();
+  state.taskAssignmentDrafts.clear();
   [
     elements.loginPassword,
     elements.loginMfa,
