@@ -251,6 +251,8 @@
               <button type="button" data-project-filter="all" aria-pressed="false">全部</button>
               <button type="button" data-project-filter="awaiting_acceptance" aria-pressed="false">待验收</button>
               <button type="button" data-project-filter="completed" aria-pressed="false">已完成</button>
+              <button type="button" data-project-filter="archived" aria-pressed="false">我的归档</button>
+              <button type="button" data-project-filter="deleted" aria-pressed="false">已删除</button>
             </div>
             <button id="project-browser-new" type="button" class="primary-action prototype-browser-new">创建任务</button>
             <div id="project-browser-list" class="prototype-browser-list" aria-live="polite"></div>
@@ -454,6 +456,18 @@
                   <span id="project-detail-status" class="prototype-status">进行中</span>
                   <button id="project-invite" type="button" class="quiet-button">邀请好友</button>
                   <button id="project-archive" type="button" class="quiet-button">暂停任务</button>
+                  <details class="task-personal-menu" id="task-personal-menu">
+                    <summary>任务选项</summary>
+                    <div class="task-personal-actions">
+                      <p>归档、删除仅影响你。删除后可在“已删除”恢复，AI 仍参与任务。</p>
+                      <button type="button" class="quiet-button" id="task-personal-archive">归档到我的归档</button>
+                      <button type="button" class="quiet-button" id="task-personal-delete">从我的列表删除</button>
+                      <button type="button" class="quiet-button" id="task-personal-restore">恢复到任务列表</button>
+                      <button type="button" class="quiet-button danger" id="task-leave">退出此任务</button>
+                      <p id="task-leave-hint"></p>
+                      <p id="task-personal-feedback" role="status"></p>
+                    </div>
+                  </details>
                 </div>
               </div>
               <div class="prototype-metrics" aria-label="任务概况">
@@ -1164,5 +1178,6 @@
         >京ICP备2026049737号</a>
       </span>
     </footer>
-  </body>
+  <button type="button" id="back-to-top" hidden aria-label="回到顶部">↑ 顶部</button>
+</body>
 </html>

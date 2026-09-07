@@ -674,6 +674,20 @@ def _task_detail(
             .order_by(TaskAssignment.created_at.desc())
         )
     )
+    historical_human_ids = {
+        human_id
+        for item in assignment_rows
+        for human_id in (item.responsible_human_user_id, item.created_by_human_user_id)
+    } - humans.keys()
+    if historical_human_ids:
+        humans.update(
+            {
+                human.id: human
+                for human in session.scalars(
+                    select(HumanUser).where(HumanUser.id.in_(historical_human_ids))
+                )
+            }
+        )
     missing_assignment_agent_ids = {
         item.assignee_agent_id for item in assignment_rows if item.assignee_agent_id not in agents
     }
@@ -971,7 +985,10 @@ def _task_detail(
     pending_count = sum(
         item.status not in {"completed", "cancelled"} for item in effective_assignment_rows
     )
+    from agentpost.tasks.preferences import preference_summary
+
     return TaskDetail(
+        **preference_summary(session, task.id, viewer_membership.human_user_id),
         task_id=task.id,
         thread_id=task.thread_id,
         title=task.title,
@@ -2116,15 +2133,19 @@ def invite_task_members(
         row.joined_at = now
         row.updated_at = now
         session.add(row)
-        session.add(
-            TaskAgentParticipant(
+        participant = session.get(TaskAgentParticipant, (task.id, default_agent.id))
+        if participant is None:
+            participant = TaskAgentParticipant(
                 task_id=task.id,
                 agent_id=default_agent.id,
                 human_user_id=human_id,
                 role="primary",
                 selected_at=now,
             )
-        )
+            session.add(participant)
+        participant.active = True
+        participant.role = "primary"
+        participant.selected_at = now
         _queue_collaboration_assignment(
             session,
             task=task,

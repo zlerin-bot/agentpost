@@ -2,6 +2,11 @@
 
 ## 当前接续摘要
 
+- 2026-09-07 手机列表与个人任务管理切片 **local_verified，未部署**：取消手机任务/好友列表固定最大高度，使用整页滚动；手机长页提供回到顶部。新增 Task 消息/执行结果红点，前台每 30 秒仅刷新指示，GET 不写已读，实际打开的活动快照用独立 Human 记录标记，迟到消息仍未读。
+- 任务选项新增个人归档、从自己列表删除和恢复（不修改共享状态，不停用 AI）；普通成员可退出，撤销本人及所选 AI 权限、取消未结束 Run 并清除租约，负责人禁止直接退出。保留历史署名，支持退出后负责人重新邀请；成员终止复用 declined 状态，以 member_left 活动区分主动退出。按用户最后指示，免打扰功能已全部取消。
+- 新 schema `0038_human_task_preferences`，服务端保存按 Human+Task 的个人列表状态与已查看活动 ID。未上线；生产仍为 0.1.56/schema0037，后续部署须迁移。已查看集合逐条累计，超长任务的存储增长与 PostgreSQL 并发性能尚待实测。
+- 验证：481 非 PostgreSQL passed、1 loopback skip、5 PostgreSQL deselected；38 Orbit 导航 tests、Ruff/format/JS syntax/diff check 通过；SQLite 新迁移 upgrade/downgrade/upgrade 通过。隔离浏览器 390px 下 13 个任务整页展开、无横向溢出，回顶 scrollY=0，归档/删除/恢复实测；1280px 桌面无溢出，读取后列表/导航红点消除，console warning/error=0。好友使用相同滚动容器修复，真实多好友/真机触屏、跨设备与 PostgreSQL 验收仍待确认。预览保留合成数据库，后台进程由 `/tmp/ap_preview_resume.py` 启动；未部署，定时任务仍 PAUSED。
+
 - 2026-09-07 AP056 反馈开发切片：新增认证握手、Task 历史分页/精确活动读取、可跳过历史的上下文、SDK 截断信息、豆包显式文本工具、Manus Task 操作、附件元数据及自动 SHA、可选 Run 最终回执、负责人取消 queued 工作、代发署名与下载反馈、持久化轮询基础。当前是本地验证，未部署、未更新外部宿主；四阶段尚未全部完成，详见 `docs/AP056_FEEDBACK_IMPLEMENTATION_20260907.md`。
 - 本轮验证：478 非 PostgreSQL passed、1 loopback skip、5 PostgreSQL deselected；真实 MCP 9 passed，轮询专项 2 passed；60 JavaScript/TypeScript tests，Ruff/format/JS syntax/TypeScript build/diff check 通过。隔离 IAB 1470px/390px 验证下载反馈、署名、派工、取消、返回列表，无横向溢出；原 8777 服务停止后已重建合成数据，旧预览 task 深链接不再适用。
 - 待继续：各宿主真实自动唤醒/升级迁移、PostgreSQL 迟提交与游标并发、Human AI 页完整能力视图、旧入口迁移收敛、结果比较视图；真实豆包/Manus与手机/跨 Human验收待确认。测试任务定时检查仍 PAUSED，不得当作产品监听恢复。

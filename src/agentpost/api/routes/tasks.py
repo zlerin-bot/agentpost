@@ -35,6 +35,7 @@ from agentpost.tasks.schemas import (
     TaskFinalSubmission,
     TaskInvitationDecision,
     TaskMembersInvite,
+    TaskPreferenceUpdate,
     TaskRunHumanResponse,
     TaskStatusUpdate,
     TaskSummary,
@@ -808,3 +809,41 @@ def complete_task_run(
     if prefer == "return=representation":
         return JSONResponse(result, headers={"Preference-Applied": prefer})
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.patch("/tasks/{task_id}/preferences")
+def patch_task_preferences(
+    task_id: UUID,
+    payload: TaskPreferenceUpdate,
+    current_human: CurrentHumanDep,
+    session: SessionDep,
+    csrf: HumanCsrfDep,
+) -> dict:
+    from agentpost.tasks.preferences import update_preference
+
+    del csrf
+    try:
+        return update_preference(session, user=current_human, task_id=task_id, payload=payload)
+    except TaskNotFoundError as exc:
+        raise _not_found("task_not_found") from exc
+
+
+@router.post("/tasks/{task_id}/leave", status_code=204)
+def leave_human_task(
+    task_id: UUID,
+    current_human: CurrentHumanDep,
+    session: SessionDep,
+    csrf: HumanCsrfDep,
+) -> Response:
+    from agentpost.tasks.preferences import leave_task
+
+    del csrf
+    try:
+        leave_task(session, user=current_human, task_id=task_id)
+    except TaskNotFoundError as exc:
+        raise _not_found("task_not_found") from exc
+    except TaskStateConflictError as exc:
+        raise HTTPException(
+            status_code=409, detail="负责人不能退出；可归档或从自己的列表删除任务。"
+        ) from exc
+    return Response(status_code=204)

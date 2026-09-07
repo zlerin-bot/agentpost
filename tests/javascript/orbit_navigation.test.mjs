@@ -621,3 +621,20 @@ test("multi-AI assignment validates selection, reuses uncertain batches and isol
   assert.equal(state.taskAssignmentDrafts.has("task-a"), false);
   assert.equal(elements.projectActionResult.textContent, undefined);
 });
+
+test("personal task filters isolate archives and recover deleted tasks", () => {
+  const source = script.slice(script.indexOf("function filteredProjects()"), script.indexOf("function filteredFriends()"));
+  const state = { projectQuery: "", projectFilter: "all", projects: [
+    {title: "live", status: "active"},
+    {title: "archive", status: "active", personal_state: "archived"},
+    {title: "deleted", status: "active", personal_state: "deleted"},
+  ]};
+  const filter = new Function("state", "projectStatusLabel", `${source}; return filteredProjects;`)(state, p => p.status);
+  assert.deepEqual(filter().map(p => p.title), ["live"]);
+  state.projectFilter = "archived";
+  assert.deepEqual(filter().map(p => p.title), ["archive"]);
+  state.projectFilter = "deleted";
+  assert.deepEqual(filter().map(p => p.title), ["deleted"]);
+  state.projectQuery = "missing";
+  assert.deepEqual(filter(), []);
+});

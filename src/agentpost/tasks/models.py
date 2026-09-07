@@ -400,3 +400,17 @@ class TaskActivityRelation(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )
+
+
+class HumanTaskPreference(Base):
+    """Personal website state; never Agent delivery/read or shared Task state."""
+
+    __tablename__ = "human_task_preferences"
+    human_user_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("human_users.id", ondelete="CASCADE"), primary_key=True
+    )
+    task_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("tasks.id", ondelete="CASCADE"), primary_key=True
+    )
+    list_state: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
+    seen_activity_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)

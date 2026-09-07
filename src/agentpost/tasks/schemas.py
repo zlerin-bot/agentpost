@@ -376,7 +376,14 @@ class TaskStateAxes(TaskModel):
     accepted_at: datetime | None = None
 
 
+class TaskPreferenceUpdate(TaskModel):
+    list_state: Literal["active", "archived", "deleted"] | None = None
+    seen_activity_ids: list[UUID] = Field(default_factory=list, max_length=2000)
+
+
 class TaskSummary(TaskModel):
+    personal_state: str = "active"
+    unread_count: int = 0
     task_id: UUID
     thread_id: UUID
     title: str

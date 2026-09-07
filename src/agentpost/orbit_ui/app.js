@@ -498,6 +498,11 @@ function dateOnlyText(value) {
 function filteredProjects() {
   const query = state.projectQuery.trim().toLowerCase();
   return state.projects.filter((project) => {
+    const personalState = project.personal_state || "active";
+    if (["archived", "deleted"].includes(state.projectFilter)) {
+      return personalState === state.projectFilter && (!query || (project.title + " " + project.goal).toLowerCase().includes(query));
+    }
+    if (personalState !== "active") return false;
     const matchesFilter = state.projectFilter === "all"
       || (state.projectFilter === "active" && ["active", "paused"].includes(project.status))
       || project.status === state.projectFilter;
@@ -538,7 +543,7 @@ function friendRelationLabel(friend) {
   }[friend.relation_status] || "关系待确认";
 }
 
-function createCollaborationListButton({ title, meta, badge, active, avatar, onClick }) {
+function createCollaborationListButton({ title, meta, badge, active, avatar, onClick, unread = false }) {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "prototype-list-item";
@@ -554,6 +559,13 @@ function createCollaborationListButton({ title, meta, badge, active, avatar, onC
   copy.className = "prototype-list-copy";
   const titleNode = document.createElement("strong");
   titleNode.textContent = title;
+  if (unread) {
+    const dot = document.createElement("span");
+    dot.className = "task-new-dot";
+    dot.setAttribute("aria-label", "有新消息");
+    dot.setAttribute("role", "img");
+    titleNode.append(dot);
+  }
   const metaNode = document.createElement("small");
   metaNode.textContent = meta;
   copy.append(titleNode, metaNode);
@@ -580,7 +592,7 @@ async function loadProjects({ preserveSelection = true } = {}) {
     if (requestedTaskId && preserveSelection && !state.selectedProjectId) {
       state.selectedProjectId = requestedTaskId;
     } else if (!preserveSelection || !projectById(state.selectedProjectId)) {
-      state.selectedProjectId = isMobileWorkspace() ? "" : (state.projects[0]?.task_id || "");
+      state.selectedProjectId = isMobileWorkspace() ? "" : (filteredProjects()[0]?.task_id || "");
     }
     renderProjectBrowser();
     updateCollaborationWorkspaceMode();
@@ -618,11 +630,15 @@ async function loadProjectDetail(projectId) {
     }
     if (project.task_id !== projectId) throw new Error("任务信息不匹配，请重新读取。");
     state.selectedProject = project;
+    renderTaskPreferences(project);
     const url = new URL(window.location.href);
     if (state.activeModule === "projects" && url.searchParams.get("task") !== projectId) {
       history.replaceState({ task: projectId }, "", taskRouteUrl(projectId) + url.hash);
     }
     renderProjectDetail();
+    if (state.activeModule === "projects" && document.visibilityState === "visible") {
+      void markTaskSnapshotViewed(project);
+    }
   } catch (error) {
     if (state.selectedProjectId !== projectId || sequence !== state.taskRequestSequence) return;
     state.selectedProject = null;
@@ -708,7 +724,7 @@ async function loadFriends() {
   }
 }
 
-function renderProjectBrowser() {
+function renderProjectBrowser({ detail = true } = {}) {
   const projects = filteredProjects();
   elements.projectBrowserCount.textContent = projects.length + " 个";
   elements.projectBrowserList.replaceChildren();
@@ -716,6 +732,7 @@ function renderProjectBrowser() {
     const pending = project.membership_status === "invited" ? "待确认" : "";
     elements.projectBrowserList.append(createCollaborationListButton({
       title: project.title,
+      unread: project.unread_count > 0,
       meta: project.owner_display_name + "负责 · 更新 " + dateText(project.updated_at),
       badge: pending || projectStatusLabel(project),
       active: state.selectedProjectId === project.task_id,
@@ -723,7 +740,8 @@ function renderProjectBrowser() {
       onClick: () => selectTask(project.task_id),
     }));
   });
-  renderProjectDetail();
+  updateTaskNavDot();
+  if (detail) renderProjectDetail();
 }
 
 function activityText(activity) {
@@ -735,6 +753,7 @@ function activityText(activity) {
     member_added: "将 " + target + " 加入任务",
     member_joined: "加入了任务",
     member_declined: "拒绝了任务邀请",
+    member_left: "退出了任务，其 AI 未结束工作已取消",
     assignment_created: "创建了 AI 执行单元",
     assignment_cancelled: "取消了排队工作，历史记录保留",
     agent_joined_collaboration: "参与 AI 已进入协同队列",
@@ -6363,3 +6382,87 @@ async function initializeOrbit() {
 }
 
 initializeOrbit();
+
+
+function updateTaskNavDot() {
+  const nav = document.querySelector('button[data-module="projects"]');
+  if (!nav) return;
+  nav.querySelector(".task-new-dot")?.remove();
+  if (state.projects.some((p) => p.unread_count > 0 && (!p.personal_state || p.personal_state === "active"))) {
+    const dot = document.createElement("span");
+    dot.className = "task-new-dot";
+    dot.setAttribute("role", "img");
+    dot.setAttribute("aria-label", "任务有新消息");
+    nav.append(dot);
+  }
+}
+
+function renderTaskPreferences(project) {
+  document.querySelector("#task-personal-restore").hidden = !["archived", "deleted"].includes(project.personal_state);
+  document.querySelector("#task-leave").disabled = project.membership_role === "owner";
+  document.querySelector("#task-leave-hint").textContent = project.membership_role === "owner"
+    ? "你是负责人，不能直接退出；可使用个人归档。" : "退出后，你及你的 AI 将失去任务访问权，未结束的工作将取消。";
+  document.querySelector("#task-personal-feedback").textContent = "";
+}
+
+async function markTaskSnapshotViewed(project) {
+  const ids = (project.activities || []).map((item) => item.activity_id);
+  if (!ids.length) return;
+  try {
+    const pref = await requestJson(`/api/v1/tasks/${encodeURIComponent(project.task_id)}/preferences`, {
+      method: "PATCH", headers: { "Content-Type": "application/json", "X-CSRF-Token": state.csrfToken },
+      body: JSON.stringify({ seen_activity_ids: ids }),
+    });
+    const row = state.projects.find((p) => p.task_id === project.task_id);
+    if (row) Object.assign(row, pref);
+    renderProjectBrowser({ detail: false });
+  } catch (_) { /* A failed Human view write must not hide unread messages. */ }
+}
+
+async function changeTaskPreference(action) {
+  const project = currentTaskForAction();
+  if (!project) return;
+  const menu = document.querySelector("#task-personal-menu");
+  const buttons = [...menu.querySelectorAll("button")];
+  if (buttons.some((button) => button.dataset.busy)) return;
+  if (action === "leave" && !window.confirm("退出此任务？你及你的 AI 将失去访问权限，未结束的工作将取消。需负责人重新邀请才能加入。")) return;
+  const payload = { list_state: action };
+  buttons.forEach((button) => { button.dataset.busy = "true"; button.disabled = true; });
+  try {
+    await requestJson(`/api/v1/tasks/${encodeURIComponent(project.task_id)}/${action === "leave" ? "leave" : "preferences"}`, {
+      method: action === "leave" ? "POST" : "PATCH",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": state.csrfToken },
+      ...(action === "leave" ? {} : { body: JSON.stringify(payload) }),
+    });
+    if (state.selectedProjectId !== project.task_id) return;
+    menu.open = false;
+    await selectTask("");
+    await loadProjects();
+  } catch (error) {
+    if (state.selectedProjectId === project.task_id) document.querySelector("#task-personal-feedback").textContent = error.message;
+  } finally {
+    buttons.forEach((button) => { delete button.dataset.busy; button.disabled = false; });
+    document.querySelector("#task-leave").disabled = currentTaskForAction()?.membership_role === "owner";
+  }
+}
+
+for (const [id, action] of [["task-personal-archive", "archived"], ["task-personal-delete", "deleted"], ["task-personal-restore", "active"], ["task-leave", "leave"]]) {
+  document.getElementById(id).addEventListener("click", () => void changeTaskPreference(action));
+}
+const backToTop = document.querySelector("#back-to-top");
+window.addEventListener("scroll", () => { backToTop.hidden = window.scrollY < 400; }, { passive: true });
+backToTop.addEventListener("click", () => {
+  window.scrollTo({ top: 0, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
+});
+let taskIndicatorLoading = false;
+setInterval(async () => {
+  if (!state.dashboard || !state.csrfToken || document.visibilityState !== "visible" || taskIndicatorLoading) return;
+  taskIndicatorLoading = true;
+  try {
+    const payload = await requestJson("/api/v1/tasks");
+    if (!state.dashboard) return;
+    state.projects = payload.items || [];
+    renderProjectBrowser({ detail: false });
+  } catch (_) { /* Keep the last known indicators on transient failure. */ }
+  finally { taskIndicatorLoading = false; }
+}, 30000);
