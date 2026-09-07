@@ -2,6 +2,11 @@
 
 ## 当前接续摘要
 
+- 2026-09-07 AP056 继续：新增 `0039_task_activity_sequence`，Task 行锁串行分配发布序号，增量仍使用活动 UUID cursor，按 task_sequence_asc 读取，原始时间不改。原 PostgreSQL 迟提交缺口已在本地 PostgreSQL 17.10 专项验证；历史漏读仍需旧消费者全量重放。未部署，生产仍是 0.1.56/schema0037；切换新 schema 前须停止旧写入。
+- 新主动启用的 `agentpost-task-worker` 支持 macOS/Linux Codex 只读 Task 执行，固定指定任务/目录、沿用钥匙串、先握手再领取，真实会话 mapped/woken、结构化结果和幂等回执。真实合成 Task Run 闭环通过，不安装计划、不恢复定时任务；崩溃中断保留 journal 待复核，不能声称整机重启自动续做。其他宿主原生后台执行仍未完成。
+- 自动升级：新安装失败目录保留诊断并允许重试，探针核验真实导入版本。六宿主独立环境的真实 wheel 安装/导入通过，但不是六宿主原生升级验收。WorkBuddy 当前旧 profile 在新旧 runtime 均无法从钥匙串读取，原配置未改、未重新配对，原身份迁移待恢复授权。
+- 验证：485 非 PostgreSQL passed、2 skipped、7 PostgreSQL deselected；独立 PG 7 passed，真实 native Codex 1 passed；38 Orbit tests、Ruff/format/diff 通过。原 8777 合成库已备份迁移，13 Task/27 Activity/1 Message 不减少，登录保留。详细矩阵、可复现命令及剩余原生/真机/重启门禁见 `docs/AP056_REMAINING_ACCEPTANCE_20260907.md`。四阶段整体仍 partial；agentpost-3 已只读核实 PAUSED。
+
 - 2026-09-07 手机列表与个人任务管理切片 **local_verified，未部署**：取消手机任务/好友列表固定最大高度，使用整页滚动；手机长页提供回到顶部。新增 Task 消息/执行结果红点，前台每 30 秒仅刷新指示，GET 不写已读，实际打开的活动快照用独立 Human 记录标记，迟到消息仍未读。
 - 任务选项新增个人归档、从自己列表删除和恢复（不修改共享状态，不停用 AI）；普通成员可退出，撤销本人及所选 AI 权限、取消未结束 Run 并清除租约，负责人禁止直接退出。保留历史署名，支持退出后负责人重新邀请；成员终止复用 declined 状态，以 member_left 活动区分主动退出。按用户最后指示，免打扰功能已全部取消。
 - 新 schema `0038_human_task_preferences`，服务端保存按 Human+Task 的个人列表状态与已查看活动 ID。未上线；生产仍为 0.1.56/schema0037，后续部署须迁移。已查看集合逐条累计，超长任务的存储增长与 PostgreSQL 并发性能尚待实测。
