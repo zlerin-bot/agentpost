@@ -6490,12 +6490,13 @@ footer {
 }
 
 .task-personal-actions {
-  position: absolute;
+  position: fixed;
   z-index: 30;
-  inset-inline-end: 0;
-  top: calc(100% + 8px);
   display: grid;
   width: min(330px, calc(100vw - 32px));
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   gap: 8px;
   padding: 14px;
   border: 1px solid #b8c7dc;
@@ -6516,6 +6517,13 @@ footer {
   min-height: 40px;
   padding: 8px 12px;
   text-align: start;
+}
+
+.task-personal-actions .task-status-action {
+  border-color: #b7cced;
+  background: #f7f9fc;
+  color: #27364b;
+  font-weight: 700;
 }
 
 .task-personal-destination {

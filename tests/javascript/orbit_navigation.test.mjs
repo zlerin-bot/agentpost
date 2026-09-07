@@ -685,5 +685,8 @@ test("personal task filters isolate archives and recover deleted tasks", () => {
   assert.match(script, /setProjectFilter\("deleted"\)/);
   assert.match(script, /已移到“已删除”。当前页面可直接选择“恢复到任务列表”/);
   assert.match(stylesheet, /\.prototype-detail-actions > \.prototype-status,[\s\S]*?height: 40px;/);
-  assert.match(stylesheet, /\.task-personal-actions \{[\s\S]*?position: absolute;/);
+  assert.match(stylesheet, /\.task-personal-actions \{[\s\S]*?position: fixed;[\s\S]*?overflow-y: auto;/);
+  assert.match(script, /function positionTaskPersonalMenu\(\)/);
+  assert.match(html, /<div class="prototype-detail-actions">\s*<span id="project-detail-status"[\s\S]*?<button id="project-invite"[\s\S]*?<details class="task-personal-menu"/);
+  assert.match(html, /task-personal-help[\s\S]*project-archive[\s\S]*task-open-deleted/);
 });

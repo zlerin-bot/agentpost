@@ -6553,6 +6553,26 @@ function renderTaskPreferences(project) {
   document.querySelector("#task-personal-feedback").textContent = "";
 }
 
+function positionTaskPersonalMenu() {
+  const menu = document.querySelector("#task-personal-menu");
+  const panel = menu.querySelector(".task-personal-actions");
+  const summary = menu.querySelector("summary");
+  if (!menu.open) return;
+  const margin = 12;
+  const gap = 8;
+  const trigger = summary.getBoundingClientRect();
+  const width = Math.min(330, window.innerWidth - margin * 2);
+  const availableBelow = window.innerHeight - trigger.bottom - gap - margin;
+  const availableAbove = trigger.top - gap - margin;
+  const openBelow = availableBelow >= Math.min(panel.scrollHeight, 280) || availableBelow >= availableAbove;
+  const availableHeight = Math.max(160, openBelow ? availableBelow : availableAbove);
+  const height = Math.min(panel.scrollHeight, availableHeight);
+  panel.style.width = `${width}px`;
+  panel.style.left = `${Math.max(margin, Math.min(trigger.right - width, window.innerWidth - width - margin))}px`;
+  panel.style.top = `${openBelow ? trigger.bottom + gap : Math.max(margin, trigger.top - gap - height)}px`;
+  panel.style.maxHeight = `${availableHeight}px`;
+}
+
 async function markTaskSnapshotViewed(project) {
   const ids = (project.activities || []).map((item) => item.activity_id);
   if (!ids.length) return;
@@ -6615,6 +6635,11 @@ document.getElementById("task-open-deleted").addEventListener("click", () => {
   document.querySelector('[data-project-filter="deleted"]')?.focus({ preventScroll: true });
   resetMobileLayerScroll();
 });
+document.querySelector("#task-personal-menu").addEventListener("toggle", (event) => {
+  if (event.currentTarget.open) window.requestAnimationFrame(positionTaskPersonalMenu);
+});
+window.addEventListener("resize", positionTaskPersonalMenu);
+window.addEventListener("scroll", positionTaskPersonalMenu, { passive: true });
 const backToTop = document.querySelector("#back-to-top");
 window.addEventListener("scroll", () => { backToTop.hidden = window.scrollY < 400; }, { passive: true });
 backToTop.addEventListener("click", () => {
