@@ -106,7 +106,7 @@ class TaskExecutionContract(ContractModel):
     resolve_endpoint: Literal["/api/v1/agent/tasks/resolve"] = "/api/v1/agent/tasks/resolve"
     activity_page_endpoint: str = "/api/v1/agent/tasks/{task_id}/activities"
     activity_endpoint: str = "/api/v1/agent/tasks/{task_id}/activities/{activity_id}"
-    activity_order: str = "created_at_asc_activity_id_asc"
+    activity_order: str = "task_sequence_asc"
     activity_cursor_rule: str = (
         "Persist next_cursor only after processing; parents fetched separately"
     )

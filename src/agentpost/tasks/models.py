@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import (
     JSON,
+    BigInteger,
     Boolean,
     CheckConstraint,
     DateTime,
@@ -316,6 +317,7 @@ class AgentRun(Base):
 class TaskActivity(Base):
     __tablename__ = "task_activities"
     __table_args__ = (
+        UniqueConstraint("task_id", "sequence", name="uq_task_activities_sequence"),
         UniqueConstraint(
             "actor_agent_id",
             "idempotency_key",
@@ -327,6 +329,7 @@ class TaskActivity(Base):
     task_id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    sequence: Mapped[int] = mapped_column(BigInteger, nullable=False)
     activity_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     actor_type: Mapped[str] = mapped_column(String(16), nullable=False)
     actor_human_user_id: Mapped[UUID | None] = mapped_column(

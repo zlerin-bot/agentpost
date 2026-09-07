@@ -70,7 +70,7 @@ include = [
 [tool.pytest.ini_options]
 addopts = "-ra --strict-markers"
 testpaths = ["tests", "sdk/python/tests"]
-pythonpath = ["src", "sdk/python/src", "integrations/mcp/src"]
+pythonpath = ["src", "sdk/python/src", "integrations/mcp/src", "tests/integration"]
 markers = [
   "postgres: requires a running PostgreSQL database",
   "e2e: end-to-end acceptance scenario",

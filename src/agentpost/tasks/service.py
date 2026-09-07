@@ -468,7 +468,22 @@ def _add_activity(
     idempotency_key: str | None = None,
     request_hash: str | None = None,
 ) -> TaskActivity:
+    # Serialize publication for this Task until commit. A later transaction cannot
+    # publish past an uncommitted activity. Timestamps remain original audit facts.
+    session.execute(select(Task.id).where(Task.id == task_id).with_for_update())
+    persisted = (
+        session.scalar(
+            select(func.max(TaskActivity.sequence)).where(TaskActivity.task_id == task_id)
+        )
+        or 0
+    )
+    pending = [
+        item.sequence
+        for item in session.new
+        if isinstance(item, TaskActivity) and item.task_id == task_id
+    ]
     activity = TaskActivity(
+        sequence=max([persisted, *pending]) + 1,
         task_id=task_id,
         activity_type=kind,
         actor_type=actor_type,
@@ -1572,17 +1587,8 @@ def read_agent_activity_page(
         )
         if anchor is None:
             raise TaskNotFoundError
-        query = query.where(
-            or_(
-                TaskActivity.created_at > anchor.created_at,
-                (TaskActivity.created_at == anchor.created_at) & (TaskActivity.id > anchor.id),
-            )
-        )
-    rows = list(
-        session.scalars(
-            query.order_by(TaskActivity.created_at.asc(), TaskActivity.id.asc()).limit(limit + 1)
-        )
-    )
+        query = query.where(TaskActivity.sequence > anchor.sequence)
+    rows = list(session.scalars(query.order_by(TaskActivity.sequence.asc()).limit(limit + 1)))
     if activity_id is not None and not rows:
         raise TaskNotFoundError
     selected = rows[:limit]
@@ -1597,8 +1603,11 @@ def read_agent_activity_page(
     )
     return {
         "task_id": task_id,
-        "items": list(reversed(detail.activities)),
-        "order": "created_at_asc_activity_id_asc",
+        "items": sorted(
+            detail.activities,
+            key=lambda item: next(row.sequence for row in selected if row.id == item.activity_id),
+        ),
+        "order": "task_sequence_asc",
         "has_more": len(rows) > limit,
         "next_cursor": str(selected[-1].id) if selected else (str(cursor) if cursor else None),
         "security_label": "external_agent_content",

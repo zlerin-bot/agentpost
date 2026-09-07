@@ -32,7 +32,7 @@ def test_public_agent_integration_contract_preserves_machine_and_human_semantics
         "resolve_endpoint": "/api/v1/agent/tasks/resolve",
         "activity_page_endpoint": "/api/v1/agent/tasks/{task_id}/activities",
         "activity_endpoint": "/api/v1/agent/tasks/{task_id}/activities/{activity_id}",
-        "activity_order": "created_at_asc_activity_id_asc",
+        "activity_order": "task_sequence_asc",
         "activity_cursor_rule": (
             "Persist next_cursor only after processing; parents fetched separately"
         ),

@@ -1638,7 +1638,7 @@ def test_agent_activity_cursor_exact_read_and_revocation(settings: Settings, dat
                 json={"body": f"message {i}"},
             )
             assert response.status_code == 201
-        # Equal timestamps exercise the unique ID tie breaker.
+        # Equal timestamps do not alter durable per-Task publication order.
         with database.session_factory() as session:
             rows = list(
                 session.scalars(select(TaskActivity).where(TaskActivity.task_id == UUID(task_id)))
@@ -1646,7 +1646,7 @@ def test_agent_activity_cursor_exact_read_and_revocation(settings: Settings, dat
             stamp = utc_now()
             for row in rows:
                 row.created_at = stamp
-            expected = sorted(str(row.id) for row in rows)
+            expected = [str(row.id) for row in sorted(rows, key=lambda row: row.sequence)]
             session.commit()
         seen = []
         cursor = None
