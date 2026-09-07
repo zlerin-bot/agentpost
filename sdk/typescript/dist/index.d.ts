@@ -197,7 +197,11 @@ export declare class AgentPostClient {
         checkpoint?: JsonObject;
         idempotencyKey?: string;
     }): Promise<void>;
-    heartbeat(healthStatus?: "healthy" | "degraded" | "error", lastErrorCode?: string): Promise<ConnectorHeartbeat>;
+    heartbeat(healthStatus?: "healthy" | "degraded" | "error", lastErrorCode?: string, taskListener?: {
+        status: "listening" | "stopped" | "error";
+        sessionId: string;
+        wakeCapability: "unsupported" | "manual" | "automatic";
+    }): Promise<ConnectorHeartbeat>;
     rotateCredential(): Promise<{
         connector_id: string;
         agent: JsonObject;

@@ -170,6 +170,61 @@ def _agent_summary(agent: Agent, *, role: str | None = None) -> AgentSummary:
 def list_friend_suggestions(
     session: Session, *, user: HumanUser, query: str | None = None, limit: int = 20
 ) -> list[FriendResponse]:
+    normalized = query.strip().casefold() if query else ""
+    exact_human_ids: set[UUID] = set()
+    if normalized:
+        try:
+            exact_human_ids.add(UUID(normalized))
+        except ValueError:
+            pass
+        exact_human_ids.update(
+            session.scalars(
+                select(HumanUser.id).where(
+                    HumanUser.status == "active",
+                    func.lower(HumanUser.username) == normalized,
+                )
+            )
+        )
+        try:
+            exact_agent_id = UUID(normalized)
+        except ValueError:
+            exact_agent_id = None
+        agent_conditions = [
+            func.lower(Agent.address) == normalized,
+            func.lower(Agent.handle) == normalized,
+        ]
+        if exact_agent_id is not None:
+            agent_conditions.append(Agent.id == exact_agent_id)
+        exact_human_ids.update(
+            session.scalars(
+                select(AgentOwnership.human_user_id)
+                .join(Agent, Agent.id == AgentOwnership.agent_id)
+                .where(Agent.status == "active", or_(*agent_conditions))
+            )
+        )
+        exact_human_ids.discard(user.id)
+        exact_humans = list(
+            session.scalars(
+                select(HumanUser).where(
+                    HumanUser.id.in_(exact_human_ids), HumanUser.status == "active"
+                )
+            )
+        )
+        exact_results = []
+        for human in exact_humans:
+            friendship = _friendship_for(session, user.id, human.id)
+            if friendship is not None and friendship.status in {"pending", "accepted"}:
+                continue
+            exact_results.append(
+                FriendResponse(
+                    human_user_id=human.id,
+                    username=human.username,
+                    display_name=human.display_name,
+                    relation_status="suggested",
+                )
+            )
+        if exact_results:
+            return exact_results[:limit]
     owned_ids = set(
         session.scalars(
             select(AgentOwnership.agent_id).where(AgentOwnership.human_user_id == user.id)
@@ -209,7 +264,6 @@ def list_friend_suggestions(
             HumanUser.id != user.id,
         )
     ).all()
-    normalized = query.strip().casefold() if query else ""
     grouped: dict[UUID, tuple[HumanUser, datetime]] = {}
     for agent, human in candidates:
         if normalized and normalized not in f"{human.username} {human.display_name}".casefold():
@@ -268,8 +322,6 @@ def list_friends(
         human = humans.get(other_id)
         if human is None:
             continue
-        if normalized and normalized not in f"{human.username} {human.display_name}".casefold():
-            continue
         if friendship.status == "accepted":
             relation = "accepted"
         elif friendship.requested_by_human_id == user.id:
@@ -281,6 +333,20 @@ def list_friends(
             agent = _human_agent(session, human.id, human.default_agent_id)
             if agent is not None:
                 agents.append(_agent_summary(agent))
+        searchable = " ".join(
+            [
+                human.username,
+                human.display_name,
+                str(human.id),
+                *[
+                    f"{agent.display_name} {agent.address} {agent.agent_id} "
+                    f"{' '.join(agent.capabilities)}"
+                    for agent in agents
+                ],
+            ]
+        ).casefold()
+        if normalized and normalized not in searchable:
+            continue
         response.append(
             FriendResponse(
                 friendship_id=friendship.id,
@@ -2064,7 +2130,8 @@ def list_task_invitation_candidates(
     session: Session, *, user: HumanUser, task_id: UUID, limit: int = 100
 ) -> list[FriendResponse]:
     task, membership = _task_context(session, task_id=task_id, user=user)
-    _require_owner(task, membership)
+    if membership.status != "active" or task.status not in {"active", "paused"}:
+        raise TaskNotFoundError
     existing = set(
         session.scalars(
             select(TaskMembership.human_user_id).where(
@@ -2091,7 +2158,8 @@ def invite_task_members(
     settings: Settings,
 ) -> TaskDetail:
     task, membership = _task_context(session, task_id=task_id, user=user, lock=True)
-    _require_owner(task, membership)
+    if membership.status != "active" or task.status not in {"active", "paused"}:
+        raise TaskNotFoundError
     accepted_ids = {
         friend.human_user_id
         for friend in list_friends(session, user=user, limit=200)

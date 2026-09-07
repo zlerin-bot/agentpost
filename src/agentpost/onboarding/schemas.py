@@ -99,6 +99,10 @@ class PairingConnectorResponse(OnboardingModel):
     runtime_session_started_at: datetime | None = None
     runtime_version_reported_at: datetime | None = None
     runtime_capabilities: list[str] = Field(default_factory=list)
+    task_listener_status: Literal["listening", "stopped", "error"] | None = None
+    task_listener_session_id: str | None = None
+    task_listener_last_heartbeat_at: datetime | None = None
+    wake_capability: Literal["unsupported", "manual", "automatic"] = "unsupported"
     status: Literal["active", "replaced", "revoked"]
     health_status: Literal["unknown", "healthy", "degraded", "error"]
     created_at: datetime
@@ -250,6 +254,7 @@ class OrbitConnector(PairingConnectorResponse):
     reconnect_required: bool = False
     upgrade_reason: str
     upgrade_prompt: str | None = None
+    work_availability: Literal["ready", "working", "recovering", "needs_attention"]
 
 
 class OrbitConnectorList(OnboardingModel):
@@ -275,6 +280,9 @@ class ConnectorHeartbeatCreate(OnboardingModel):
     configured_version: str | None = Field(default=None, max_length=100)
     runtime_session_started_at: datetime | None = None
     capabilities: list[str] = Field(default_factory=list, max_length=64)
+    task_listener_status: Literal["listening", "stopped", "error"] | None = None
+    task_listener_session_id: str | None = Field(default=None, max_length=64)
+    wake_capability: Literal["unsupported", "manual", "automatic"] | None = None
     last_error_code: str | None = Field(
         default=None,
         min_length=1,

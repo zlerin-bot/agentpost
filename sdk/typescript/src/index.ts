@@ -478,6 +478,11 @@ export class AgentPostClient {
   async heartbeat(
     healthStatus: "healthy" | "degraded" | "error" = "healthy",
     lastErrorCode?: string,
+    taskListener?: {
+      status: "listening" | "stopped" | "error";
+      sessionId: string;
+      wakeCapability: "unsupported" | "manual" | "automatic";
+    },
   ): Promise<ConnectorHeartbeat> {
     return await this.request("POST", "/connect/heartbeat", {
       body: {
@@ -488,6 +493,9 @@ export class AgentPostClient {
         configured_version: RUNTIME_VERSION,
         runtime_session_started_at: RUNTIME_SESSION_STARTED_AT,
         capabilities: RUNTIME_CAPABILITIES,
+        task_listener_status: taskListener?.status ?? null,
+        task_listener_session_id: taskListener?.sessionId ?? null,
+        wake_capability: taskListener?.wakeCapability ?? null,
       },
     }) as ConnectorHeartbeat;
   }

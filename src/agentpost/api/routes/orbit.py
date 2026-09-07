@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import html
+import json
 from collections.abc import Iterator
 from typing import Annotated, BinaryIO
 from urllib.parse import quote
@@ -85,6 +87,54 @@ def _stream_and_close(source: BinaryIO) -> Iterator[bytes]:
 def _attachment_disposition(filename: str, *, inline: bool) -> str:
     mode = "inline" if inline else "attachment"
     return f"{mode}; filename=attachment.bin; filename*=UTF-8''{quote(filename)}"
+
+
+_TEXT_PREVIEW_TYPES = {
+    "application/json",
+    "application/markdown",
+    "text/markdown",
+    "text/plain",
+    "text/x-markdown",
+}
+
+
+def _text_attachment_preview(attachment: Attachment, source: BinaryIO) -> bytes:
+    try:
+        content = source.read().decode("utf-8", errors="replace")
+    finally:
+        source.close()
+    if attachment.content_type.partition(";")[0].strip().lower() == "application/json":
+        try:
+            content = json.dumps(json.loads(content), ensure_ascii=False, indent=2)
+        except json.JSONDecodeError:
+            pass
+    filename = html.escape(attachment.filename)
+    safe_content = html.escape(content)
+    return f"""<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{filename}</title>
+  <style>
+    :root {{
+      color-scheme: light;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }}
+    body {{ margin: 0; background: #f5f8fc; color: #172033; }}
+    main {{ max-width: 920px; margin: 0 auto; padding: 24px clamp(16px, 4vw, 42px) 48px; }}
+    header {{ margin-bottom: 16px; padding-bottom: 12px; border-bottom: 2px solid #c8d7ec; }}
+    h1 {{ margin: 0; font-size: clamp(18px, 3vw, 25px); overflow-wrap: anywhere; }}
+    p {{ margin: 6px 0 0; color: #5f6b7d; font-size: 14px; }}
+    pre {{
+      margin: 0; border: 1px solid #c8d7ec; border-radius: 14px; background: #fff; padding: 18px;
+      white-space: pre-wrap; overflow-wrap: anywhere;
+      font: 15px/1.75 ui-monospace, SFMono-Regular, Menlo, monospace;
+    }}
+  </style>
+</head>
+<body><main><header><h1>{filename}</h1><p>只读文字预览</p></header><pre>{safe_content}</pre></main></body>
+</html>""".encode()
 
 
 def _visible_orbit_attachment_source(
@@ -601,7 +651,7 @@ def orbit_attachment_preview(
     current_human: CurrentHumanDep,
     session: SessionDep,
     settings: SettingsDep,
-) -> StreamingResponse:
+) -> Response:
     attachment, source = _visible_orbit_attachment_source(
         session,
         settings,
@@ -609,13 +659,30 @@ def orbit_attachment_preview(
         attachment_id,
     )
     content_type = attachment.content_type.partition(";")[0].strip().lower()
-    if content_type not in {"application/pdf", "text/html"}:
+    supported_types = {"application/pdf", "text/html", *_TEXT_PREVIEW_TYPES}
+    if content_type not in supported_types:
         source.close()
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
             detail={
                 "code": "attachment_preview_unsupported",
                 "message": "This attachment type does not support an inline preview",
+            },
+        )
+    if content_type in _TEXT_PREVIEW_TYPES:
+        preview = _text_attachment_preview(attachment, source)
+        return Response(
+            content=preview,
+            media_type="text/html",
+            headers={
+                "Cache-Control": "no-store",
+                "Content-Disposition": _attachment_disposition(attachment.filename, inline=True),
+                "Content-Security-Policy": (
+                    "sandbox; default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; "
+                    "form-action 'none'; frame-ancestors 'self'"
+                ),
+                "Referrer-Policy": "no-referrer",
+                "X-Content-Type-Options": "nosniff",
             },
         )
     content_security_policy = (

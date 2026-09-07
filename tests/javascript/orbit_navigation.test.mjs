@@ -25,7 +25,37 @@ test("task recipient summaries count Humans and preserve nonstandard states", ()
     "共享给 3 人 · 1 个 AI 兼容投递");
   assert.equal(summary([{ status: "failed" }]), "共享范围：1 个 AI · 1 个状态待确认");
   assert.doesNotMatch(script, /任务上下文可用，无需逐条回复/);
-  assert.match(script, /summary.textContent = taskMessageRecipientSummary/);
+  assert.match(script, /查看接收状态 · \$\{taskMessageRecipientSummary/);
+});
+
+test("three-level task discussions state actor, reason, audience, content, and follow-up", () => {
+  const source = script.slice(script.indexOf("function taskMessageAudienceLabel("),
+    script.indexOf("function syncTaskPrimaryAgentOptions("));
+  const labels = new Function(`${source}; return { taskMessageAudienceLabel, taskMessageFollowUpLabel };`)();
+  const project = { members: [
+    { human_user_id: "one", display_name: "020" },
+    { human_user_id: "two", display_name: "张子良" },
+  ] };
+  const activity = { metadata: { recipient_statuses: [
+    { human_user_id: "one" }, { human_user_id: "two" },
+  ] } };
+  assert.equal(labels.taskMessageAudienceLabel(project, activity), "020、张子良");
+  assert.equal(labels.taskMessageFollowUpLabel(project, activity), "未指定；需要执行时请安排明确工作");
+  assert.match(script, /appendTaskMessageFact\(context, "因为什么"/);
+  assert.match(script, /appendTaskMessageFact\(context, "面向谁"/);
+  assert.match(script, /appendTaskMessageFact\(context, "谁跟进"/);
+  assert.match(script, /name\.textContent = "说了什么"/);
+  assert.match(stylesheet, /\.task-discussion-facts/);
+  assert.match(stylesheet, /\.task-message-context/);
+  assert.match(stylesheet, /\.task-message-body/);
+  assert.match(script, /project-activity-row human-tone-\$\{humanColorTone\(activity\.actor_human_user_id\)\}/);
+  assert.match(stylesheet, /\.task-discussion \.project-activity-row\.human-tone-5/);
+  assert.match(stylesheet, /background: #fff4dd/);
+  assert.match(stylesheet, /background: #eaf3ff/);
+  assert.match(stylesheet, /background: #e9f7ed/);
+  assert.match(stylesheet, /\.task-discussion \.project-activity-row\s*\{\s*grid-template-columns: minmax\(0, 1fr\)/s);
+  assert.match(stylesheet, /\.task-discussion \.project-activity-avatar\s*\{\s*display: none/s);
+  assert.match(stylesheet, /\.task-message-context \.task-message-fact\s*\{[^}]*grid-template-columns: 64px minmax\(0, 1fr\)/s);
 });
 
 test("explicit reply chains group once without guessing from body or author", () => {
@@ -315,12 +345,12 @@ test("mobile Star Orbit keeps only processing and tasks as compact shortcuts", (
   assert.match(stylesheet, /\.thread-list-item \{[\s\S]*?min-width: 0;/);
 });
 
-test("mobile connection status stays on one line and reports heartbeat-backed online Agents", () => {
+test("mobile connection status stays on one line and reports task availability", () => {
   assert.match(html, /connection-label-full/);
   assert.match(html, /connection-label-compact/);
-  assert.match(script, /`\$\{connectedAgentCount\} 个 Agent`/);
-  assert.match(script, /`\$\{connectedAgentCount\} 个 Agent 在线`/);
-  assert.match(script, /connectedAgentCount > 0 \? "success" : ""/);
+  assert.match(script, /`\$\{readyAgentCount\} 个 AI 可接任务 · \$\{workingAgentCount\} 个执行中`/);
+  assert.match(script, /`\$\{readyAgentCount\} 可接 · \$\{workingAgentCount\} 执行`/);
+  assert.match(script, /readyAgentCount \+ workingAgentCount > 0 \? "success" : ""/);
   assert.match(stylesheet, /\.connection-label-compact \{\s*display: none;/);
   assert.match(stylesheet, /@media \(max-width: 580px\)[\s\S]*?\.connection \{[\s\S]*?white-space: nowrap;/);
   assert.match(stylesheet, /\.connection-label-full \{\s*display: none;/);
@@ -416,11 +446,16 @@ test("conversation identity and attachments expose clear safe actions", () => {
   assert.match(script, /agent\?\.owner_display_name/);
   assert.match(script, /agent\?\.owned_by_current_human/);
   assert.match(script, /打开 PDF/);
-  assert.match(script, /安全预览/);
+  assert.match(script, /预览网页/);
+  assert.match(script, /查看内容/);
+  assert.match(script, /"text\/markdown"/);
+  assert.match(script, /"application\/json"/);
   assert.match(script, /\/api\/v1\/orbit\/attachments\/\$\{attachmentId\}/);
   assert.match(html, /id="attachment-preview-frame"[^>]*sandbox=""/);
+  assert.match(html, /附件以隔离、只读方式展示/);
   assert.match(stylesheet, /\.attachment-preview-dialog iframe/);
   assert.match(stylesheet, /\.thread-attachment-action/);
+  assert.match(stylesheet, /\.thread-attachment-action\.is-primary/);
 });
 
 test("archived conversations move to Settings and hide from owned Agents without deleting messages", () => {
@@ -451,13 +486,15 @@ test("mobile Thread list and detail are separate layers", () => {
   assert.match(html, /返回对话列表/);
 });
 
-test("Relay groups Agents and derives five explicit connection states", () => {
+test("Relay shows four Human-facing work states and keeps technical evidence", () => {
   assert.match(html, /Agent 与连接/);
   assert.match(html, /全部 Agent/);
-  assert.match(html, /正常连接/);
-  assert.match(html, /等待 Agent/);
-  assert.match(html, /离线/);
-  assert.match(html, /连接异常/);
+  assert.match(html, /可接任务/);
+  assert.match(html, /正在工作/);
+  assert.match(html, /恢复中/);
+  assert.match(html, /需要处理/);
+  assert.match(script, /work_availability/);
+  assert.match(script, /current_task_listener_last_heartbeat_at/);
   assert.match(script, /connection_state/);
   assert.match(script, /current_connector_last_heartbeat_at/);
   assert.match(script, /你已完成授权，正在等待 Agent/);

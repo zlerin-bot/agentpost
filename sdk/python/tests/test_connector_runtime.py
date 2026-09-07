@@ -139,6 +139,29 @@ def message_json(*, status: str) -> dict[str, Any]:
     }
 
 
+def test_connector_heartbeat_can_report_task_listener_without_overloading_transport_state():
+    bodies = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        bodies.append(json.loads(request.content))
+        return httpx.Response(200, json=heartbeat_json())
+
+    with AgentPost(
+        "https://agentpost.me",
+        "agt_listener-key",
+        transport=httpx.MockTransport(handler),
+    ) as client:
+        client.connector.heartbeat(
+            task_listener_status="listening",
+            task_listener_session_id="listener-session-1",
+            wake_capability="manual",
+        )
+    assert bodies[0]["health_status"] == "healthy"
+    assert bodies[0]["task_listener_status"] == "listening"
+    assert bodies[0]["task_listener_session_id"] == "listener-session-1"
+    assert bodies[0]["wake_capability"] == "manual"
+
+
 def test_keyring_store_masks_credentials_and_cursor_file_contains_only_cursor(
     tmp_path: Path,
 ) -> None:

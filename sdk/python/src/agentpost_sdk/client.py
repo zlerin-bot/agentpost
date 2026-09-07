@@ -321,6 +321,9 @@ class _ConnectorResource:
         runtime_version: str | None = None,
         runtime_session_started_at: datetime | None = None,
         capabilities: list[str] | None = None,
+        task_listener_status: str | None = None,
+        task_listener_session_id: str | None = None,
+        wake_capability: str | None = None,
     ):
         from agentpost_sdk.onboarding import ConnectorHeartbeat
 
@@ -338,6 +341,9 @@ class _ConnectorResource:
                     runtime_session_started_at or _RUNTIME_SESSION_STARTED_AT
                 ).isoformat(),
                 "capabilities": capabilities or _RUNTIME_CAPABILITIES,
+                "task_listener_status": task_listener_status,
+                "task_listener_session_id": task_listener_session_id,
+                "wake_capability": wake_capability,
             },
         )
         try:

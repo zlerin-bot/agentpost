@@ -2,6 +2,7 @@ from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 from agentpost.onboarding.connectivity import (
+    agent_work_availability,
     connector_connection_state,
     heartbeat_timeout_seconds,
 )
@@ -55,4 +56,28 @@ def test_connection_states_do_not_treat_authorization_as_online() -> None:
             heartbeat_interval_seconds=30,
         )
         == "connection_error"
+    )
+
+
+def test_work_availability_requires_fresh_listener_or_active_run() -> None:
+    now = datetime(2026, 8, 27, 0, 1, 30, tzinfo=UTC)
+    connected = connector(
+        task_listener_status="listening",
+        task_listener_last_heartbeat_at=now,
+        wake_capability="manual",
+    )
+    assert agent_work_availability(connected, now=now, heartbeat_interval_seconds=30) == "ready"
+    connected.task_listener_last_heartbeat_at = now - timedelta(seconds=91)
+    assert (
+        agent_work_availability(connected, now=now, heartbeat_interval_seconds=30)
+        == "needs_attention"
+    )
+    assert (
+        agent_work_availability(
+            connected,
+            now=now,
+            heartbeat_interval_seconds=30,
+            has_active_run=True,
+        )
+        == "working"
     )

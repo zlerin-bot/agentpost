@@ -112,6 +112,7 @@ class OrbitAgent(ControlModel):
         "offline",
         "connection_error",
     ]
+    work_availability: Literal["ready", "working", "recovering", "needs_attention"]
     current_connector_type: str | None = None
     current_connector_name: str | None = None
     current_connector_device: str | None = None
@@ -120,6 +121,9 @@ class OrbitAgent(ControlModel):
     current_connector_activated_at: datetime | None = None
     current_connector_last_heartbeat_at: datetime | None = None
     current_connector_error_code: str | None = None
+    current_task_listener_status: str | None = None
+    current_task_listener_last_heartbeat_at: datetime | None = None
+    current_wake_capability: str | None = None
     unread_count: int
     pending_task_count: int
 

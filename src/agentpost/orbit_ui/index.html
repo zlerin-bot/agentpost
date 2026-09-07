@@ -299,13 +299,13 @@
                 </div>
                 <button id="agent-overview-new" type="button" class="primary-action">连接新的 Agent</button>
               </div>
-              <p class="section-intro">状态依据当前连接、最近在线时间和明确错误判断；完成授权后，仍需等待 Agent 完成连接。</p>
+              <p class="section-intro">这里显示 AI 是否真的能接任务；连接、监听、唤醒和运行证据可在详情中查看。</p>
               <div class="agent-overview-metrics" aria-label="Agent 连接统计">
                 <article><span>全部 Agent</span><strong id="agent-stat-all">0</strong></article>
-                <article><span>正常连接</span><strong id="agent-stat-connected">0</strong></article>
-                <article><span>等待 Agent</span><strong id="agent-stat-awaiting">0</strong></article>
-                <article><span>离线</span><strong id="agent-stat-offline">0</strong></article>
-                <article><span>连接异常</span><strong id="agent-stat-error">0</strong></article>
+                <article><span>可接任务</span><strong id="agent-stat-connected">0</strong></article>
+                <article><span>正在工作</span><strong id="agent-stat-awaiting">0</strong></article>
+                <article><span>恢复中</span><strong id="agent-stat-offline">0</strong></article>
+                <article><span>需要处理</span><strong id="agent-stat-error">0</strong></article>
               </div>
               <div id="agent-overview-groups" class="agent-overview-groups"></div>
             </div>
@@ -479,6 +479,7 @@
               <p id="project-action-result" class="form-status" role="status"></p>
               <section id="task-attention" class="task-attention" aria-label="需要我处理" hidden></section>
               <nav id="task-jump-nav" class="task-jump-nav" aria-label="当前任务内容">
+                <button id="task-jump-latest" type="button">最新动态</button>
                 <button type="button" data-task-target="task-progress">进展</button>
                 <button type="button" data-task-target="task-records">讨论与记录</button>
                 <button type="button" data-task-target="task-owner-controls">安排工作</button>
@@ -1157,7 +1158,7 @@
           <button id="attachment-preview-close" type="button" class="dialog-close" aria-label="关闭附件预览">×</button>
         </div>
         <p id="attachment-preview-meta" class="dialog-summary"></p>
-        <div class="attachment-preview-note">HTML 中的脚本、联网请求、表单和弹窗已停用。</div>
+        <div class="attachment-preview-note">附件以隔离、只读方式展示；脚本、联网请求、表单和弹窗均不会运行。</div>
         <iframe id="attachment-preview-frame" title="附件内容" sandbox=""></iframe>
         <div class="dialog-actions">
           <a id="attachment-preview-download" class="quiet-button attachment-download-link" href="#" download>下载原文件</a>

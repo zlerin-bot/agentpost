@@ -49,7 +49,7 @@ from agentpost.control.schemas import (
 )
 from agentpost.identity.models import Agent, utc_now
 from agentpost.messaging.models import AuditLog, Delivery, Message
-from agentpost.onboarding.connectivity import connector_connection_state
+from agentpost.onboarding.connectivity import agent_work_availability, connector_connection_state
 
 
 class HumanEmailAlreadyRegisteredError(Exception):
@@ -1393,6 +1393,16 @@ def build_orbit_dashboard(
 
     now = datetime.now(UTC)
     current_connectors = _current_connectors_by_agent(session, agent_ids)
+    from agentpost.tasks.models import AgentRun
+
+    active_run_agent_ids = set(
+        session.scalars(
+            select(AgentRun.agent_id).where(
+                AgentRun.agent_id.in_(agent_ids),
+                AgentRun.status.in_(["leased", "starting", "running"]),
+            )
+        )
+    )
     agents: list[OrbitAgent] = []
     for entry in entries:
         connector = current_connectors.get(entry.agent.id)
@@ -1413,6 +1423,12 @@ def build_orbit_dashboard(
                     now=now,
                     heartbeat_interval_seconds=heartbeat_interval_seconds,
                 ),
+                work_availability=agent_work_availability(
+                    connector,
+                    now=now,
+                    heartbeat_interval_seconds=heartbeat_interval_seconds,
+                    has_active_run=entry.agent.id in active_run_agent_ids,
+                ),
                 current_connector_type=getattr(connector, "connector_type", None),
                 current_connector_name=getattr(connector, "display_name", None),
                 current_connector_device=getattr(connector, "device_name", None),
@@ -1425,6 +1441,11 @@ def build_orbit_dashboard(
                     None,
                 ),
                 current_connector_error_code=getattr(connector, "last_error_code", None),
+                current_task_listener_status=getattr(connector, "task_listener_status", None),
+                current_task_listener_last_heartbeat_at=getattr(
+                    connector, "task_listener_last_heartbeat_at", None
+                ),
+                current_wake_capability=getattr(connector, "wake_capability", None),
                 unread_count=unread_by_agent.get(entry.agent.id, 0),
                 pending_task_count=pending_by_agent.get(entry.agent.id, 0),
             )

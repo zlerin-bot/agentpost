@@ -10,9 +10,18 @@ test("late task responses, including failures and A-B-A races, cannot replace cu
   const requests = [];
   const request = () => new Promise((resolve, reject) => requests.push({ resolve, reject }));
   let renders = 0;
-  const load = new Function("state", "requestJson", "renderProjectDetail", "window", "history", "taskRouteUrl",
+  const load = new Function("state", "requestJson", "renderProjectDetail", "window", "history", "taskRouteUrl", "renderTaskPreferences", "document", "markTaskSnapshotViewed",
     section("async function loadProjectDetail(", "function taskRouteUrl(") + ";return loadProjectDetail;")(
-    state, request, () => { renders++; }, { location: { href: "https://example.test/orbit?task=A" } }, {}, () => "");
+    state,
+    request,
+    () => { renders++; },
+    { location: { href: "https://example.test/orbit?task=A" } },
+    {},
+    () => "",
+    () => {},
+    { visibilityState: "hidden" },
+    () => {},
+  );
   const first = load("A");
   state.selectedProjectId = "B";
   const second = load("B");

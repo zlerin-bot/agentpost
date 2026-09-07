@@ -11,7 +11,7 @@ import tempfile
 import time
 from pathlib import Path
 from threading import Event
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from agentpost_sdk.auto_upgrade import _install_lock
 from agentpost_sdk.client import AgentPost
@@ -268,15 +268,36 @@ def main():
                 claim, workspace=args.workspace, heartbeat=heartbeat
             ),
         )
+        listener_session_id = str(uuid4())
+
+        def report_listener(status="listening"):
+            return client.connector.heartbeat(
+                task_listener_status=status,
+                task_listener_session_id=listener_session_id,
+                wake_capability="manual",
+            )
+
         stop = Event()
         try:
             while True:
+                report_listener()
                 print(json.dumps(worker.once(args.task_id), ensure_ascii=False), flush=True)
                 if args.once:
+                    report_listener("stopped")
                     return
                 stop.wait(30)
         except KeyboardInterrupt:
             stop.set()
+            try:
+                report_listener("stopped")
+            except Exception:
+                pass
+        except Exception:
+            try:
+                report_listener("error")
+            except Exception:
+                pass
+            raise
 
 
 if __name__ == "__main__":

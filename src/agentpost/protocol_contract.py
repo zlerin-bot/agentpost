@@ -175,6 +175,11 @@ class HeartbeatContract(ContractModel):
     reports_installed_configured_and_runtime_versions: Literal[True] = True
     reports_runtime_session_and_capabilities: Literal[True] = True
     reconnect_required_when_loaded_runtime_is_stale: Literal[True] = True
+    task_listener_heartbeat_is_independent: Literal[True] = True
+    work_availability_requires_listener_or_active_run: Literal[True] = True
+    work_availability_states: list[str] = Field(
+        default_factory=lambda: ["ready", "working", "recovering", "needs_attention"]
+    )
 
 
 class SynchronizationContract(ContractModel):

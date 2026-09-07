@@ -25,7 +25,7 @@ from agentpost.identity.api_keys import api_key_prefix, digest_api_key, generate
 from agentpost.identity.handles import available_handle_suggestions
 from agentpost.identity.models import Agent, AgentApiKey, utc_now
 from agentpost.messaging.models import AuditLog, Delivery, Message
-from agentpost.onboarding.connectivity import connector_connection_state
+from agentpost.onboarding.connectivity import agent_work_availability, connector_connection_state
 from agentpost.onboarding.crypto import (
     canonicalize_user_code,
     derive_agent_api_key,
@@ -200,6 +200,10 @@ def _connector_response(connector: ConnectorInstance) -> PairingConnectorRespons
         runtime_session_started_at=connector.runtime_session_started_at,
         runtime_version_reported_at=connector.runtime_version_reported_at,
         runtime_capabilities=connector.runtime_capabilities,
+        task_listener_status=connector.task_listener_status,
+        task_listener_session_id=connector.task_listener_session_id,
+        task_listener_last_heartbeat_at=connector.task_listener_last_heartbeat_at,
+        wake_capability=connector.wake_capability,
         status=connector.status,
         health_status=connector.health_status,
         created_at=connector.created_at,
@@ -755,6 +759,16 @@ def list_human_connectors(
             )
         ).all()
     }
+    from agentpost.tasks.models import AgentRun
+
+    active_run_agent_ids = set(
+        session.scalars(
+            select(AgentRun.agent_id).where(
+                AgentRun.agent_id.in_([agent.id for _, agent in rows]),
+                AgentRun.status.in_(["leased", "starting", "running"]),
+            )
+        )
+    )
     results: list[OrbitConnector] = []
     for connector, agent in rows:
         is_current = connector.id in bindings
@@ -793,6 +807,12 @@ def list_human_connectors(
                 ),
                 upgrade_reason=upgrade_reason,
                 upgrade_prompt=upgrade_prompt,
+                work_availability=agent_work_availability(
+                    connector,
+                    now=utc_now(),
+                    heartbeat_interval_seconds=heartbeat_interval_seconds,
+                    has_active_run=agent.id in active_run_agent_ids,
+                ),
             )
         )
     return results
@@ -1011,6 +1031,12 @@ def record_connector_heartbeat(
         connector.runtime_version = payload.client_version
         connector.runtime_version_reported_at = now
     connector.runtime_capabilities = payload.capabilities
+    if payload.task_listener_status is not None:
+        connector.task_listener_status = payload.task_listener_status
+        connector.task_listener_session_id = payload.task_listener_session_id
+        connector.task_listener_last_heartbeat_at = now
+    if payload.wake_capability is not None:
+        connector.wake_capability = payload.wake_capability
     upgrade = _connector_upgrade_directive(
         session,
         settings=settings,

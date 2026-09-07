@@ -27,6 +27,15 @@ class ConnectorInstance(Base):
             "upgrade_status IS NULL OR upgrade_status IN ('requested', 'completed')",
             name="ck_connector_instances_upgrade_status",
         ),
+        CheckConstraint(
+            "task_listener_status IS NULL OR task_listener_status IN "
+            "('listening', 'stopped', 'error')",
+            name="ck_connector_instances_task_listener_status",
+        ),
+        CheckConstraint(
+            "wake_capability IN ('unsupported', 'manual', 'automatic')",
+            name="ck_connector_instances_wake_capability",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
@@ -57,6 +66,12 @@ class ConnectorInstance(Base):
         DateTime(timezone=True), nullable=True
     )
     runtime_capabilities: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    task_listener_status: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    task_listener_session_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    task_listener_last_heartbeat_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    wake_capability: Mapped[str] = mapped_column(String(24), nullable=False, default="unsupported")
     upgrade_target_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
     upgrade_status: Mapped[str | None] = mapped_column(String(24), nullable=True)
     upgrade_requested_at: Mapped[datetime | None] = mapped_column(

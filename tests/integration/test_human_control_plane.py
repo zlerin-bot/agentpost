@@ -294,11 +294,14 @@ def test_orbit_site_is_branded_and_does_not_persist_credentials(
     assert "owner_display_name" in script.text
     assert "/api/v1/orbit/attachments/" in script.text
     assert "打开 PDF" in script.text
-    assert "安全预览" in script.text
+    assert "预览网页" in script.text
     assert 'sandbox=""' in orbit.text
     assert "Agent 与连接状态" in orbit.text
-    assert "等待 Agent" in orbit.text
-    assert "连接异常" in orbit.text
+    assert "可接任务" in orbit.text
+    assert "正在工作" in orbit.text
+    assert "恢复中" in orbit.text
+    assert "需要处理" in orbit.text
+    assert "连接异常" in script.text
     assert "重新连接这个 Agent" in orbit.text
     assert "权限与关系" in orbit.text
     assert "删除采用软删除" in orbit.text
@@ -1415,6 +1418,8 @@ def test_human_attachment_open_and_html_preview_are_authorized_and_read_only(
             b"<!doctype html><meta charset=utf-8><h1>Safe preview</h1>"
             b"<script>parent.document.body.dataset.unsafe='true'</script>"
         )
+        markdown_bytes = "# 测试说明\n\n<script>不能执行</script>\n\n- 直接阅读".encode()
+        json_bytes = b'{"status":"ready","items":[1,2]}'
         pdf_upload = client.post(
             "/api/v1/attachments",
             headers={"Authorization": f"Bearer {alice['api_key']}"},
@@ -1425,7 +1430,23 @@ def test_human_attachment_open_and_html_preview_are_authorized_and_read_only(
             headers={"Authorization": f"Bearer {alice['api_key']}"},
             files={"file": ("preview.html", html_bytes, "text/html")},
         )
-        assert pdf_upload.status_code == html_upload.status_code == 201
+        markdown_upload = client.post(
+            "/api/v1/attachments",
+            headers={"Authorization": f"Bearer {alice['api_key']}"},
+            files={"file": ("notes.md", markdown_bytes, "text/markdown")},
+        )
+        json_upload = client.post(
+            "/api/v1/attachments",
+            headers={"Authorization": f"Bearer {alice['api_key']}"},
+            files={"file": ("status.json", json_bytes, "application/json")},
+        )
+        assert (
+            pdf_upload.status_code
+            == html_upload.status_code
+            == markdown_upload.status_code
+            == json_upload.status_code
+            == 201
+        )
         sent = client.post(
             "/api/v1/messages",
             headers={
@@ -1437,7 +1458,12 @@ def test_human_attachment_open_and_html_preview_are_authorized_and_read_only(
                 "type": "message",
                 "subject": "附件查看",
                 "content": {"format": "text", "body": "请查看附件"},
-                "attachments": [pdf_upload.json()["id"], html_upload.json()["id"]],
+                "attachments": [
+                    pdf_upload.json()["id"],
+                    html_upload.json()["id"],
+                    markdown_upload.json()["id"],
+                    json_upload.json()["id"],
+                ],
             },
         )
         assert sent.status_code == 201
@@ -1463,6 +1489,14 @@ def test_human_attachment_open_and_html_preview_are_authorized_and_read_only(
         )
         html_preview = client.get(
             f"/api/v1/orbit/attachments/{html_upload.json()['id']}/preview",
+            headers=owner_headers,
+        )
+        markdown_preview = client.get(
+            f"/api/v1/orbit/attachments/{markdown_upload.json()['id']}/preview",
+            headers=owner_headers,
+        )
+        json_preview = client.get(
+            f"/api/v1/orbit/attachments/{json_upload.json()['id']}/preview",
             headers=owner_headers,
         )
         auditor_preview = client.get(
@@ -1499,6 +1533,14 @@ def test_human_attachment_open_and_html_preview_are_authorized_and_read_only(
     assert html_preview.headers["content-type"].startswith("text/html")
     assert "default-src 'none'" in html_preview.headers["content-security-policy"]
     assert "form-action 'none'" in html_preview.headers["content-security-policy"]
+    assert markdown_preview.status_code == 200
+    assert markdown_preview.headers["content-type"].startswith("text/html")
+    assert "&lt;script&gt;不能执行&lt;/script&gt;" in markdown_preview.text
+    assert "<script>不能执行</script>" not in markdown_preview.text
+    assert "只读文字预览" in markdown_preview.text
+    assert "default-src 'none'" in markdown_preview.headers["content-security-policy"]
+    assert json_preview.status_code == 200
+    assert "  &quot;status&quot;: &quot;ready&quot;" in json_preview.text
     assert auditor_preview.status_code == outsider_preview.status_code == 404
     assert state_after == state_before
 
@@ -1523,7 +1565,13 @@ def test_agent_connection_projection_uses_current_binding_heartbeat_and_error_ev
         with database.session_factory() as session:
             now = datetime.now(UTC)
             connector_specs = {
-                "connected": {"health_status": "healthy", "last_heartbeat_at": now},
+                "connected": {
+                    "health_status": "healthy",
+                    "last_heartbeat_at": now,
+                    "task_listener_status": "listening",
+                    "task_listener_last_heartbeat_at": now,
+                    "wake_capability": "manual",
+                },
                 "awaiting": {"health_status": "unknown", "last_heartbeat_at": None},
                 "offline": {
                     "health_status": "healthy",
@@ -1570,6 +1618,9 @@ def test_agent_connection_projection_uses_current_binding_heartbeat_and_error_ev
         "offline": "offline",
     }
     assert projected["connected"]["current_connector_type"] == "codex"
+    assert projected["connected"]["work_availability"] == "ready"
+    assert projected["offline"]["work_availability"] == "needs_attention"
+    assert projected["connected"]["current_task_listener_status"] == "listening"
     assert projected["broken"]["current_connector_error_code"] == "demo_connection_error"
     assert dashboard.json()["metrics"]["connected_agent_count"] == 1
 

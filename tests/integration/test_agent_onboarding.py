@@ -352,6 +352,9 @@ def test_outdated_connector_heartbeat_requests_upgrade_once_and_keeps_inbox_comp
                 "configured_version": "agentpost-connect/0.1.45",
                 "runtime_session_started_at": "2026-09-02T12:00:00Z",
                 "capabilities": ["legacy_inbox"],
+                "task_listener_status": "listening",
+                "task_listener_session_id": "worker-session-1",
+                "wake_capability": "manual",
             },
         )
         assert first.status_code == 200, first.text
@@ -361,8 +364,13 @@ def test_outdated_connector_heartbeat_requests_upgrade_once_and_keeps_inbox_comp
         assert first_connector["runtime_version"] == "agentpost-connect/0.1.20"
         assert first_connector["runtime_session_started_at"] == "2026-09-02T12:00:00Z"
         assert first_connector["runtime_capabilities"] == ["legacy_inbox"]
+        assert first_connector["task_listener_status"] == "listening"
+        assert first_connector["task_listener_session_id"] == "worker-session-1"
+        assert first_connector["task_listener_last_heartbeat_at"]
+        assert first_connector["wake_capability"] == "manual"
         visible = client.get("/api/v1/orbit/connectors").json()["items"]
         assert visible[0]["reconnect_required"] is True
+        assert visible[0]["work_availability"] == "ready"
         directive = first.json()["upgrade"]
         assert first.json()["version_status"] == "update_required"
         assert directive["action"] == "upgrade_required"
@@ -382,6 +390,7 @@ def test_outdated_connector_heartbeat_requests_upgrade_once_and_keeps_inbox_comp
             },
         )
         assert second.status_code == 200, second.text
+        assert second.json()["connector"]["task_listener_session_id"] == "worker-session-1"
         assert (
             second.json()["upgrade"]["notification_message_id"]
             == directive["notification_message_id"]

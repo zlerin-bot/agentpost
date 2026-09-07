@@ -59,6 +59,7 @@ const state = {
   friendsLoaded: false,
   selectedFriendId: "",
   friendQuery: "",
+  friendSearchTimer: null,
   friendFilter: "accepted",
   activeModule: "projects",
   activeSection: "board",
@@ -527,6 +528,7 @@ function filteredFriends() {
     const searchable = [
       friend.display_name,
       friend.username,
+      friend.search_match || "",
       ...friend.agents.flatMap((agent) => agent.capabilities || []),
       ...friend.agents.flatMap((agent) => [agent.display_name, agent.address]),
     ].join(" ").toLowerCase();
@@ -696,20 +698,33 @@ async function selectTask(taskId, { updateHistory = true } = {}) {
   }
 }
 
-async function loadFriends() {
+async function loadFriends(query = "") {
   if (!state.dashboard) {
     return;
   }
   try {
+    const suffix = query.trim() ? `?query=${encodeURIComponent(query.trim())}` : "";
     const [payload, suggestions] = await Promise.all([
-      requestJson("/api/v1/friends"),
-      requestJson("/api/v1/friends/suggestions"),
+      requestJson(`/api/v1/friends${suffix}`),
+      requestJson(`/api/v1/friends/suggestions${suffix}`),
     ]);
-    const formal = Array.isArray(payload?.items) ? payload.items : [];
-    const suggested = Array.isArray(suggestions?.items) ? suggestions.items : [];
-    state.friends = [...formal, ...suggested.filter(
+    const formal = (Array.isArray(payload?.items) ? payload.items : []).map(
+      (friend) => ({ ...friend, search_match: query.trim() }),
+    );
+    const suggested = (Array.isArray(suggestions?.items) ? suggestions.items : []).map(
+      (friend) => ({ ...friend, search_match: query.trim() }),
+    );
+    const loaded = [...formal, ...suggested.filter(
       (candidate) => !formal.some((friend) => friend.human_user_id === candidate.human_user_id),
     )];
+    state.friends = query.trim()
+      ? [...loaded, ...state.friends.filter(
+        (friend) => !loaded.some((match) => match.human_user_id === friend.human_user_id),
+      )]
+      : loaded;
+    if (query.trim() && !formal.length && suggested.length) {
+      state.friendFilter = "suggested";
+    }
     if (!state.friendsLoaded && formal.some((friend) => friend.relation_status === "pending_incoming")) {
       state.friendFilter = "pending_incoming";
     }
@@ -858,7 +873,7 @@ function createTaskActivityAttachment(activity, format, body) {
   icon.textContent = format === "json" ? "{}" : "⌑";
   const copy = document.createElement("span");
   const name = document.createElement("strong");
-  name.textContent = taskContentTitle(activity);
+  name.textContent = "说了什么";
   const hint = document.createElement("small");
   hint.textContent = `${format.toUpperCase()} 正文 · 展开阅读`;
   copy.append(name, hint);
@@ -1101,6 +1116,55 @@ function taskMessageRecipientSummary(recipients) {
     + (unknown ? ` · ${unknown} 个状态待确认` : "");
 }
 
+function taskMessageAudienceLabel(project, activity) {
+  const recipients = Array.isArray(activity.metadata?.recipient_statuses)
+    ? activity.metadata.recipient_statuses
+    : [];
+  const humanIds = [...new Set(recipients.map((item) => item.human_user_id).filter(Boolean))];
+  const names = humanIds.map((id) => (
+    (project.members || []).find((member) => String(member.human_user_id) === String(id))?.display_name
+  )).filter(Boolean);
+  if (!humanIds.length) return "任务成员（具体范围待确认）";
+  if (names.length !== humanIds.length) return `${humanIds.length} 位任务成员`;
+  if (names.length <= 3) return names.join("、");
+  return `${names.slice(0, 2).join("、")}等 ${names.length} 位任务成员`;
+}
+
+function taskMessageReasonLabel(project, activity) {
+  const parentId = activity.metadata?.reply_to_activity_id;
+  if (parentId) {
+    const original = (project.activities || []).find((item) => item.activity_id === parentId);
+    return original
+      ? `回应 ${original.actor_display_name || "任务成员"} 的「${taskContentTitle(original)}」`
+      : "回应一条较早的任务消息（原记录暂不可用）";
+  }
+  const subject = plainTaskExcerpt(activity.metadata?.subject || "", 64);
+  return subject ? `发起讨论「${subject}」` : "发起一项任务讨论";
+}
+
+function taskMessageFollowUpLabel(project, activity) {
+  const followUpIds = Array.isArray(activity.metadata?.follow_up_human_user_ids)
+    ? activity.metadata.follow_up_human_user_ids
+    : [];
+  const names = followUpIds.map((id) => (
+    (project.members || []).find((member) => String(member.human_user_id) === String(id))?.display_name
+  )).filter(Boolean);
+  return names.length
+    ? names.join("、")
+    : "未指定；需要执行时请安排明确工作";
+}
+
+function appendTaskMessageFact(container, label, value, className = "") {
+  const fact = document.createElement("span");
+  fact.className = `task-message-fact ${className}`.trim();
+  const name = document.createElement("b");
+  name.textContent = label;
+  const content = document.createElement("span");
+  content.textContent = value;
+  fact.append(name, content);
+  container.append(fact);
+}
+
 function syncTaskPrimaryAgentOptions(preferredAgentId = "") {
   const selected = Array.from(
     elements.taskMyAgentOptions.querySelectorAll('input[name="task-my-agent"]:checked'),
@@ -1246,8 +1310,9 @@ function renderProjectDetail() {
     + (project.invited_member_count ? " · " + project.invited_member_count + " 人待确认" : "");
   elements.projectDue.textContent = dateOnlyText(project.due_at);
   elements.projectStateAxes.textContent = taskStateAxesLabel(project);
-  elements.projectInvite.hidden = !ownerAccess;
-  elements.projectMemberInvite.hidden = !ownerAccess;
+  const memberAccess = project.membership_status === "active";
+  elements.projectInvite.hidden = !memberAccess;
+  elements.projectMemberInvite.hidden = !memberAccess;
   elements.projectInvite.disabled = project.status === "archived";
   elements.projectMemberInvite.disabled = project.status === "archived";
   elements.projectArchive.hidden = !ownerAccess;
@@ -1413,7 +1478,7 @@ function renderProjectDetail() {
     const route = document.createElement("small");
     const priorityLabels = { low: "低", normal: "普通", high: "高", urgent: "紧急" };
     const wakeLabels = {
-      queued: "等待 Connector 领取",
+      queued: "已排队，尚未被任务监听领取",
       claimed: "Connector 已领取",
       mapped: "已映射本地会话",
       woken: "本地 AI 已唤醒",
@@ -1675,9 +1740,18 @@ function renderProjectDetail() {
           !discussionKinds.has(activity.kind) && !workKinds.has(activity.kind)
         ))
         : currentActivities));
+  const latestActivity = currentActivities[0];
+  const latestButton = document.querySelector("#task-jump-latest");
+  latestButton.hidden = !latestActivity;
+  latestButton.textContent = project.unread_count > 0
+    ? `最新动态 · ${project.unread_count} 条新内容`
+    : "最新动态";
+  latestButton.onclick = latestActivity
+    ? () => revealTaskRecord(latestActivity.activity_id)
+    : null;
   const renderActivitiesInto = (activities, container) => activities.forEach((activity) => {
     const row = document.createElement("article");
-    row.className = "project-activity-row";
+    row.className = `project-activity-row human-tone-${humanColorTone(activity.actor_human_user_id)}`;
     row.id = `task-activity-${activity.activity_id}`;
     const avatar = document.createElement("span");
     avatar.className = `project-activity-avatar actor-${activity.actor_type}`;
@@ -1709,7 +1783,7 @@ function renderProjectDetail() {
     const actor = document.createElement("strong");
     const actorHuman = activity.actor_display_name || "AgentPost";
     const actorAgent = activity.actor_agent_display_name;
-    if (["task_message", "task_created", "created"].includes(activity.kind) && actorAgent) {
+    if (["task_created", "created"].includes(activity.kind) && actorAgent) {
       const origin = activity.metadata?.publication_origin;
       actor.textContent = origin === "human_delegated"
         ? `${actorHuman} 委托 ${actorAgent} 发布`
@@ -1726,14 +1800,31 @@ function renderProjectDetail() {
     textNode.className = "project-activity-action";
     textNode.textContent = activityText(activity);
     copy.append(heading);
-    if (activity.actor_agent_display_name
-      && !["task_message", "task_created", "created"].includes(activity.kind)) {
+    if (activity.kind === "task_message" && actorAgent) {
+      const agent = document.createElement("small");
+      agent.className = "project-activity-agent";
+      const origin = activity.metadata?.publication_origin;
+      agent.textContent = origin === "human_delegated"
+        ? `由 ${actorAgent} 代为发布`
+        : (origin === "agent_autonomous"
+          ? `其 ${actorAgent} 主动发布`
+          : `通过 ${actorAgent} 发布`);
+      copy.append(agent);
+    } else if (activity.actor_agent_display_name
+      && !["task_created", "created"].includes(activity.kind)) {
       const agent = document.createElement("small");
       agent.className = "project-activity-agent";
       agent.textContent = "通过 AI：" + activity.actor_agent_display_name;
       copy.append(agent);
     }
-    copy.append(textNode);
+    if (activity.kind === "task_message") {
+      const context = document.createElement("div");
+      context.className = "task-message-context";
+      appendTaskMessageFact(context, "因为什么", taskMessageReasonLabel(project, activity), "reason");
+      appendTaskMessageFact(context, "面向谁", taskMessageAudienceLabel(project, activity), "audience");
+      appendTaskMessageFact(context, "谁跟进", taskMessageFollowUpLabel(project, activity), "follow-up");
+      copy.append(context);
+    } else copy.append(textNode);
     const suggestedParent = ownerAccess && state.taskRecordFilter === "relations"
       ? suggestedTaskReplyParent(project, activity) : null;
     if (suggestedParent) {
@@ -1813,7 +1904,7 @@ function renderProjectDetail() {
       const recipients = document.createElement("details");
       recipients.className = "project-activity-recipients";
       const summary = document.createElement("summary");
-      summary.textContent = taskMessageRecipientSummary(activity.metadata.recipient_statuses);
+      summary.textContent = `查看接收状态 · ${taskMessageRecipientSummary(activity.metadata.recipient_statuses)}`;
       recipients.append(summary);
       activity.metadata.recipient_statuses.forEach((item) => {
         const recipient = document.createElement("div");
@@ -1829,12 +1920,17 @@ function renderProjectDetail() {
       } else if (String(activity.metadata.body).length > 600 || /^\s*#{1,6}\s/m.test(String(activity.metadata.body))) {
         copy.append(createTaskActivityAttachment(activity, "text", activity.metadata.body));
       } else {
+        const message = document.createElement("section");
+        message.className = "task-message-body";
+        const label = document.createElement("strong");
+        label.textContent = "说了什么";
         const body = document.createElement("p");
         body.className = "task-activity-text-body";
         body.textContent = typeof activity.metadata.body === "string"
           ? activity.metadata.body
           : JSON.stringify(activity.metadata.body);
-        copy.append(body);
+        message.append(label, body);
+        copy.append(message);
       }
     }
     if (Array.isArray(activity.metadata?.attachments)) {
@@ -1948,12 +2044,24 @@ function renderProjectDetail() {
       const root = discussion[0];
       const latest = discussion.at(-1);
       const title = root.metadata?.subject || String(root.metadata?.body || activityText(root)).slice(0, 80);
-      summary.textContent = `${root.actor_display_name}：${title} · ${discussion.length - 1} 条回复 · ${dateText(latest.created_at)}`;
+      const heading = document.createElement("span");
+      heading.className = "task-discussion-heading";
+      const topic = document.createElement("strong");
+      topic.textContent = plainTaskExcerpt(title, 92);
+      const time = document.createElement("time");
+      time.textContent = dateText(latest.created_at);
+      heading.append(topic, time);
+      const facts = document.createElement("span");
+      facts.className = "task-discussion-facts";
+      appendTaskMessageFact(facts, "发起", root.actor_display_name || "Human 待确认");
+      appendTaskMessageFact(facts, "面向", taskMessageAudienceLabel(project, root));
+      appendTaskMessageFact(facts, "回复", `${discussion.length - 1} 条`);
+      appendTaskMessageFact(facts, "跟进", taskMessageFollowUpLabel(project, latest), "follow-up");
       const preview = document.createElement("p");
-      preview.textContent = `${latest.actor_display_name}：${plainTaskExcerpt(latest.metadata?.body || activityText(latest), 120)}`;
+      preview.textContent = `最新回复 · ${latest.actor_display_name || "Human 待确认"}：${plainTaskExcerpt(latest.metadata?.body || activityText(latest), 120)}`;
       const list = document.createElement("div");
       renderActivitiesInto(discussion, list);
-      summary.append(preview);
+      summary.append(heading, facts, preview);
       details.append(summary, list);
       elements.projectActivityList.append(details);
       return;
@@ -2109,7 +2217,7 @@ function renderFriendDetail() {
     const name = document.createElement("strong");
     name.textContent = agent.display_name;
     const status = document.createElement("small");
-    status.textContent = agent.address + (agent.connection_state ? " · " + agent.connection_state : "");
+    status.textContent = agent.address + (agent.work_availability ? " · " + statusLabel(agent.work_availability) : "");
     copy.append(name, status);
     row.append(avatar, copy);
     elements.friendAgentList.append(row);
@@ -2658,6 +2766,10 @@ function initializeCollaborationModules() {
   elements.friendSearchInput.addEventListener("input", () => {
     state.friendQuery = elements.friendSearchInput.value;
     renderFriendBrowser();
+    window.clearTimeout(state.friendSearchTimer);
+    state.friendSearchTimer = window.setTimeout(() => {
+      void loadFriends(state.friendQuery);
+    }, 250);
   });
   elements.friendFilters.forEach((button) => {
     button.addEventListener("click", () => {
@@ -3246,6 +3358,12 @@ function statusLabel(value, type = "status") {
     offline: "离线",
     connection_error: "连接异常",
     awaiting_agent: "等待 Agent 完成本机连接",
+    ready: "可接任务",
+    working: "正在工作",
+    recovering: "恢复中",
+    needs_attention: "需要处理",
+    listening: "正在监听",
+    stopped: "已停止监听",
   };
   return labels[value] || safeText(value);
 }
@@ -3284,6 +3402,18 @@ function agentConnectionCopy(agent) {
   return copies[agent.connection_state] || "连接证据不足";
 }
 
+function agentAvailabilityCopy(agent) {
+  const copies = {
+    ready: `任务监听正常，最近确认 ${dateText(agent.current_task_listener_last_heartbeat_at)}`,
+    working: "已有任务 Run 正在执行，进度以任务页的运行记录为准",
+    recovering: "AgentPost 正在尝试恢复任务执行",
+    needs_attention: agent.connection_state === "connected"
+      ? "连接可以通信，但没有检测到任务监听；新工作会继续排队，不会误报为已执行"
+      : agentConnectionCopy(agent),
+  };
+  return copies[agent.work_availability] || "暂时没有足够证据判断是否能接任务";
+}
+
 function agentMatchesQuery(agent) {
   if (!state.agentQuery) {
     return true;
@@ -3300,21 +3430,21 @@ function agentMatchesQuery(agent) {
 
 function renderAgentOverview(agents) {
   const counts = {
-    connected: 0,
-    awaiting_agent: 0,
-    offline: 0,
-    connection_error: 0,
+    ready: 0,
+    working: 0,
+    recovering: 0,
+    needs_attention: 0,
   };
   agents.forEach((agent) => {
-    if (Object.hasOwn(counts, agent.connection_state)) {
-      counts[agent.connection_state] += 1;
+    if (Object.hasOwn(counts, agent.work_availability)) {
+      counts[agent.work_availability] += 1;
     }
   });
   elements.agentStatAll.textContent = String(agents.length);
-  elements.agentStatConnected.textContent = String(counts.connected);
-  elements.agentStatAwaiting.textContent = String(counts.awaiting_agent);
-  elements.agentStatOffline.textContent = String(counts.offline);
-  elements.agentStatError.textContent = String(counts.connection_error);
+  elements.agentStatConnected.textContent = String(counts.ready);
+  elements.agentStatAwaiting.textContent = String(counts.working);
+  elements.agentStatOffline.textContent = String(counts.recovering);
+  elements.agentStatError.textContent = String(counts.needs_attention);
   elements.agentOverviewGroups.replaceChildren();
   if (!agents.length) {
     elements.agentOverviewGroups.append(emptyState("还没有可查看的 Agent。连接新的 Agent 后会在这里出现。"));
@@ -3352,7 +3482,7 @@ function agentBrowserButton(agent) {
   display.textContent = `${safeText(agent.display_name)} · ${agent.current_connector_type ? agentTypeLabel({ agent_type: agent.current_connector_type }) : "类型未提供"}`;
   names.append(name, display);
   identity.append(avatar, names);
-  const status = chip(agent.connection_state);
+  const status = chip(agent.work_availability);
   button.append(identity, status);
   button.addEventListener("click", () => selectAgent(String(agent.id)));
   return button;
@@ -3410,11 +3540,11 @@ function detailFact(label, value, copy = "") {
 function renderCurrentAgentConnection(agent) {
   elements.agentCurrentConnection.replaceChildren();
   const intro = document.createElement("div");
-  intro.className = `agent-connection-banner ${agent.connection_state}`;
+  intro.className = `agent-connection-banner ${agent.work_availability}`;
   const heading = document.createElement("strong");
-  heading.textContent = statusLabel(agent.connection_state);
+  heading.textContent = statusLabel(agent.work_availability);
   const copy = document.createElement("p");
-  copy.textContent = agentConnectionCopy(agent);
+  copy.textContent = agentAvailabilityCopy(agent);
   intro.append(heading, copy);
   elements.agentCurrentConnection.append(intro);
   if (agent.connection_state === "disconnected") {
@@ -3429,6 +3559,9 @@ function renderCurrentAgentConnection(agent) {
     ["初始连接时间", dateText(agent.current_connector_activated_at)],
     ["最近连接时间", dateText(agent.current_connector_last_heartbeat_at)],
     ["健康证据", statusLabel(agent.current_connector_health || "unknown")],
+    ["任务监听", statusLabel(agent.current_task_listener_status || "unknown")],
+    ["最近监听确认", dateText(agent.current_task_listener_last_heartbeat_at)],
+    ["唤醒方式", ({ automatic: "AgentPost 可自动唤醒", manual: "需先手动启动监听", unsupported: "当前宿主不支持" })[agent.current_wake_capability] || "未上报"],
   ].forEach(([label, value]) => facts.append(detailFact(label, value)));
   const technical = document.createElement("details");
   technical.className = "agent-technical-details";
@@ -3503,8 +3636,8 @@ function renderAgentDetail(agent) {
     : `${safeText(agent.display_name)} · 尚未设置短名称`;
   elements.agentDetailAvatar.textContent = agentDisplayName(agent).slice(0, 1).toUpperCase();
   elements.agentDetailAvatar.style.setProperty("--agent-hue", String(agentHue(agent)));
-  elements.agentDetailStatus.className = `data-chip ${agent.connection_state}`;
-  elements.agentDetailStatus.textContent = statusLabel(agent.connection_state);
+  elements.agentDetailStatus.className = `data-chip ${agent.work_availability}`;
+  elements.agentDetailStatus.textContent = statusLabel(agent.work_availability);
   elements.agentDetailSummary.replaceChildren(
     detailFact("常用名称", agentDisplayName(agent)),
     detailFact("显示名称", agent.display_name),
@@ -3782,7 +3915,7 @@ function connectorCard(connector, historical = false) {
   const connectionName = document.createElement("span");
   connectionName.textContent = safeText(connector.display_name, "本机连接");
   identity.append(name, connectionName);
-  heading.append(identity, chip(historical ? connector.status : connector.connection_state));
+  heading.append(identity, chip(historical ? connector.status : connector.work_availability));
 
   const facts = document.createElement("dl");
   [
@@ -3793,6 +3926,7 @@ function connectorCard(connector, historical = false) {
     ["初始连接时间", dateText(connector.activated_at)],
     ["最近连接时间", dateText(connector.last_heartbeat_at)],
     ["连接状态", statusLabel(connector.health_status)],
+    ["接任务状态", statusLabel(connector.work_availability)],
   ].forEach(([label, value]) => {
     const cell = document.createElement("div");
     const term = document.createElement("dt");
@@ -3818,6 +3952,10 @@ function connectorCard(connector, historical = false) {
     ["当前会话启动", dateText(connector.runtime_session_started_at)],
     ["版本上报时间", dateText(connector.runtime_version_reported_at)],
     ["实际加载能力", (connector.runtime_capabilities || []).join("、") || "未上报"],
+    ["任务监听原始状态", connector.task_listener_status || "未上报"],
+    ["监听会话", connector.task_listener_session_id || "未上报"],
+    ["最近监听心跳", dateText(connector.task_listener_last_heartbeat_at)],
+    ["唤醒能力", connector.wake_capability || "未上报"],
     ["推荐版本", connector.recommended_version],
     ["最低完整协作版本", connector.minimum_supported_version],
   ].forEach(([label, value]) => {
@@ -5145,6 +5283,13 @@ function appendThreadAttachments(message, body) {
     const attachmentId = encodeURIComponent(String(attachment.id));
     const downloadUrl = `/api/v1/orbit/attachments/${attachmentId}`;
     const previewUrl = `${downloadUrl}/preview`;
+    const readableTypes = new Set([
+      "application/json",
+      "application/markdown",
+      "text/markdown",
+      "text/plain",
+      "text/x-markdown",
+    ]);
 
     if (normalizedType === "application/pdf") {
       const open = document.createElement("a");
@@ -5153,18 +5298,19 @@ function appendThreadAttachments(message, body) {
       open.target = "_blank";
       open.rel = "noopener noreferrer";
       open.textContent = "打开 PDF";
+      open.classList.add("is-primary");
       actions.append(open);
-    } else if (normalizedType === "text/html") {
+    } else if (normalizedType === "text/html" || readableTypes.has(normalizedType)) {
       const preview = document.createElement("button");
       preview.type = "button";
-      preview.className = "thread-attachment-action";
-      preview.textContent = "安全预览";
+      preview.className = "thread-attachment-action is-primary";
+      preview.textContent = normalizedType === "text/html" ? "预览网页" : "查看内容";
       preview.addEventListener("click", () => openAttachmentPreview(attachment));
       actions.append(preview);
     }
 
     const download = document.createElement("a");
-    download.className = "thread-attachment-action";
+    download.className = "thread-attachment-action is-secondary";
     download.href = downloadUrl;
     download.download = safeText(attachment.filename, "attachment");
     download.textContent = "下载";
@@ -5628,11 +5774,16 @@ async function loadDashboard() {
     elements.welcomeView.hidden = true;
     elements.workspaceView.hidden = false;
     await Promise.all([loadProjects(), loadFriends()]);
-    const connectedAgentCount = Number(dashboard.metrics?.connected_agent_count || 0);
+    const readyAgentCount = (dashboard.agents || []).filter(
+      (agent) => agent.work_availability === "ready",
+    ).length;
+    const workingAgentCount = (dashboard.agents || []).filter(
+      (agent) => agent.work_availability === "working",
+    ).length;
     setConnection(
-      `${connectedAgentCount} 个 Agent 在线`,
-      connectedAgentCount > 0 ? "success" : "",
-      `${connectedAgentCount} 个 Agent`,
+      `${readyAgentCount} 个 AI 可接任务 · ${workingAgentCount} 个执行中`,
+      readyAgentCount + workingAgentCount > 0 ? "success" : "",
+      `${readyAgentCount} 可接 · ${workingAgentCount} 执行`,
     );
     await maybeOpenRequestedPairing();
   } catch (error) {

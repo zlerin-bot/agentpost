@@ -2,6 +2,9 @@
 
 ## 当前接续摘要
 
+- 2026-09-07 0.1.58 P0 反馈切片 **local_verified，未部署**：修复 Dylan 指出的“连接心跳正常但任务长期排队”状态失真。Connector 新增独立任务监听心跳、监听会话和唤醒能力，Human 主界面只显示“可接任务、正在工作、恢复中、需要处理”；连接、监听、唤醒等原始证据放入详情。`agentpost-task-worker` 启动、轮询、停止和异常时上报监听事实；普通连接心跳不会伪造或清除监听状态。当前 Codex worker 的唤醒能力仍为 manual，其他宿主未上报监听前会如实显示“需要处理”。新 schema 为 `0040_connector_task_listener_truth`。
+- 同一切片处理 020 的成员和好友反馈：任一 active Task 成员都可把自己已接受的好友直接加入任务，服务端仍以成员关系和发起人的好友关系校验；好友支持按 Human 用户名/ID、Agent 地址/短名称/ID 精确查找。任务页新增“最新动态”直达入口；旧 Thread 页面保持只读且无发送框；任务讨论三层关系、手机扁平布局、分层底纹，以及 Markdown/JSON/HTML 一次点击安全预览也纳入本候选。张子良本轮已读取内容只有安全处理确认，没有可复现的新产品缺陷。
+- 验证：491 非 PostgreSQL passed、2 skipped、7 PostgreSQL deselected；67 项 JavaScript/TypeScript/OpenClaw 测试、Ruff check/format、TypeScript compile 和 diff check 通过。新 0040 迁移已在隔离 SQLite upgrade/downgrade 验证。当前机器没有 PostgreSQL CLI/测试 URL，本轮 PostgreSQL 专项待确认。隔离 Chrome 8778 桌面预览无横向溢出；390px 新状态区真机/浏览器尺寸复核待确认。生产仍是 0.1.57 partial，定时任务保持 PAUSED。
 - 2026-09-07 0.1.58 导航红点热修复候选：任务未读红点不再作为一级导航网格的第三个子项，而是附着在“任务”标题内；桌面侧栏与手机底栏均不再被红点新增行或撑高。红点仍保留，任务列表内的行内红点语义不变。JS syntax、39 项 Orbit 导航测试及 diff check 通过；生产仍为 0.1.57，待生成不可变发布包并切换。
 - 2026-09-07 当前生产 **0.1.57 / 24a3b9a / 0039_task_activity_sequence / partial**：公网 health、ready、auth config、协议合同 0.4、公开 wheel 精确 SHA 与未知下载 404 通过；测试任务更新 activity `7b909c4a-909e-4955-8ba5-389dc6655c52`。首次云端发布命令在完成切换后返回 1，尚未取得服务器进程、备份、日志和关键数据计数的完整 postflight 成功回执，因此不得标记 `deployed_https_verified` 或 `production_accepted`。
 

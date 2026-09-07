@@ -8,7 +8,7 @@ from sqlalchemy import select
 
 from agentpost.config import Settings
 from agentpost.db import Database
-from agentpost.identity.models import utc_now
+from agentpost.identity.models import Agent, utc_now
 from agentpost.main import create_app
 from agentpost.onboarding.models import AgentConnectorBinding, ConnectorInstance
 from agentpost.tasks.models import (
@@ -746,6 +746,124 @@ def test_confirmed_friends_task_agent_selection_run_and_human_acceptance(
         assert completed.status_code == 200, completed.text
         assert completed.json()["status"] == "completed"
         assert completed.json()["state_axes"]["human_acceptance_status"] == "accepted"
+
+
+def test_active_member_can_add_only_their_own_confirmed_friend(
+    settings: Settings, database: Database
+) -> None:
+    with TestClient(create_app(settings=_runtime(settings), database=database)) as client:
+        owner = _register(client, "member-invite-owner")
+        member = _register(client, "member-invite-member")
+        friend = _register(client, "member-invite-friend")
+        outsider = _register(client, "member-invite-outsider")
+        owner_agent = _create_owned_agent(
+            client, human_id=str(owner["user"]["id"]), handle="member-invite-owner"
+        )
+        _create_owned_agent(
+            client, human_id=str(member["user"]["id"]), handle="member-invite-member"
+        )
+        _create_owned_agent(
+            client, human_id=str(friend["user"]["id"]), handle="member-invite-friend"
+        )
+        _create_owned_agent(
+            client, human_id=str(outsider["user"]["id"]), handle="member-invite-outsider"
+        )
+
+        def befriend(requester, target_username, target):
+            requester_csrf = _login(client, requester)
+            requested = client.post(
+                "/api/v1/friend-requests",
+                headers={"X-CSRF-Token": requester_csrf},
+                json={"username": target_username},
+            )
+            target_csrf = _login(client, target)
+            accepted = client.post(
+                f"/api/v1/friend-requests/{requested.json()['friendship_id']}/decision",
+                headers={"X-CSRF-Token": target_csrf},
+                json={"decision": "accept"},
+            )
+            assert accepted.status_code == 200, accepted.text
+
+        befriend("member-invite-owner", "member-invite-member", "member-invite-member")
+        owner_auth = {"Authorization": f"Bearer {owner_agent['api_key']}"}
+        task = client.post(
+            "/api/v1/agent/tasks",
+            headers={**owner_auth, "Idempotency-Key": "member-invite-task"},
+            json={"title": "成员邀请", "goal": "协同", "expected_output": "结果"},
+        ).json()
+        owner_csrf = _login(client, "member-invite-owner")
+        added_member = client.post(
+            f"/api/v1/tasks/{task['task_id']}/members",
+            headers={"X-CSRF-Token": owner_csrf},
+            json={"human_user_ids": [member["user"]["id"]]},
+        )
+        assert added_member.status_code == 200, added_member.text
+
+        befriend("member-invite-member", "member-invite-friend", "member-invite-friend")
+        member_csrf = _login(client, "member-invite-member")
+        candidates = client.get(f"/api/v1/tasks/{task['task_id']}/invite-candidates")
+        assert {item["human_user_id"] for item in candidates.json()["items"]} == {
+            friend["user"]["id"]
+        }
+        added_friend = client.post(
+            f"/api/v1/tasks/{task['task_id']}/members",
+            headers={"X-CSRF-Token": member_csrf},
+            json={"human_user_ids": [friend["user"]["id"]]},
+        )
+        assert added_friend.status_code == 200, added_friend.text
+        roles = {item["human_user_id"]: item["role"] for item in added_friend.json()["members"]}
+        assert roles[owner["user"]["id"]] == "owner"
+        assert roles[friend["user"]["id"]] == "member"
+
+        outsider_csrf = _login(client, "member-invite-outsider")
+        hidden = client.post(
+            f"/api/v1/tasks/{task['task_id']}/members",
+            headers={"X-CSRF-Token": outsider_csrf},
+            json={"human_user_ids": [friend["user"]["id"]]},
+        )
+        assert hidden.status_code == 404
+
+
+def test_friend_suggestions_resolve_exact_agent_identity(
+    settings: Settings, database: Database
+) -> None:
+    with TestClient(create_app(settings=_runtime(settings), database=database)) as client:
+        _register(client, "exact-seeker")
+        target = _register(client, "exact-target")
+        target_agent = _create_owned_agent(
+            client, human_id=str(target["user"]["id"]), handle="exact-target-agent"
+        )
+        with database.session_factory() as session:
+            agent_row = session.get(Agent, UUID(target_agent["agent"]["id"]))
+            assert agent_row is not None
+            agent_row.handle = "exact-target-agent"
+            session.commit()
+        _login(client, "exact-seeker")
+        for query in (
+            target["user"]["id"],
+            target_agent["agent"]["id"],
+            target_agent["agent"]["address"],
+            "exact-target-agent",
+        ):
+            response = client.get("/api/v1/friends/suggestions", params={"query": query})
+            assert response.status_code == 200, response.text
+            assert response.json()["items"], query
+            assert response.json()["items"][0]["human_user_id"] == target["user"]["id"]
+        seeker_csrf = _login(client, "exact-seeker")
+        requested = client.post(
+            "/api/v1/friend-requests",
+            headers={"X-CSRF-Token": seeker_csrf},
+            json={"username": "exact-target"},
+        ).json()
+        target_csrf = _login(client, "exact-target")
+        client.post(
+            f"/api/v1/friend-requests/{requested['friendship_id']}/decision",
+            headers={"X-CSRF-Token": target_csrf},
+            json={"decision": "accept"},
+        )
+        _login(client, "exact-seeker")
+        accepted = client.get("/api/v1/friends", params={"query": target_agent["agent"]["address"]})
+        assert accepted.json()["items"][0]["relation_status"] == "accepted"
 
 
 def test_task_messages_use_legacy_inbox_and_native_run_without_breaking_old_connectors(
