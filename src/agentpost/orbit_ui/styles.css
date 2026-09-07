@@ -6435,10 +6435,99 @@ footer {
   margin-top: 8px;
 }
 
-.task-personal-menu { position: relative; }
-.task-personal-menu summary { cursor: pointer; min-height: 44px; padding: 10px; }
-.task-personal-actions { display: grid; gap: 8px; padding: 12px; background: var(--surface, #fff); border: 1px solid #ddd; border-radius: 12px; max-width: 320px; }
-.task-personal-actions p { margin: 0; font-size: 13px; }
+.prototype-detail-actions > .prototype-status,
+.prototype-detail-actions > .quiet-button,
+.prototype-detail-actions > .task-personal-menu > summary {
+  box-sizing: border-box;
+  min-height: 40px;
+  height: 40px;
+  border-radius: 12px;
+  padding: 0 14px;
+  font-size: var(--font-control);
+  line-height: 1;
+}
+
+.prototype-detail-actions > .prototype-status {
+  border: 1px solid #b7dfc2;
+}
+
+.task-personal-menu {
+  position: relative;
+}
+
+.task-personal-menu > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--line-strong);
+  background: #fff;
+  color: #3c4043;
+  font-weight: 650;
+  cursor: pointer;
+  list-style: none;
+  white-space: nowrap;
+}
+
+.task-personal-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.task-personal-menu > summary::after {
+  content: "⌄";
+  color: #6b7280;
+  font-size: 15px;
+  transform: translateY(-1px);
+}
+
+.task-personal-menu[open] > summary {
+  border-color: #9ab7e6;
+  background: #f4f8ff;
+  color: #185abc;
+}
+
+.task-personal-menu[open] > summary::after {
+  transform: rotate(180deg) translateY(-1px);
+}
+
+.task-personal-actions {
+  position: absolute;
+  z-index: 30;
+  inset-inline-end: 0;
+  top: calc(100% + 8px);
+  display: grid;
+  width: min(330px, calc(100vw - 32px));
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid #b8c7dc;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 12px 30px rgb(32 51 79 / 18%);
+}
+
+.task-personal-actions p {
+  margin: 0;
+  font-size: var(--font-meta);
+  line-height: 1.55;
+}
+
+.task-personal-actions .quiet-button,
+.task-personal-destination {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 12px;
+  text-align: start;
+}
+
+.task-personal-destination {
+  border: 1px solid #b7cced;
+  border-radius: 10px;
+  background: #edf4ff;
+  color: #185abc;
+  font: inherit;
+  font-size: var(--font-control);
+  font-weight: 700;
+  cursor: pointer;
+}
 .task-new-dot {
   display: inline-block;
   width: 8px;

@@ -2,6 +2,7 @@
 
 ## 当前接续摘要
 
+- 2026-09-07 任务头部与恢复入口修复 **local_verified，未部署**：任务状态、邀请、暂停和“任务选项”统一为 40px 高度、字号、圆角和基线；移除浏览器默认黑色 disclosure 三角，任务选项改为右对齐浮层。说明明确为“任务列表顶部 → 已删除”，并新增“打开‘已删除’列表”直达按钮。执行个人删除后自动进入“已删除”并保留当前任务详情，可立即点击“恢复到任务列表”；归档采用同样路径。隔离 Chrome 桌面点击验证筛选从“进行中”切换到“已删除”；50 项相关前端测试、2 项相关 Python 集成测试、Ruff/format/JS syntax/diff check 通过。生产仍未更新。
 - 2026-09-07 0.1.58 P0 反馈切片 **local_verified，未部署**：修复 Dylan 指出的“连接心跳正常但任务长期排队”状态失真。Connector 新增独立任务监听心跳、监听会话和唤醒能力，Human 主界面只显示“可接任务、正在工作、恢复中、需要处理”；连接、监听、唤醒等原始证据放入详情。`agentpost-task-worker` 启动、轮询、停止和异常时上报监听事实；普通连接心跳不会伪造或清除监听状态。当前 Codex worker 的唤醒能力仍为 manual，其他宿主未上报监听前会如实显示“需要处理”。新 schema 为 `0040_connector_task_listener_truth`。
 - 同一切片处理 020 的成员和好友反馈：任一 active Task 成员都可把自己已接受的好友直接加入任务，服务端仍以成员关系和发起人的好友关系校验；好友支持按 Human 用户名/ID、Agent 地址/短名称/ID 精确查找。任务页新增“最新动态”直达入口；旧 Thread 页面保持只读且无发送框；任务讨论三层关系、手机扁平布局、分层底纹，以及 Markdown/JSON/HTML 一次点击安全预览也纳入本候选。张子良本轮已读取内容只有安全处理确认，没有可复现的新产品缺陷。
 - 验证：491 非 PostgreSQL passed、2 skipped、7 PostgreSQL deselected；67 项 JavaScript/TypeScript/OpenClaw 测试、Ruff check/format、TypeScript compile 和 diff check 通过。新 0040 迁移已在隔离 SQLite upgrade/downgrade 验证。当前机器没有 PostgreSQL CLI/测试 URL，本轮 PostgreSQL 专项待确认。隔离 Chrome 8778 桌面预览无横向溢出；390px 新状态区真机/浏览器尺寸复核待确认。生产仍是 0.1.57 partial，定时任务保持 PAUSED。

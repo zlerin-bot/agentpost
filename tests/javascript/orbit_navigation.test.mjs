@@ -680,4 +680,10 @@ test("personal task filters isolate archives and recover deleted tasks", () => {
   assert.deepEqual(filter().map(p => p.title), ["deleted"]);
   state.projectQuery = "missing";
   assert.deepEqual(filter(), []);
+  assert.match(html, /id="task-open-deleted">打开“已删除”列表/);
+  assert.match(html, /恢复路径：任务列表顶部 → 已删除/);
+  assert.match(script, /setProjectFilter\("deleted"\)/);
+  assert.match(script, /已移到“已删除”。当前页面可直接选择“恢复到任务列表”/);
+  assert.match(stylesheet, /\.prototype-detail-actions > \.prototype-status,[\s\S]*?height: 40px;/);
+  assert.match(stylesheet, /\.task-personal-actions \{[\s\S]*?position: absolute;/);
 });

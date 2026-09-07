@@ -517,6 +517,15 @@ function filteredProjects() {
   });
 }
 
+function setProjectFilter(filter) {
+  state.projectFilter = filter;
+  elements.projectFilters.forEach((button) => {
+    const active = button.dataset.projectFilter === filter;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+}
+
 function filteredFriends() {
   const query = state.friendQuery.trim().toLowerCase();
   return state.friends.filter((friend) => {
@@ -2247,14 +2256,9 @@ function renderFriendDetail() {
     row.append(copy, arrow);
     row.addEventListener("click", async () => {
       state.selectedProjectId = project.task_id;
-      state.projectFilter = ["awaiting_acceptance", "completed"].includes(project.status)
+      setProjectFilter(["awaiting_acceptance", "completed"].includes(project.status)
         ? project.status
-        : (project.status === "archived" || project.status === "cancelled" ? "all" : "active");
-      elements.projectFilters.forEach((button) => {
-        const active = button.dataset.projectFilter === state.projectFilter;
-        button.classList.toggle("active", active);
-        button.setAttribute("aria-pressed", String(active));
-      });
+        : (project.status === "archived" || project.status === "cancelled" ? "all" : "active"));
       activateRoute("projects", "board", { focusContent: true });
       renderProjectBrowser();
       await loadProjectDetail(project.task_id);
@@ -2461,12 +2465,7 @@ async function updateSelectedProjectStatus() {
       },
     );
     if (!acceptTaskUpdate(project.task_id, updated)) return;
-    state.projectFilter = "active";
-    elements.projectFilters.forEach((button) => {
-      const active = button.dataset.projectFilter === state.projectFilter;
-      button.classList.toggle("active", active);
-      button.setAttribute("aria-pressed", String(active));
-    });
+    setProjectFilter("active");
     await loadProjects();
     elements.projectActionResult.textContent = action === "pause" ? "任务已经暂停。" : "任务已经继续。";
   } catch (error) {
@@ -2751,12 +2750,7 @@ function initializeCollaborationModules() {
   });
   elements.projectFilters.forEach((button) => {
     button.addEventListener("click", () => {
-      state.projectFilter = button.dataset.projectFilter;
-      elements.projectFilters.forEach((item) => {
-        const active = item === button;
-        item.classList.toggle("active", active);
-        item.setAttribute("aria-pressed", String(active));
-      });
+      setProjectFilter(button.dataset.projectFilter);
       const projects = filteredProjects();
       if (!projects.some((project) => project.task_id === state.selectedProjectId)) {
         void selectTask(isMobileWorkspace() ? "" : (projects[0]?.task_id || ""));
@@ -6549,7 +6543,10 @@ function updateTaskNavDot() {
 }
 
 function renderTaskPreferences(project) {
-  document.querySelector("#task-personal-restore").hidden = !["archived", "deleted"].includes(project.personal_state);
+  const personalState = project.personal_state || "active";
+  document.querySelector("#task-personal-archive").hidden = personalState !== "active";
+  document.querySelector("#task-personal-delete").hidden = personalState === "deleted";
+  document.querySelector("#task-personal-restore").hidden = !["archived", "deleted"].includes(personalState);
   document.querySelector("#task-leave").disabled = project.membership_role === "owner";
   document.querySelector("#task-leave-hint").textContent = project.membership_role === "owner"
     ? "你是负责人，不能直接退出；可使用个人归档。" : "退出后，你及你的 AI 将失去任务访问权，未结束的工作将取消。";
@@ -6586,9 +6583,19 @@ async function changeTaskPreference(action) {
       ...(action === "leave" ? {} : { body: JSON.stringify(payload) }),
     });
     if (state.selectedProjectId !== project.task_id) return;
-    menu.open = false;
-    await selectTask("");
+    const nextFilter = action === "deleted" ? "deleted" : action === "archived" ? "archived" : "active";
+    setProjectFilter(nextFilter);
     await loadProjects();
+    if (action !== "leave") {
+      await selectTask(project.task_id);
+      elements.projectActionResult.textContent = action === "deleted"
+        ? "已移到“已删除”。当前页面可直接选择“恢复到任务列表”。"
+        : action === "archived"
+          ? "已移到“我的归档”。当前页面可直接恢复。"
+          : "已恢复到任务列表。";
+    } else {
+      await selectTask("");
+    }
   } catch (error) {
     if (state.selectedProjectId === project.task_id) document.querySelector("#task-personal-feedback").textContent = error.message;
   } finally {
@@ -6600,6 +6607,14 @@ async function changeTaskPreference(action) {
 for (const [id, action] of [["task-personal-archive", "archived"], ["task-personal-delete", "deleted"], ["task-personal-restore", "active"], ["task-leave", "leave"]]) {
   document.getElementById(id).addEventListener("click", () => void changeTaskPreference(action));
 }
+document.getElementById("task-open-deleted").addEventListener("click", () => {
+  document.querySelector("#task-personal-menu").open = false;
+  setProjectFilter("deleted");
+  const projects = filteredProjects();
+  void selectTask(isMobileWorkspace() ? "" : (projects[0]?.task_id || ""));
+  document.querySelector('[data-project-filter="deleted"]')?.focus({ preventScroll: true });
+  resetMobileLayerScroll();
+});
 const backToTop = document.querySelector("#back-to-top");
 window.addEventListener("scroll", () => { backToTop.hidden = window.scrollY < 400; }, { passive: true });
 backToTop.addEventListener("click", () => {
