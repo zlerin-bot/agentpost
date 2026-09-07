@@ -37,6 +37,7 @@ connector = ["keyring>=25,<26"]
 [project.scripts]
 agentpost-api = "agentpost.main:run"
 agentpost-connect = "agentpost_sdk.cli:main"
+agentpost-task-worker = "agentpost_sdk.task_worker:main"
 agentpost-doubao = "agentpost_sdk.doubao_work_launcher:main"
 agentpost-manus = "agentpost_sdk.manus_launcher:main"
 agentpost-manus-folder = "agentpost_sdk.manus_local_adapter:main"
