@@ -13,6 +13,7 @@ import sys
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
+from uuid import uuid4
 
 from agentpost_sdk import __version__
 
@@ -74,6 +75,7 @@ def prepare_upgrade(*, fetch=None, install=None, home: Path | None = None) -> di
     guard = _install_lock(lock)
     if guard is None:
         return {"status": "upgrade_in_progress", "target_version": release.version}
+    created_here = not runtime.exists()
     try:
         suffix = "Scripts" if os.name == "nt" else "bin"
         executable = (
@@ -96,19 +98,26 @@ def prepare_upgrade(*, fetch=None, install=None, home: Path | None = None) -> di
                     str(runtime / suffix / ("python.exe" if os.name == "nt" else "python")),
                     "-I",
                     "-c",
-                    "import agentpost_mcp.server, agentpost_sdk",
+                    "import agentpost_mcp.server, agentpost_sdk; print(agentpost_sdk.__version__)",
                 ],
                 capture_output=True,
+                text=True,
                 timeout=20,
                 check=False,
             )
-            if probe.returncode:
+            if probe.returncode or probe.stdout.strip() != release.version:
                 raise RuntimeError("runtime_import_failed")
             marker.write_text(
                 json.dumps({"version": release.version, "sha256": release.wheel_sha256})
             )
             marker.chmod(0o600)
         return {"status": "ready", "target_version": release.version, "executable": str(executable)}
+    except Exception:
+        # Preserve failed fresh candidates for diagnosis, freeing the version path for retry.
+        # Existing/possibly running environments are never moved.
+        if created_here and runtime.exists():
+            runtime.rename(root / f".failed-{release.version}-{uuid4().hex}")
+        raise
     finally:
         guard.close()
 

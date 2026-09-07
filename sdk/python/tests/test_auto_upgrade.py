@@ -68,7 +68,9 @@ def test_active_install_lock_does_not_interrupt_existing_process(tmp_path, relea
 
 
 def test_fresh_install_verified_before_publication(tmp_path, release, monkeypatch):
-    monkeypatch.setattr(upgrade.subprocess, "run", lambda *a, **k: SimpleNamespace(returncode=0))
+    monkeypatch.setattr(
+        upgrade.subprocess, "run", lambda *a, **k: SimpleNamespace(returncode=0, stdout="0.9.0")
+    )
 
     def install(release, *, runtime):
         (runtime / "bin").mkdir(parents=True)
@@ -107,3 +109,17 @@ def test_background_preparation_publishes_pointer_not_process_switch(tmp_path, m
     assert json.loads((tmp_path / "runtimes/codex/current.json").read_text()) == {
         "version": "0.9.0"
     }
+
+
+def test_failed_fresh_install_can_retry_without_touching_existing_runtime(tmp_path, release):
+    def interrupted(release, *, runtime):
+        runtime.mkdir(parents=True)
+        (runtime / "partial-install").write_text("failure evidence")
+        raise RuntimeError("network failed")
+
+    for _ in range(2):
+        with pytest.raises(RuntimeError, match="network failed"):
+            upgrade.prepare_upgrade(fetch=lambda: release, install=interrupted, home=tmp_path)
+    root = tmp_path / "runtimes/codex"
+    assert not (root / release.version).exists()
+    assert len(list(root.glob(".failed-*/partial-install"))) == 2
