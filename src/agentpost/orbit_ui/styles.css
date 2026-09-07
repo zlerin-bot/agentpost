@@ -6505,6 +6505,10 @@ footer {
   box-shadow: 0 12px 30px rgb(32 51 79 / 18%);
 }
 
+.task-personal-menu:not([open]) > .task-personal-actions {
+  display: none;
+}
+
 .task-personal-actions p {
   margin: 0;
   font-size: var(--font-meta);
