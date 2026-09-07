@@ -83,8 +83,8 @@ wheel_file=${wheel_name}
 wheel_sha256=${wheel_sha}
 EOF
 
-install -m 755 "${repository_root}/scripts/aliyun/switch-release.sh" "${output_dir}/aliyun-switch-release.sh"
-install -m 755 "${repository_root}/scripts/aliyun/postflight.sh" "${output_dir}/aliyun-postflight.sh"
+install -m 755 "${snapshot}/scripts/aliyun/switch-release.sh" "${output_dir}/aliyun-switch-release.sh"
+install -m 755 "${snapshot}/scripts/aliyun/postflight.sh" "${output_dir}/aliyun-postflight.sh"
 
 (
   cd "${output_dir}"

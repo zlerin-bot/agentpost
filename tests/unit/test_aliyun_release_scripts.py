@@ -98,3 +98,16 @@ def test_switch_and_postflight_report_progress_without_health_retry_noise() -> N
     assert "curl -fs --max-time 5" in switch
     assert "2>/dev/null || true" in switch
     assert "duration_seconds=" in postflight
+
+
+def test_schema_cutover_and_rollback_stop_writers_before_migrating() -> None:
+    script = ALIYUN_SCRIPTS[1].read_text()
+    cutover = script.split("step switch\n", 1)[1]
+    assert cutover.index("systemctl stop agentpost") < cutover.index("pg_dump")
+    assert cutover.index("pg_dump") < cutover.index("upgrade head")
+    rollback = script.split('cat > "${rollback}" <<ROLLBACK', 1)[1].split("\nROLLBACK", 1)[0]
+    assert rollback.index("systemctl stop agentpost") < rollback.index("downgrade")
+    assert "!= '${prior_schema}'" in rollback
+    prepare = ALIYUN_SCRIPTS[0].read_text()
+    assert '"${snapshot}/scripts/aliyun/switch-release.sh"' in prepare
+    assert '"${snapshot}/scripts/aliyun/postflight.sh"' in prepare

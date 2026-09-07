@@ -143,7 +143,8 @@ sha256sum "${backup}/agentpost.dump" "${backup}/attachments.tar.gz" "${backup}/a
 cat > "${rollback}" <<ROLLBACK
 #!/usr/bin/env bash
 set -Eeuo pipefail
-if [[ "\$(sudo -u postgres psql -d agentpost -Atc 'select version_num from alembic_version')" == '${target_schema}' ]]; then
+systemctl stop agentpost
+if [[ "\$(sudo -u postgres psql -d agentpost -Atc 'select version_num from alembic_version')" != '${prior_schema}' ]]; then
   database_url="\$(python3 - '/opt/agentpost/shared/agentpost.env' <<'PY'
 import sys
 from pathlib import Path
@@ -326,6 +327,16 @@ PY
 
 step switch
 cutover_started_at="$(date --iso-8601=seconds)"
+# Schema 0039 cannot accept writes from the old server. Quiesce before migration.
+systemctl stop agentpost
+[[ "$(systemctl show -p MainPID --value agentpost)" == "0" ]]
+# Refresh the recoverable snapshot after the last old writer has stopped.
+sudo -u postgres pg_dump -Fc -d agentpost > "${backup}/agentpost.dump"
+pg_restore --list "${backup}/agentpost.dump" > "${backup}/agentpost.dump.list"
+tar -C /var/lib/agentpost -czf "${backup}/attachments.tar.gz" attachments
+tar -tzf "${backup}/attachments.tar.gz" > "${backup}/attachments.list"
+sha256sum "${backup}/agentpost.dump" "${backup}/attachments.tar.gz" "${backup}/agentpost.env" "${backup}/agentpost.service" "${backup}/nginx-agentpost" "${backup}/${prior_wheel_name}" "${rollback}" > "${backup}/SHA256SUMS.backup"
+(cd "${backup}" && sha256sum -c SHA256SUMS.backup)
 (cd "${release}" && sudo -u agentpost env AGENTPOST_DATABASE_URL="${database_url}" "${venv}/bin/python" -m alembic -c alembic.ini upgrade head)
 ln -sfn "${release}" /opt/agentpost/current.next
 mv -Tf /opt/agentpost/current.next /opt/agentpost/current

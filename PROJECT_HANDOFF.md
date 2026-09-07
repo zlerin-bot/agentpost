@@ -2,6 +2,8 @@
 
 ## 当前接续摘要
 
+- 2026-09-07 0.1.57 发布候选：整合多 AI 派工、AP056 反馈、手机交互、独立 Human 视图、任务活动顺序及可选 Codex worker。用户已授权部署及测试任务更新；正式切换/后检待执行。发布脚本新增迁移/回退前停写与停写后备份；脚本也从指定 commit 快照提取。server/SDK/MCP/插件/锁文件同步 0.1.57，schema0039。486 非 PG passed、2 skipped、7 deselected，46 Orbit/TS tests、Ruff/format/JS syntax 通过。原生及跨设备验收边界继续见 AP056_REMAINING_ACCEPTANCE，定时任务保持 PAUSED。
+
 - 2026-09-07 AP056 继续：新增 `0039_task_activity_sequence`，Task 行锁串行分配发布序号，增量仍使用活动 UUID cursor，按 task_sequence_asc 读取，原始时间不改。原 PostgreSQL 迟提交缺口已在本地 PostgreSQL 17.10 专项验证；历史漏读仍需旧消费者全量重放。未部署，生产仍是 0.1.56/schema0037；切换新 schema 前须停止旧写入。
 - 新主动启用的 `agentpost-task-worker` 支持 macOS/Linux Codex 只读 Task 执行，固定指定任务/目录、沿用钥匙串、先握手再领取，真实会话 mapped/woken、结构化结果和幂等回执。真实合成 Task Run 闭环通过，不安装计划、不恢复定时任务；崩溃中断保留 journal 待复核，不能声称整机重启自动续做。其他宿主原生后台执行仍未完成。
 - 自动升级：新安装失败目录保留诊断并允许重试，探针核验真实导入版本。六宿主独立环境的真实 wheel 安装/导入通过，但不是六宿主原生升级验收。WorkBuddy 当前旧 profile 在新旧 runtime 均无法从钥匙串读取，原配置未改、未重新配对，原身份迁移待恢复授权。
