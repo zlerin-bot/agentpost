@@ -621,6 +621,9 @@ def _task_detail(
     task: Task,
     viewer_membership: TaskMembership,
     activity_limit: int = 200,
+    activity_ids: list[UUID] | None = None,
+    include_reply_parents: bool = True,
+    include_assignments: bool = True,
 ) -> TaskDetail:
     membership_rows = session.execute(
         select(TaskMembership, HumanUser)
@@ -667,6 +670,7 @@ def _task_detail(
         session.scalars(
             select(TaskAssignment)
             .where(TaskAssignment.task_id == task.id)
+            .where(include_assignments)
             .order_by(TaskAssignment.created_at.desc())
         )
     )
@@ -802,7 +806,8 @@ def _task_detail(
             session.scalars(
                 select(TaskActivity)
                 .where(TaskActivity.task_id == task.id)
-                .order_by(TaskActivity.created_at.desc())
+                .where(True if activity_ids is None else TaskActivity.id.in_(activity_ids))
+                .order_by(TaskActivity.created_at.desc(), TaskActivity.id.desc())
                 .limit(activity_limit)
             )
         )
@@ -882,7 +887,7 @@ def _task_detail(
 
     project_activity_metadata(activity_rows)
     loaded_activity_ids = {item.id for item in activity_rows}
-    for _ in range(32):
+    for _ in range(32 if include_reply_parents else 0):
         missing_parent_ids: set[UUID] = set()
         for metadata in projected_metadata.values():
             parent_id = metadata.get("reply_to_activity_id")
@@ -909,6 +914,7 @@ def _task_detail(
         activity_rows.extend(parents)
         loaded_activity_ids.update(item.id for item in parents)
         project_activity_metadata(parents)
+    activity_rows.sort(key=lambda item: (_as_utc(item.created_at), str(item.id)), reverse=True)
     activity_agent_ids = {item.actor_agent_id for item in activity_rows if item.actor_agent_id}
     activity_agents = {
         agent.id: agent
@@ -917,7 +923,11 @@ def _task_detail(
     activities = []
     for item in activity_rows:
         actor_name = None
-        actor_agent_name = None
+        actor_agent_name = (
+            activity_agents[item.actor_agent_id].display_name
+            if item.actor_agent_id in activity_agents
+            else None
+        )
         actor_human_id = item.actor_human_user_id
         if item.actor_human_user_id in humans:
             actor_name = humans[item.actor_human_user_id].display_name
@@ -1016,6 +1026,8 @@ def list_tasks(session: Session, *, user: HumanUser, limit: int = 100) -> list[T
                     "activities",
                     "activity_total",
                     "activities_truncated",
+                    "activity_order",
+                    "authoritative_source",
                 }
             )
         )
@@ -1391,9 +1403,189 @@ def _task_participation_for_agent(
     return row
 
 
-def get_task_for_agent(session: Session, *, agent: Agent, task_id: UUID) -> TaskDetail:
-    task, _, membership = _task_participation_for_agent(session, agent=agent, task_id=task_id)
+def cancel_queued_assignment(
+    session: Session, *, user: HumanUser, task_id: UUID, assignment_id: UUID
+) -> TaskDetail:
+    task, membership = _task_context(session, task_id=task_id, user=user, lock=True)
+    _require_owner(task, membership)
+    assignment = session.scalar(
+        select(TaskAssignment)
+        .where(TaskAssignment.id == assignment_id, TaskAssignment.task_id == task_id)
+        .with_for_update()
+    )
+    if assignment is None:
+        raise TaskNotFoundError
+    if assignment.status == "cancelled":
+        return _task_detail(session, task=task, viewer_membership=membership)
+    runs = list(
+        session.scalars(
+            select(AgentRun).where(AgentRun.assignment_id == assignment_id).with_for_update()
+        )
+    )
+    if assignment.status != "queued" or any(
+        run.status in {"leased", "starting", "running", "waiting_human"} for run in runs
+    ):
+        raise TaskStateConflictError
+    now = utc_now()
+    assignment.status = "cancelled"
+    assignment.cancellation_reason = "human_cancelled"
+    assignment.updated_at = now
+    for run in runs:
+        if run.status == "queued":
+            run.status = "cancelled"
+            run.cancellation_reason = "human_cancelled"
+            run.finished_at = now
+            run.lease_token_digest = None
+            run.lease_expires_at = None
+    task.updated_at = now
+    _add_activity(
+        session,
+        task_id=task_id,
+        kind="assignment_cancelled",
+        actor_type="human",
+        actor_human_id=user.id,
+        metadata={
+            "assignment_id": str(assignment_id),
+            "reason": "human_cancelled",
+            "previous_status": "queued",
+        },
+    )
+    session.commit()
     return _task_detail(session, task=task, viewer_membership=membership)
+
+
+def agent_handshake(session: Session, *, agent: Agent, limit: int = 50) -> dict:
+    """Small authorized task index; no history or execution side effects."""
+    from agentpost import __version__
+
+    rows = list(
+        session.scalars(
+            select(Task)
+            .join(TaskAgentParticipant, TaskAgentParticipant.task_id == Task.id)
+            .join(
+                TaskMembership,
+                (TaskMembership.task_id == Task.id)
+                & (TaskMembership.human_user_id == TaskAgentParticipant.human_user_id),
+            )
+            .where(
+                TaskAgentParticipant.agent_id == agent.id,
+                TaskAgentParticipant.active.is_(True),
+                TaskMembership.status == "active",
+            )
+            .order_by(Task.updated_at.desc(), Task.id.desc())
+            .limit(limit + 1)
+        )
+    )
+    connection = session.scalar(
+        select(ConnectorInstance)
+        .join(
+            AgentConnectorBinding,
+            AgentConnectorBinding.connector_instance_id == ConnectorInstance.id,
+        )
+        .where(AgentConnectorBinding.agent_id == agent.id, ConnectorInstance.status == "active")
+    )
+    return {
+        "agent_id": agent.id,
+        "agent_name": agent.display_name,
+        "server_version": __version__,
+        "connection": {
+            "runtime_version": connection.runtime_version,
+            "last_heartbeat_at": _as_utc(connection.last_heartbeat_at),
+            "runtime_capabilities": connection.runtime_capabilities,
+            "health_status": connection.health_status,
+        }
+        if connection
+        else None,
+        "tasks_truncated": len(rows) > limit,
+        "tasks": [
+            {
+                "task_id": task.id,
+                "title": task.title,
+                "status": task.status,
+                "updated_at": _as_utc(task.updated_at),
+            }
+            for task in rows[:limit]
+        ],
+        "authoritative_source": "task_activities",
+        "contract": "/api/v1/protocol/contract",
+        "next_steps": ["resolve_task_if_title", "get_task", "task_activities"],
+        "automatic_wake": "host_dependent_unverified",
+        "security_label": "external_agent_content",
+    }
+
+
+def get_task_for_agent(
+    session: Session, *, agent: Agent, task_id: UUID, include_history: bool = True
+) -> TaskDetail:
+    task, _, membership = _task_participation_for_agent(session, agent=agent, task_id=task_id)
+    detail = _task_detail(
+        session,
+        task=task,
+        viewer_membership=membership,
+        activity_limit=200 if include_history else 0,
+    )
+    if not include_history:
+        detail.activity_total = (
+            session.scalar(
+                select(func.count(TaskActivity.id)).where(TaskActivity.task_id == task_id)
+            )
+            or 0
+        )
+        detail.activities_truncated = detail.activity_total > 0
+    return detail
+
+
+def read_agent_activity_page(
+    session: Session,
+    *,
+    agent: Agent,
+    task_id: UUID,
+    cursor: UUID | None = None,
+    limit: int = 50,
+    activity_id: UUID | None = None,
+) -> dict:
+    """Authorized keyset read. Parent context is fetched separately, never injected into pages."""
+    task, _, membership = _task_participation_for_agent(session, agent=agent, task_id=task_id)
+    query = select(TaskActivity).where(TaskActivity.task_id == task_id)
+    if activity_id is not None:
+        query = query.where(TaskActivity.id == activity_id)
+    if cursor is not None:
+        anchor = session.scalar(
+            select(TaskActivity).where(TaskActivity.task_id == task_id, TaskActivity.id == cursor)
+        )
+        if anchor is None:
+            raise TaskNotFoundError
+        query = query.where(
+            or_(
+                TaskActivity.created_at > anchor.created_at,
+                (TaskActivity.created_at == anchor.created_at) & (TaskActivity.id > anchor.id),
+            )
+        )
+    rows = list(
+        session.scalars(
+            query.order_by(TaskActivity.created_at.asc(), TaskActivity.id.asc()).limit(limit + 1)
+        )
+    )
+    if activity_id is not None and not rows:
+        raise TaskNotFoundError
+    selected = rows[:limit]
+    detail = _task_detail(
+        session,
+        task=task,
+        viewer_membership=membership,
+        activity_limit=limit,
+        activity_ids=[row.id for row in selected],
+        include_reply_parents=False,
+        include_assignments=False,
+    )
+    return {
+        "task_id": task_id,
+        "items": list(reversed(detail.activities)),
+        "order": "created_at_asc_activity_id_asc",
+        "has_more": len(rows) > limit,
+        "next_cursor": str(selected[-1].id) if selected else (str(cursor) if cursor else None),
+        "security_label": "external_agent_content",
+    }
 
 
 def _connector_version_tuple(value: str | None) -> tuple[int, int, int] | None:
@@ -2779,6 +2971,7 @@ def claim_agent_run(
         session, task_id=task.id
     )
     return AgentRunClaim(
+        status=run.status,
         run_id=run.id,
         lease_token=token,
         lease_expires_at=expires,
@@ -2873,6 +3066,7 @@ def update_agent_run(
         session, task_id=task.id
     )
     return AgentRunClaim(
+        status=run.status,
         run_id=run.id,
         lease_token=payload.lease_token,
         lease_expires_at=run.lease_expires_at,
@@ -2899,6 +3093,28 @@ def update_agent_run(
     )
 
 
+def _run_result_snapshot(session: Session, run: AgentRun, *, replayed: bool) -> dict:
+    assignment = session.get(TaskAssignment, run.assignment_id)
+    activity = session.scalar(
+        select(TaskActivity).where(
+            TaskActivity.task_id == assignment.task_id,
+            TaskActivity.activity_type == "assignment_result",
+            TaskActivity.activity_metadata["run_id"].as_string() == str(run.id),
+        )
+    )
+    return {
+        "run_id": str(run.id),
+        "task_id": str(assignment.task_id),
+        "assignment_id": str(run.assignment_id),
+        "status": run.status,
+        "wake_stage": _run_wake_stage(run),
+        "checkpoint": run.checkpoint,
+        "result_activity_id": str(activity.id) if activity else None,
+        "replayed": replayed,
+        "human_acceptance": "not_implied",
+    }
+
+
 def complete_agent_run(
     session: Session,
     *,
@@ -2906,7 +3122,7 @@ def complete_agent_run(
     run_id: UUID,
     payload: AgentRunResult,
     idempotency_key: str | None = None,
-) -> None:
+) -> dict:
     hash_payload = payload.model_dump(mode="json")
     if "checkpoint" not in payload.model_fields_set:
         current_run = session.get(AgentRun, run_id)
@@ -2928,7 +3144,12 @@ def complete_agent_run(
             if existing_by_key.id != run_id or existing_by_key.result_request_hash != request_hash:
                 raise TaskStateConflictError
             if existing_by_key.status in {"completed", "partial", "failed", "cancelled"}:
-                return
+                _task_participation_for_agent(
+                    session,
+                    agent=agent,
+                    task_id=session.get(TaskAssignment, existing_by_key.assignment_id).task_id,
+                )
+                return _run_result_snapshot(session, existing_by_key, replayed=True)
     run, assignment, task = _leased_run(
         session, agent=agent, run_id=run_id, lease_token=payload.lease_token
     )
@@ -2967,3 +3188,4 @@ def complete_agent_run(
     # Creating a new Run for every other Agent causes mechanical acknowledgement loops;
     # review work must be requested explicitly through a Human-directed assignment.
     session.commit()
+    return _run_result_snapshot(session, run, replayed=False)

@@ -104,6 +104,12 @@ class TaskExecutionContract(ContractModel):
     create_endpoint: Literal["/api/v1/agent/tasks"] = "/api/v1/agent/tasks"
     create_requires_idempotency_key: Literal[True] = True
     resolve_endpoint: Literal["/api/v1/agent/tasks/resolve"] = "/api/v1/agent/tasks/resolve"
+    activity_page_endpoint: str = "/api/v1/agent/tasks/{task_id}/activities"
+    activity_endpoint: str = "/api/v1/agent/tasks/{task_id}/activities/{activity_id}"
+    activity_order: str = "created_at_asc_activity_id_asc"
+    activity_cursor_rule: str = (
+        "Persist next_cursor only after processing; parents fetched separately"
+    )
     context_endpoint_template: Literal["/api/v1/agent/tasks/{task_id}"] = (
         "/api/v1/agent/tasks/{task_id}"
     )
@@ -276,6 +282,24 @@ def build_agent_integration_contract(settings: Settings) -> AgentIntegrationCont
                 ),
                 changes_state=True,
                 required_headers=["Idempotency-Key"],
+            ),
+            EndpointContract(
+                method="GET",
+                path="/api/v1/agent/handshake",
+                purpose="read current identity, server version and scoped task index",
+                changes_state=False,
+            ),
+            EndpointContract(
+                method="GET",
+                path="/api/v1/agent/tasks/{task_id}/activities",
+                purpose="read ordered activity pages using an incremental cursor",
+                changes_state=False,
+            ),
+            EndpointContract(
+                method="GET",
+                path="/api/v1/agent/tasks/{task_id}/activities/{activity_id}",
+                purpose="read one authorized task activity",
+                changes_state=False,
             ),
             EndpointContract(
                 method="POST",

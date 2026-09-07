@@ -406,6 +406,8 @@ class TaskDetail(TaskSummary):
     activities: list[TaskActivityResponse]
     activity_total: int = 0
     activities_truncated: bool = False
+    activity_order: str = "created_at_desc_activity_id_desc"
+    authoritative_source: str = "task_activities"
 
 
 class AgentCollaborationUpdate(TaskModel):
@@ -417,6 +419,7 @@ class AgentCollaborationUpdate(TaskModel):
 
 
 class AgentRunClaim(TaskModel):
+    status: str = "leased"
     run_id: UUID
     lease_token: str
     lease_expires_at: datetime

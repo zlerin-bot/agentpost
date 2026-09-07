@@ -362,6 +362,16 @@ export class AgentPostClient {
     }) as TaskResolution;
   }
 
+  async handshake(): Promise<Record<string, unknown>> {
+    return await this.request("GET", "/agent/handshake") as Record<string, unknown>;
+  }
+
+  async taskActivities(taskId: string, cursor = "", limit = 50, activityId = ""): Promise<Record<string, unknown>> {
+    const base = `/agent/tasks/${encodeURIComponent(taskId)}/activities`;
+    return await this.request("GET", activityId ? `${base}/${encodeURIComponent(activityId)}` : base,
+      { query: activityId ? {} : { cursor: cursor || undefined, limit } }) as Record<string, unknown>;
+  }
+
   async getTask(taskId: string): Promise<TaskContext> {
     return await this.request(
       "GET",

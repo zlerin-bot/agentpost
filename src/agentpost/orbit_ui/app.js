@@ -736,6 +736,7 @@ function activityText(activity) {
     member_joined: "加入了任务",
     member_declined: "拒绝了任务邀请",
     assignment_created: "创建了 AI 执行单元",
+    assignment_cancelled: "取消了排队工作，历史记录保留",
     agent_joined_collaboration: "参与 AI 已进入协同队列",
     member_agents_selected: "更新了参与 AI",
     member_email_sent: "已向" + target + "的注册邮箱发送任务通知",
@@ -1437,6 +1438,31 @@ function renderProjectDetail() {
     identity.textContent = `所属任务：${project.title} · 工作 ID：${assignment.assignment_id}`;
     technical.append(technicalLabel, identity, route, heartbeat);
     copy.append(heading, workTitle, agent, summary, technical);
+    if (project.membership_role === "owner" && assignment.status === "queued") {
+      const cancelWork = document.createElement("button");
+      cancelWork.type = "button";
+      cancelWork.className = "quiet-button";
+      cancelWork.textContent = "取消排队工作";
+      const cancelStatus = document.createElement("small");
+      cancelStatus.setAttribute("role", "status");
+      cancelWork.addEventListener("click", async () => {
+        if (cancelWork.disabled) return;
+        cancelWork.disabled = true;
+        cancelStatus.textContent = "正在取消…";
+        try {
+          await requestJson(`/api/v1/tasks/${encodeURIComponent(project.task_id)}/assignments/${encodeURIComponent(assignment.assignment_id)}/cancel`, {
+            method: "POST", headers: { "X-CSRF-Token": state.csrfToken },
+          });
+          cancelStatus.textContent = "已取消，历史记录保留";
+          if (state.selectedProjectId === project.task_id) await loadProjectDetail(project.task_id);
+        } catch (error) {
+          cancelStatus.textContent = `${error.message}。请刷新核对，已开始执行的工作不能在此取消。`;
+          cancelWork.disabled = false;
+        }
+      });
+      technical.append(cancelWork, cancelStatus);
+    }
+
     if (repeatedRequirement) {
       const note = document.createElement("p");
       note.className = "task-field-help";
@@ -1615,7 +1641,7 @@ function renderProjectDetail() {
   });
   const discussionKinds = new Set(["task_message"]);
   const workKinds = new Set([
-    "assignment_created", "run_leased", "run_progress", "run_waiting_human",
+    "assignment_created", "assignment_cancelled", "run_leased", "run_progress", "run_waiting_human",
     "human_run_response", "assignment_result", "final_submitted", "accepted",
     "changes_requested",
   ]);
@@ -5123,7 +5149,39 @@ function appendThreadAttachments(message, body) {
     download.href = downloadUrl;
     download.download = safeText(attachment.filename, "attachment");
     download.textContent = "下载";
-    actions.append(download);
+    const downloadStatus = document.createElement("small");
+    downloadStatus.setAttribute("role", "status");
+    download.addEventListener("click", async (event) => {
+      event.preventDefault();
+      if (download.getAttribute("aria-disabled") === "true") return;
+      download.setAttribute("aria-disabled", "true");
+      downloadStatus.textContent = "正在获取文件…";
+      try {
+        const response = await fetch(downloadUrl, { credentials: "same-origin" });
+        if (!response.ok) throw new Error(`下载失败（${response.status}）`);
+        const blob = await response.blob();
+        if (Number.isFinite(attachment.size) && blob.size !== attachment.size) throw new Error("文件大小校验失败");
+        if (attachment.sha256 && crypto.subtle) {
+          const digest = await crypto.subtle.digest("SHA-256", await blob.arrayBuffer());
+          const hex = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
+          if (hex !== String(attachment.sha256).toLowerCase()) throw new Error("文件完整性校验失败");
+        }
+        const objectUrl = URL.createObjectURL(blob);
+        const save = document.createElement("a");
+        save.href = objectUrl;
+        save.download = download.download;
+        document.body.append(save);
+        save.click();
+        save.remove();
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+        downloadStatus.textContent = "已交给浏览器保存，请在下载列表确认";
+      } catch (error) {
+        downloadStatus.textContent = error.message || "下载失败，请重试";
+      } finally {
+        download.removeAttribute("aria-disabled");
+      }
+    });
+    actions.append(download, downloadStatus);
     card.append(name, info, actions);
     list.append(card);
   });

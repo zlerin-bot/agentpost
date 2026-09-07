@@ -1616,3 +1616,129 @@ def test_batch_assignments_are_atomic_authorized_and_idempotent(
             json=cross_payload,
         )
         assert denied.status_code == 403, denied.text
+
+
+def test_agent_activity_cursor_exact_read_and_revocation(settings: Settings, database: Database):
+    with TestClient(create_app(settings=_runtime(settings), database=database)) as client:
+        owner = _register(client, "cursor-owner")
+        agent = _create_owned_agent(
+            client, human_id=str(owner["user"]["id"]), handle="cursor-owner"
+        )
+        auth = {"Authorization": f"Bearer {agent['api_key']}"}
+        task_id = client.post(
+            "/api/v1/agent/tasks",
+            headers={**auth, "Idempotency-Key": "cursor-create"},
+            json={"title": "cursor", "goal": "read", "expected_output": "evidence"},
+        ).json()["task_id"]
+        url = f"/api/v1/agent/tasks/{task_id}/activities"
+        for i in range(5):
+            response = client.post(
+                f"/api/v1/agent/tasks/{task_id}/messages",
+                headers={**auth, "Idempotency-Key": f"cursor-msg-{i}"},
+                json={"body": f"message {i}"},
+            )
+            assert response.status_code == 201
+        # Equal timestamps exercise the unique ID tie breaker.
+        with database.session_factory() as session:
+            rows = list(
+                session.scalars(select(TaskActivity).where(TaskActivity.task_id == UUID(task_id)))
+            )
+            stamp = utc_now()
+            for row in rows:
+                row.created_at = stamp
+            expected = sorted(str(row.id) for row in rows)
+            session.commit()
+        seen = []
+        cursor = None
+        while True:
+            page = client.get(
+                url, headers=auth, params={"limit": 2, **({"cursor": cursor} if cursor else {})}
+            )
+            assert page.status_code == 200, page.text
+            data = page.json()
+            seen.extend(item["activity_id"] for item in data["items"])
+            cursor = data["next_cursor"]
+            if not data["has_more"]:
+                break
+        assert seen == expected
+        assert client.get(url, headers=auth, params={"cursor": cursor}).json()["items"] == []
+        exact = client.get(f"{url}/{seen[0]}", headers=auth)
+        assert [x["activity_id"] for x in exact.json()["items"]] == [seen[0]]
+        assert client.get(url, headers=auth, params={"limit": 101}).status_code == 422
+        with database.session_factory() as session:
+            membership = session.scalar(
+                select(TaskMembership).where(TaskMembership.task_id == UUID(task_id))
+            )
+            membership.status = "declined"
+            session.commit()
+        assert client.get(url, headers=auth).status_code == 404
+        assert client.get(f"{url}/{seen[0]}", headers=auth).status_code == 404
+
+
+def test_cancel_queue_and_result_snapshot_preserve_legacy_contract(
+    settings: Settings, database: Database
+):
+    with TestClient(create_app(settings=_runtime(settings), database=database)) as client:
+        owner = _register(client, "snapshot-owner")
+        agent = _create_owned_agent(
+            client, human_id=str(owner["user"]["id"]), handle="snapshot-owner"
+        )
+        auth = {"Authorization": f"Bearer {agent['api_key']}"}
+        task = client.post(
+            "/api/v1/agent/tasks",
+            headers={**auth, "Idempotency-Key": "snapshot-task"},
+            json={"title": "snapshot", "goal": "test", "expected_output": "result"},
+        ).json()
+        task_id = task["task_id"]
+        assignment_id = task["assignments"][0]["assignment_id"]
+        assert (
+            client.get("/api/v1/agent/handshake", headers=auth).json()["tasks"][0]["task_id"]
+            == task_id
+        )
+        csrf = _login(client, "snapshot-owner")
+        cancel_url = f"/api/v1/tasks/{task_id}/assignments/{assignment_id}/cancel"
+        assert client.post(cancel_url).status_code == 403
+        assert client.post(cancel_url, headers={"X-CSRF-Token": csrf}).status_code == 200
+        again = client.post(cancel_url, headers={"X-CSRF-Token": csrf})
+        assert again.status_code == 200
+        assert (
+            len([a for a in again.json()["activities"] if a["kind"] == "assignment_cancelled"]) == 1
+        )
+        assert (
+            client.post(
+                "/api/v1/task-runs/claim",
+                headers=auth,
+                json={"task_id": task_id, "assignment_id": assignment_id},
+            ).json()
+            is None
+        )
+        task2 = client.post(
+            "/api/v1/agent/tasks",
+            headers={**auth, "Idempotency-Key": "snapshot-task2"},
+            json={"title": "snapshot2", "goal": "test", "expected_output": "result"},
+        ).json()
+        claim = client.post(
+            "/api/v1/task-runs/claim", headers=auth, json={"task_id": task2["task_id"]}
+        ).json()
+        result_url = f"/api/v1/task-runs/{claim['run_id']}/result"
+        body = {
+            "lease_token": claim["lease_token"],
+            "status": "completed",
+            "summary": "done",
+            "checkpoint": {"sum": 42},
+        }
+        headers = {**auth, "Idempotency-Key": "snapshot-result", "Prefer": "return=representation"}
+        result = client.post(result_url, headers=headers, json=body)
+        assert result.status_code == 200, result.text
+        assert result.json()["checkpoint"] == {"sum": 42}
+        assert result.json()["result_activity_id"]
+        assert result.json()["replayed"] is False
+        repeated = client.post(result_url, headers=headers, json=body)
+        assert repeated.json()["replayed"] is True
+        assert repeated.json()["result_activity_id"] == result.json()["result_activity_id"]
+        assert (
+            client.post(
+                result_url, headers={**auth, "Idempotency-Key": "snapshot-result"}, json=body
+            ).status_code
+            == 204
+        )

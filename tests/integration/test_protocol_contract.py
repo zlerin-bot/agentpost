@@ -30,6 +30,12 @@ def test_public_agent_integration_contract_preserves_machine_and_human_semantics
         "create_endpoint": "/api/v1/agent/tasks",
         "create_requires_idempotency_key": True,
         "resolve_endpoint": "/api/v1/agent/tasks/resolve",
+        "activity_page_endpoint": "/api/v1/agent/tasks/{task_id}/activities",
+        "activity_endpoint": "/api/v1/agent/tasks/{task_id}/activities/{activity_id}",
+        "activity_order": "created_at_asc_activity_id_asc",
+        "activity_cursor_rule": (
+            "Persist next_cursor only after processing; parents fetched separately"
+        ),
         "context_endpoint_template": "/api/v1/agent/tasks/{task_id}",
         "message_endpoint_template": "/api/v1/agent/tasks/{task_id}/messages",
         "message_requires_idempotency_key": True,

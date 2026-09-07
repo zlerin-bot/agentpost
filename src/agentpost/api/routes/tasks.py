@@ -4,6 +4,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request, Response, status
+from fastapi.responses import JSONResponse
 
 from agentpost.api.dependencies import CurrentAgentDep, SessionDep
 from agentpost.attachments.service import AttachmentUnavailableError
@@ -49,6 +50,8 @@ from agentpost.tasks.service import (
     TaskNotFoundError,
     TaskOwnerRequiredError,
     TaskStateConflictError,
+    agent_handshake,
+    cancel_queued_assignment,
     claim_agent_run,
     complete_agent_run,
     confirm_task_activity_reply,
@@ -67,6 +70,7 @@ from agentpost.tasks.service import (
     list_pending_agent_runs,
     list_task_invitation_candidates,
     list_tasks,
+    read_agent_activity_page,
     remove_friendship,
     request_friendship,
     resolve_task_for_agent,
@@ -251,12 +255,53 @@ def resolve_agent_task(
     return resolve_task_for_agent(session, agent=current_agent, query=payload.query)
 
 
+@router.get("/agent/handshake")
+def get_agent_handshake(current_agent: CurrentAgentDep, session: SessionDep) -> dict:
+    return agent_handshake(session, agent=current_agent)
+
+
 @router.get("/agent/tasks/{task_id}", response_model=TaskDetail)
 def get_agent_task(
-    task_id: UUID, current_agent: CurrentAgentDep, session: SessionDep
+    task_id: UUID,
+    current_agent: CurrentAgentDep,
+    session: SessionDep,
+    include_history: bool = True,
 ) -> TaskDetail:
     try:
-        return get_task_for_agent(session, agent=current_agent, task_id=task_id)
+        return get_task_for_agent(
+            session, agent=current_agent, task_id=task_id, include_history=include_history
+        )
+    except TaskNotFoundError as exc:
+        raise _not_found() from exc
+
+
+@router.get("/agent/tasks/{task_id}/activities")
+def get_agent_activities(
+    task_id: UUID,
+    current_agent: CurrentAgentDep,
+    session: SessionDep,
+    cursor: UUID | None = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+) -> dict:
+    try:
+        return read_agent_activity_page(
+            session, agent=current_agent, task_id=task_id, cursor=cursor, limit=limit
+        )
+    except TaskNotFoundError as exc:
+        raise _not_found() from exc
+
+
+@router.get("/agent/tasks/{task_id}/activities/{activity_id}")
+def get_agent_activity(
+    task_id: UUID,
+    activity_id: UUID,
+    current_agent: CurrentAgentDep,
+    session: SessionDep,
+) -> dict:
+    try:
+        return read_agent_activity_page(
+            session, agent=current_agent, task_id=task_id, activity_id=activity_id, limit=1
+        )
     except TaskNotFoundError as exc:
         raise _not_found() from exc
 
@@ -557,6 +602,27 @@ def create_task_assignment_batch(
         raise _conflict("idempotency_conflict") from exc
 
 
+@router.post("/tasks/{task_id}/assignments/{assignment_id}/cancel", response_model=TaskDetail)
+def cancel_human_queued_assignment(
+    task_id: UUID,
+    assignment_id: UUID,
+    current_human: CurrentHumanDep,
+    session: SessionDep,
+    csrf: HumanCsrfDep,
+) -> TaskDetail:
+    del csrf
+    try:
+        return cancel_queued_assignment(
+            session, user=current_human, task_id=task_id, assignment_id=assignment_id
+        )
+    except TaskNotFoundError as exc:
+        raise _not_found() from exc
+    except TaskOwnerRequiredError as exc:
+        raise _forbidden() from exc
+    except TaskStateConflictError as exc:
+        raise _conflict("assignment_no_longer_queued") from exc
+
+
 @router.post(
     "/tasks/{task_id}/assignments/{assignment_id}/human-response",
     response_model=TaskDetail,
@@ -712,7 +778,7 @@ def heartbeat_task_run(
 ) -> AgentRunClaim:
     try:
         return update_agent_run(session, agent=current_agent, run_id=run_id, payload=payload)
-    except (AgentRunNotFoundError, AgentRunLeaseError) as exc:
+    except (AgentRunNotFoundError, AgentRunLeaseError, TaskNotFoundError) as exc:
         raise _not_found("run_not_found") from exc
 
 
@@ -725,17 +791,20 @@ def complete_task_run(
     idempotency_key: Annotated[
         str | None, Header(alias="Idempotency-Key", min_length=1, max_length=255)
     ] = None,
+    prefer: Annotated[str | None, Header()] = None,
 ) -> Response:
     try:
-        complete_agent_run(
+        result = complete_agent_run(
             session,
             agent=current_agent,
             run_id=run_id,
             payload=payload,
             idempotency_key=idempotency_key,
         )
-    except (AgentRunNotFoundError, AgentRunLeaseError) as exc:
+    except (AgentRunNotFoundError, AgentRunLeaseError, TaskNotFoundError) as exc:
         raise _not_found("run_not_found") from exc
     except TaskStateConflictError as exc:
         raise _conflict("idempotency_conflict") from exc
+    if prefer == "return=representation":
+        return JSONResponse(result, headers={"Preference-Applied": prefer})
     return Response(status_code=status.HTTP_204_NO_CONTENT)

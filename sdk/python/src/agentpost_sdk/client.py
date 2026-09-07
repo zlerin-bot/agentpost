@@ -209,6 +209,11 @@ class _AttachmentsResource:
         except PydanticValidationError as exc:
             raise self._owner._protocol_error("Malformed attachment response", exc) from exc
 
+    def metadata(self, attachment_id: UUID | str) -> Attachment:
+        return Attachment.model_validate(
+            self._owner._request("GET", f"/attachments/{UUID(str(attachment_id))}/metadata")
+        )
+
     def download(
         self,
         attachment_id: UUID | str,
@@ -444,13 +449,14 @@ class _TaskRunsResource:
         checkpoint: Mapping[str, Any] | None = None,
         output: Mapping[str, Any] | None = None,
         idempotency_key: str | None = None,
-    ) -> None:
+    ) -> dict[str, Any] | None:
         if checkpoint is not None and output is not None:
             raise ConfigurationError("use checkpoint or legacy output, not both")
         resolved_checkpoint = checkpoint if checkpoint is not None else output
-        self._owner._request(
+        return self._owner._request(
             "POST",
             f"/task-runs/{run_id}/result",
+            headers={"Prefer": "return=representation"},
             json={
                 "lease_token": lease_token,
                 "status": status,
@@ -708,6 +714,9 @@ class AgentPost:
         except PydanticValidationError as exc:
             raise self._protocol_error("Malformed recipient resolution response", exc) from exc
 
+    def handshake(self) -> dict[str, Any]:
+        return self._request("GET", "/agent/handshake")
+
     def resolve_task(self, query: str) -> TaskResolution:
         """Resolve an exact task title without letting the client guess a task ID."""
         if not isinstance(query, str) or not query.strip():
@@ -722,13 +731,30 @@ class AgentPost:
         except PydanticValidationError as exc:
             raise self._protocol_error("Malformed task resolution response", exc) from exc
 
-    def get_task(self, task_id: UUID | str) -> TaskContext:
+    def get_task(self, task_id: UUID | str, *, include_history: bool = True) -> TaskContext:
         """Read one task only when this Agent is an active participant."""
-        data = self._request("GET", f"/agent/tasks/{task_id}")
+        data = self._request(
+            "GET",
+            f"/agent/tasks/{task_id}",
+            **({"params": {"include_history": "false"}} if not include_history else {}),
+        )
         try:
             return TaskContext.model_validate(data)
         except PydanticValidationError as exc:
             raise self._protocol_error("Malformed task context response", exc) from exc
+
+    def task_activities(
+        self, task_id: UUID | str, *, cursor: str = "", limit: int = 50, activity_id: str = ""
+    ) -> dict[str, Any]:
+        task_id = UUID(str(task_id))
+        if activity_id:
+            return self._request("GET", f"/agent/tasks/{task_id}/activities/{UUID(activity_id)}")
+        if not 1 <= limit <= 100:
+            raise ConfigurationError("limit must be between 1 and 100")
+        params = {"limit": limit}
+        if cursor:
+            params["cursor"] = str(UUID(cursor))
+        return self._request("GET", f"/agent/tasks/{task_id}/activities", params=params)
 
     def send_task_message(
         self,

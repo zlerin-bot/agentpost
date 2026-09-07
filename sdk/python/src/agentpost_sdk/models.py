@@ -170,6 +170,10 @@ class TaskResolution(APIModel):
 
 
 class TaskContext(APIModel):
+    activity_total: int = 0
+    activities_truncated: bool = False
+    activity_order: str = "unknown"
+    authoritative_source: str = "task_activities"
     task_id: UUID
     thread_id: UUID
     title: str

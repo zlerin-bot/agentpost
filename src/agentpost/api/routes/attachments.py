@@ -123,3 +123,17 @@ def download_attachment(
             "Content-Length": str(attachment.size),
         },
     )
+
+
+@router.get("/{attachment_id}/metadata", response_model=AttachmentResponse)
+def get_attachment_metadata(
+    attachment_id: UUID,
+    session: SessionDep,
+    current_agent: CurrentAgentDep,
+) -> AttachmentResponse:
+    try:
+        return attachment_response(
+            visible_attachment(session, agent_id=current_agent.id, attachment_id=attachment_id)
+        )
+    except AttachmentNotFoundError as exc:
+        raise HTTPException(status_code=404, detail={"code": "attachment_not_found"}) from exc

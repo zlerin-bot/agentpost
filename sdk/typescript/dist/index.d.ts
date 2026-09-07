@@ -161,6 +161,8 @@ export declare class AgentPostClient {
         limit?: number;
     }): Promise<JsonObject[]>;
     resolveTask(query: string): Promise<TaskResolution>;
+    handshake(): Promise<Record<string, unknown>>;
+    taskActivities(taskId: string, cursor?: string, limit?: number, activityId?: string): Promise<Record<string, unknown>>;
     getTask(taskId: string): Promise<TaskContext>;
     sendTaskMessage(options: {
         taskId: string;

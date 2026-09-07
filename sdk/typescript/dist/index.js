@@ -205,6 +205,13 @@ export class AgentPostClient {
             body: { query },
         });
     }
+    async handshake() {
+        return await this.request("GET", "/agent/handshake");
+    }
+    async taskActivities(taskId, cursor = "", limit = 50, activityId = "") {
+        const base = `/agent/tasks/${encodeURIComponent(taskId)}/activities`;
+        return await this.request("GET", activityId ? `${base}/${encodeURIComponent(activityId)}` : base, { query: activityId ? {} : { cursor: cursor || undefined, limit } });
+    }
     async getTask(taskId) {
         return await this.request("GET", `/agent/tasks/${encodeURIComponent(taskId)}`);
     }
