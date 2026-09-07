@@ -364,6 +364,12 @@ test("conversation parent expands complete loops and shows Human unread dots", (
   assert.match(stylesheet, /\.thread-unread-dot/);
 });
 
+test("task navigation unread dot stays inside the title without creating a grid item", () => {
+  assert.match(script, /nav\.querySelector\("strong"\)\?\.append\(dot\)/);
+  assert.doesNotMatch(script, /nav\.append\(dot\)/);
+  assert.match(stylesheet, /\.task-new-dot\s*\{[^}]*vertical-align:/s);
+});
+
 test("confirmed header and timeline match the approved three-column mockup", () => {
   assert.match(html, /id="top-human-avatar"/);
   assert.match(html, /id="top-human-name"/);

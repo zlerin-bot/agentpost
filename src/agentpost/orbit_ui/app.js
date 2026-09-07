@@ -6393,7 +6393,7 @@ function updateTaskNavDot() {
     dot.className = "task-new-dot";
     dot.setAttribute("role", "img");
     dot.setAttribute("aria-label", "任务有新消息");
-    nav.append(dot);
+    nav.querySelector("strong")?.append(dot);
   }
 }
 

@@ -6191,7 +6191,16 @@ footer {
 .task-personal-menu summary { cursor: pointer; min-height: 44px; padding: 10px; }
 .task-personal-actions { display: grid; gap: 8px; padding: 12px; background: var(--surface, #fff); border: 1px solid #ddd; border-radius: 12px; max-width: 320px; }
 .task-personal-actions p { margin: 0; font-size: 13px; }
-.task-new-dot { display: inline-block; width: 8px; height: 8px; background: #dc3545; border-radius: 50%; margin-inline-start: 6px; flex: none; }
+.task-new-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-inline-start: 6px;
+  border-radius: 50%;
+  background: #dc3545;
+  box-shadow: 0 0 0 2px #fff;
+  vertical-align: 0.12em;
+}
 #back-to-top { display: none; }
 @media (max-width: 860px) {
   .prototype-browser, .prototype-browser-list { height: auto; max-height: none; overflow: visible; }

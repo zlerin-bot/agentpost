@@ -2,6 +2,9 @@
 
 ## 当前接续摘要
 
+- 2026-09-07 0.1.58 导航红点热修复候选：任务未读红点不再作为一级导航网格的第三个子项，而是附着在“任务”标题内；桌面侧栏与手机底栏均不再被红点新增行或撑高。红点仍保留，任务列表内的行内红点语义不变。JS syntax、39 项 Orbit 导航测试及 diff check 通过；生产仍为 0.1.57，待生成不可变发布包并切换。
+- 2026-09-07 当前生产 **0.1.57 / 24a3b9a / 0039_task_activity_sequence / partial**：公网 health、ready、auth config、协议合同 0.4、公开 wheel 精确 SHA 与未知下载 404 通过；测试任务更新 activity `7b909c4a-909e-4955-8ba5-389dc6655c52`。首次云端发布命令在完成切换后返回 1，尚未取得服务器进程、备份、日志和关键数据计数的完整 postflight 成功回执，因此不得标记 `deployed_https_verified` 或 `production_accepted`。
+
 - 2026-09-07 0.1.57 发布候选：整合多 AI 派工、AP056 反馈、手机交互、独立 Human 视图、任务活动顺序及可选 Codex worker。用户已授权部署及测试任务更新；正式切换/后检待执行。发布脚本新增迁移/回退前停写与停写后备份；脚本也从指定 commit 快照提取。server/SDK/MCP/插件/锁文件同步 0.1.57，schema0039。486 非 PG passed、2 skipped、7 deselected，46 Orbit/TS tests、Ruff/format/JS syntax 通过。原生及跨设备验收边界继续见 AP056_REMAINING_ACCEPTANCE，定时任务保持 PAUSED。
 
 - 2026-09-07 AP056 继续：新增 `0039_task_activity_sequence`，Task 行锁串行分配发布序号，增量仍使用活动 UUID cursor，按 task_sequence_asc 读取，原始时间不改。原 PostgreSQL 迟提交缺口已在本地 PostgreSQL 17.10 专项验证；历史漏读仍需旧消费者全量重放。未部署，生产仍是 0.1.56/schema0037；切换新 schema 前须停止旧写入。
