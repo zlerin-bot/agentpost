@@ -78,7 +78,7 @@ def test_plugin_packages_the_same_implicit_skill_without_machine_specific_mcp_co
 
     assert manifest["name"] == "agentpost"
     plugin_version, separator, cachebuster = manifest["version"].partition("+")
-    assert plugin_version == "0.1.60"
+    assert plugin_version == "0.1.61"
     assert separator == "+"
     assert cachebuster.startswith("codex.")
     assert manifest["skills"] == "./skills/"
@@ -117,8 +117,8 @@ def test_production_example_connector_artifact_matches_release_version() -> None
         if line.startswith("AGENTPOST_CONNECTOR_") and "=" in line
     )
 
-    assert values["AGENTPOST_CONNECTOR_RELEASE_VERSION"] == "0.1.60"
-    assert values["AGENTPOST_CONNECTOR_WHEEL_URL"].endswith("/agentpost-0.1.60-py3-none-any.whl")
+    assert values["AGENTPOST_CONNECTOR_RELEASE_VERSION"] == "0.1.61"
+    assert values["AGENTPOST_CONNECTOR_WHEEL_URL"].endswith("/agentpost-0.1.61-py3-none-any.whl")
     assert len(values["AGENTPOST_CONNECTOR_WHEEL_SHA256"]) == 64
     int(values["AGENTPOST_CONNECTOR_WHEEL_SHA256"], 16)
 
@@ -138,6 +138,40 @@ def test_bootstrap_imports_with_the_system_python_used_by_the_copyable_prompt() 
     assert completed.returncode == 1
     assert "agentpost_bootstrap_error code=unsupported_resume_operation" in completed.stderr
     assert "Traceback" not in completed.stderr
+
+
+def test_old_system_python_reuses_current_supported_runtime_to_create_venv(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bootstrap = _load_bootstrap()
+    monkeypatch.setattr(bootstrap.Path, "home", classmethod(lambda cls: tmp_path))
+    monkeypatch.setattr(bootstrap.sys, "version_info", (3, 9, 6))
+    current_root = tmp_path / ".agentpost" / "runtimes" / "codex"
+    current_root.mkdir(parents=True)
+    (current_root / "current.json").write_text('{"version":"0.1.57"}', encoding="utf-8")
+    current_python = current_root / "0.1.57" / "bin" / "python"
+    current_python.parent.mkdir(parents=True)
+    current_python.touch()
+    destination = current_root / "0.1.61"
+    calls: list[tuple[str, ...]] = []
+
+    def runner(command, **_kwargs):
+        normalized = tuple(str(item) for item in command)
+        calls.append(normalized)
+        return SimpleNamespace(returncode=0, stdout="")
+
+    bootstrap._create_runtime_venv(destination, host_name="codex", runner=runner)
+
+    assert calls == [
+        (
+            str(current_python),
+            "-I",
+            "-c",
+            "import sys; raise SystemExit(sys.version_info < (3, 11))",
+        ),
+        (str(current_python), "-m", "venv", str(destination)),
+    ]
 
 
 def test_release_metadata_must_enable_platform_and_match_trusted_origin() -> None:

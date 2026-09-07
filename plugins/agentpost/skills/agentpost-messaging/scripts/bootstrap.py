@@ -21,6 +21,7 @@ AUTH_CONFIG_URL = "https://agentpost.me/api/v1/auth/config"
 PUBLIC_ORIGIN = "https://agentpost.me"
 MAX_CONFIG_BYTES = 128 * 1024
 MINIMUM_SETUP_VERSION = (0, 1, 1)
+MINIMUM_RUNTIME_PYTHON = (3, 11)
 SUPPORTED_HOSTS = frozenset({"codex", "workbuddy", "doubao_work", "openclaw", "hermes", "manus"})
 
 
@@ -161,6 +162,54 @@ def _runtime_commands(runtime: Path) -> tuple[Path, Path]:
     return runtime / "bin" / "python", runtime / "bin" / "agentpost-connect"
 
 
+def _python_supports_runtime(python: Path, *, runner: Runner) -> bool:
+    if not python.is_file():
+        return False
+    completed = runner(
+        [
+            str(python),
+            "-I",
+            "-c",
+            "import sys; raise SystemExit(sys.version_info < (3, 11))",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=20,
+        check=False,
+    )
+    return completed.returncode == 0
+
+
+def _create_runtime_venv(runtime: Path, *, host_name: str, runner: Runner) -> None:
+    if sys.version_info >= MINIMUM_RUNTIME_PYTHON:
+        venv.EnvBuilder(with_pip=True).create(runtime)
+        return
+
+    current_pointer = Path.home() / ".agentpost" / "runtimes" / host_name / "current.json"
+    candidates: list[Path] = []
+    try:
+        current_version = json.loads(current_pointer.read_text(encoding="utf-8")).get("version")
+    except (OSError, UnicodeError, json.JSONDecodeError, AttributeError):
+        current_version = None
+    if isinstance(current_version, str) and re.fullmatch(r"[A-Za-z0-9._+-]+", current_version):
+        candidates.append(current_pointer.parent / current_version / _runtime_commands(Path())[0])
+    candidates.append(Path.home() / ".agentpost" / "runtime" / _runtime_commands(Path())[0])
+
+    for python in candidates:
+        if not _python_supports_runtime(python, runner=runner):
+            continue
+        completed = runner(
+            [str(python), "-m", "venv", str(runtime)],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+        if completed.returncode == 0:
+            return
+    raise BootstrapError("supported_python_unavailable")
+
+
 def _installed_version(python: Path, *, runner: Runner) -> str | None:
     if not python.is_file():
         return None
@@ -183,13 +232,16 @@ def ensure_runtime(
     release: ConnectorRelease,
     *,
     runtime: Path,
+    host_name: str = "codex",
     runner: Runner = subprocess.run,
     create_venv: Callable[[Path], None] | None = None,
 ) -> Path:
     python, connector = _runtime_commands(runtime)
     if _installed_version(python, runner=runner) != release.version:
         if not python.is_file():
-            creator = create_venv or (lambda path: venv.EnvBuilder(with_pip=True).create(path))
+            creator = create_venv or (
+                lambda path: _create_runtime_venv(path, host_name=host_name, runner=runner)
+            )
             creator(runtime)
             python, connector = _runtime_commands(runtime)
         pinned_wheel = f"{release.wheel_url}#sha256={release.wheel_sha256}"
@@ -249,6 +301,7 @@ def execute(
     connector = ensure_runtime(
         release,
         runtime=runtime or runtime_home(host_name=host_name, version=release.version),
+        host_name=host_name,
         runner=runner,
         create_venv=create_venv,
     )
