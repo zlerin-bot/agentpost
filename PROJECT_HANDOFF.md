@@ -2,6 +2,10 @@
 
 ## 当前接续摘要
 
+- 2026-09-07 AP056 反馈开发切片：新增认证握手、Task 历史分页/精确活动读取、可跳过历史的上下文、SDK 截断信息、豆包显式文本工具、Manus Task 操作、附件元数据及自动 SHA、可选 Run 最终回执、负责人取消 queued 工作、代发署名与下载反馈、持久化轮询基础。当前是本地验证，未部署、未更新外部宿主；四阶段尚未全部完成，详见 `docs/AP056_FEEDBACK_IMPLEMENTATION_20260907.md`。
+- 本轮验证：478 非 PostgreSQL passed、1 loopback skip、5 PostgreSQL deselected；真实 MCP 9 passed，轮询专项 2 passed；60 JavaScript/TypeScript tests，Ruff/format/JS syntax/TypeScript build/diff check 通过。隔离 IAB 1470px/390px 验证下载反馈、署名、派工、取消、返回列表，无横向溢出；原 8777 服务停止后已重建合成数据，旧预览 task 深链接不再适用。
+- 待继续：各宿主真实自动唤醒/升级迁移、PostgreSQL 迟提交与游标并发、Human AI 页完整能力视图、旧入口迁移收敛、结果比较视图；真实豆包/Manus与手机/跨 Human验收待确认。测试任务定时检查仍 PAUSED，不得当作产品监听恢复。
+
 - 2026-09-06 **多选派工切片 local_verified，未部署**：在“安排一项明确工作”按 Human 分组显示复选框，可勾选 1–64 个参与 AI；每个所选 AI 收到同一工作要求，分别建立独立 Assignment/Run/来源活动，进展与结果继续各自追踪。分工由 Human 在要求中写明，不宣称系统自动拆解。
 - 新 Human API `POST /api/v1/tasks/{task_id}/assignments/batch` 要求 CSRF 与 Idempotency-Key：校验整批有效成员/所选 AI 后一次事务创建；批次回执绑定 Task、Human、幂等键及规范化请求哈希。相同请求（含顺序变化）不重复创建，更改正文同键 409；保留旧单选 API。未新增 schema。
 - 前端草稿仅保存在当前页面内存，按 Task 隔离；空选择/空要求拒绝，提交期间禁改防重入，网络结果未知时保留原内容和幂等键供重试；迟到响应不覆盖另一个任务。手机触控区域至少 44px、复选框 18px，支持键盘勾选与清晰焦点。
