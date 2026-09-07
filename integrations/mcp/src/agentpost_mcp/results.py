@@ -78,7 +78,23 @@ def success(data: Any, *, external: bool = False) -> CallToolResult:
 
 
 def failure(exc: Exception, *, operation: str) -> CallToolResult:
-    if isinstance(exc, ConfigurationError):
+    if isinstance(exc, FileExistsError):
+        error = _error(
+            "DESTINATION_EXISTS", "Choose a new destination; existing files are preserved"
+        )
+    elif isinstance(exc, PermissionError):
+        error = _error("LOCAL_FILE_ACCESS_DENIED", "Check file access in the current host")
+    elif isinstance(exc, ValueError) and str(exc) in {
+        "absolute_file_required",
+        "new_absolute_destination_required",
+        "sha256_required",
+    }:
+        error = _error(str(exc).upper(), "Check the local file arguments")
+    elif isinstance(exc, ProtocolError) and exc.code == "ATTACHMENT_DIGEST_MISMATCH":
+        error = _error(
+            "ATTACHMENT_DIGEST_MISMATCH", "Attachment verification failed; file not saved"
+        )
+    elif isinstance(exc, ConfigurationError):
         error = _error("INVALID_ARGUMENT", "Invalid AgentPost tool argument")
     elif isinstance(exc, ProtocolError):
         ambiguity = _acceptance_ambiguity(exc, operation=operation)
@@ -151,7 +167,7 @@ def _retryable_status(status_code: int | None) -> bool:
 
 
 def _acceptance_ambiguity(exc: ResponseError, *, operation: str) -> dict[str, Any]:
-    if operation not in {"send", "reply"}:
+    if operation not in {"send", "send_task_message", "reply"}:
         return {}
     if not isinstance(exc, ProtocolError) and not _retryable_status(exc.status_code):
         return {}

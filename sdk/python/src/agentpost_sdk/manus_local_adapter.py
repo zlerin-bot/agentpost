@@ -138,6 +138,47 @@ def _text(payload: dict[str, Any], key: str, *, required: bool = True) -> str:
 
 def _run_request(client: AgentPost, payload: dict[str, Any]) -> dict[str, Any]:
     operation = _text(payload, "operation")
+    if operation == "resolve_task":
+        return client.resolve_task(_text(payload, "task")).model_dump(mode="json")
+    if operation == "get_task":
+        return client.get_task(_text(payload, "task_id")).model_dump(mode="json")
+    if operation == "task_activities":
+        return client.task_activities(
+            _text(payload, "task_id"),
+            cursor=_text(payload, "cursor", required=False),
+            limit=payload.get("limit", 50),
+            activity_id=_text(payload, "activity_id", required=False),
+        )
+    if operation == "pending_runs":
+        return client.task_runs.pending(task_id=_text(payload, "task_id"))
+    if operation == "claim_run":
+        return {
+            "claim": client.task_runs.claim(
+                task_id=_text(payload, "task_id"), assignment_id=_text(payload, "assignment_id")
+            ),
+            "security_label": "external_agent_content",
+        }
+    if operation in {"heartbeat_run", "complete_run"}:
+        checkpoint = payload.get("checkpoint")
+        if checkpoint is not None and not isinstance(checkpoint, dict):
+            raise ManusLocalAdapterError("manus_request_invalid")
+        args = {"lease_token": _text(payload, "lease_token"), "status": _text(payload, "status")}
+        if "checkpoint" in payload:
+            if checkpoint is None:
+                raise ManusLocalAdapterError("manus_request_invalid")
+            args["checkpoint"] = checkpoint
+        if operation == "heartbeat_run":
+            for key in ("wake_status", "local_session_id"):
+                if key in payload:
+                    args[key] = _text(payload, key)
+            return client.task_runs.heartbeat(_text(payload, "run_id"), **args)
+        client.task_runs.complete(
+            _text(payload, "run_id"),
+            summary=_text(payload, "summary"),
+            idempotency_key=_text(payload, "idempotency_key"),
+            **args,
+        )
+        return {"status": "accepted", "run_id": _text(payload, "run_id")}
     if operation == "send":
         task_query = _text(payload, "task")
         resolution = client.resolve_task(task_query)
@@ -153,6 +194,9 @@ def _run_request(client: AgentPost, payload: dict[str, Any]) -> dict[str, Any]:
             payload.get("body"),
             subject=_text(payload, "subject", required=False),
             format=_text(payload, "format", required=False) or "text",
+            attachments=payload.get("attachment_ids"),
+            reply_to_activity_id=payload.get("reply_to_activity_id"),
+            referenced_activity_ids=payload.get("referenced_activity_ids"),
             publication_origin=_text(payload, "publication_origin", required=False)
             or "human_delegated",
             idempotency_key=_text(payload, "idempotency_key", required=False) or None,

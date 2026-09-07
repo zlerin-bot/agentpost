@@ -11,6 +11,7 @@ import os
 import subprocess
 import sys
 import threading
+from datetime import UTC, datetime
 from pathlib import Path
 
 from agentpost_sdk import __version__
@@ -116,6 +117,9 @@ UPGRADE_STATE: dict = {"status": "not_checked", "runtime_version": __version__}
 
 
 def _background_prepare() -> None:
+    UPGRADE_STATE["last_checked_at"] = datetime.now(UTC).isoformat()
+    UPGRADE_STATE.pop("reason", None)
+    UPGRADE_STATE.pop("target_version", None)
     try:
         result = prepare_upgrade()
         UPGRADE_STATE.update(result)
@@ -129,6 +133,7 @@ def _background_prepare() -> None:
     except Exception as exc:
         sys.stderr.write(f"AgentPost auto-upgrade deferred ({type(exc).__name__}).\n")
         UPGRADE_STATE["status"] = "upgrade_deferred"
+        UPGRADE_STATE["reason"] = type(exc).__name__
 
 
 def _watch_releases() -> None:

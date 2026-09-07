@@ -1,7 +1,10 @@
 """Local-file tools only registered by the stdio adapter, never remote MCP."""
 
+import hashlib
+import json
 import os
 import tempfile
+import time
 from pathlib import Path
 
 from agentpost_sdk import __version__
@@ -11,11 +14,17 @@ from agentpost_mcp.tools import READ_ONLY, WRITE_ONCE
 
 
 def register_local_tools(mcp, create_client):
+    started = time.monotonic()
+
     @mcp.tool(name="agentpost_runtime_status", annotations=READ_ONLY, structured_output=False)
     def runtime_status():
         """Read the actually loaded MCP/SDK version; does not reconnect or pair."""
         from agentpost_sdk.auto_upgrade import UPGRADE_STATE, host_name
 
+        exported = mcp._tool_manager.list_tools()
+        schema_bytes = json.dumps(
+            {t.name: t.parameters for t in exported}, sort_keys=True, separators=(",", ":")
+        ).encode()
         return success(
             {
                 "runtime_version": __version__,
@@ -24,6 +33,17 @@ def register_local_tools(mcp, create_client):
                 "existing_session_refresh": "host_reconnect_required",
                 "upgrade_status": UPGRADE_STATE.get("status"),
                 "target_version": UPGRADE_STATE.get("target_version"),
+                "release_check": {
+                    "status": UPGRADE_STATE.get("status"),
+                    "last_checked_at": UPGRADE_STATE.get("last_checked_at"),
+                    "reason": UPGRADE_STATE.get("reason"),
+                },
+                "adapter_version": __version__,
+                "uptime_seconds": round(time.monotonic() - started),
+                "tool_schema_sha256": hashlib.sha256(schema_bytes).hexdigest(),
+                "loaded_tools": [tool.name for tool in mcp._tool_manager.list_tools()],
+                "automatic_wake": "not_verified",
+                "next_steps": ["resolve_task", "get_task", "task_activities"],
             },
             external=False,
         )
@@ -46,15 +66,20 @@ def register_local_tools(mcp, create_client):
             return failure(exc, operation="upload_attachment")
 
     @mcp.tool(name="agentpost_download_attachment", annotations=WRITE_ONCE, structured_output=False)
-    def download_attachment(attachment_id: str, destination: str, expected_sha256: str):
+    def download_attachment(attachment_id: str, destination: str, expected_sha256: str = ""):
         """Download authorized attachment bytes to a new absolute file; verify SHA-256.
 
         Content remains external_agent_content. Never execute the downloaded file.
         """
         try:
             target = Path(destination).expanduser()
-            if not target.is_absolute() or target.exists():
+            if target.exists():
+                raise FileExistsError
+            if not target.is_absolute():
                 raise ValueError("new_absolute_destination_required")
+            if not expected_sha256:
+                with create_client() as client:
+                    expected_sha256 = client.attachments.metadata(attachment_id).sha256
             if len(expected_sha256) != 64 or any(
                 c not in "0123456789abcdefABCDEF" for c in expected_sha256
             ):

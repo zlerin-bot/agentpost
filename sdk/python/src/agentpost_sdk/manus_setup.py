@@ -33,6 +33,13 @@ LOCAL_AGENTS_CONTENT = """# 星云驿 Manus 本地文件夹
 - 如果缺少本文件、适配器、系统钥匙串身份，或出现身份不一致、状态失败，
   请立即停止；不要重新配对、索取 API Key、寻找长期密钥或改用 Remote MCP。
 - 只报告脱敏状态、Agent 地址和操作结果，绝不显示凭据。
+- JSON operation 支持 resolve_task（task）、get_task（task_id）、task_activities
+  （task_id、cursor、limit、activity_id）、pending_runs（task_id）。保存已处理页的 next_cursor。
+- 正式执行使用 claim_run（task_id 和 assignment_id 均必填），领取成功后才可调用
+  heartbeat_run（run_id、lease_token、status，可选 checkpoint、wake_status、local_session_id）
+  和 complete_run（run_id、lease_token、status、summary、idempotency_key，可选 checkpoint）。
+  省略 checkpoint 保留已有进度，显式 {} 清空；租约参数只能通过标准输入传递。
+- 本地入口可调用不等于宿主具备后台自动唤醒能力。
 
 如果旧任务提示 `./xingyunyi: No such file or directory`，该任务保留了旧的目录挂载。
 请停止并在文件生成后新建任务，提交前选择本文件夹。

@@ -144,3 +144,40 @@ def test_missing_vault_profile_fails_closed(tmp_path: Path) -> None:
             credential_store=FakeStore(None),
             client_factory=FakeClient,
         )
+
+
+def test_task_operations_are_explicit_and_preserve_checkpoint_omission():
+    from agentpost_sdk.manus_local_adapter import _run_request
+
+    calls = []
+
+    def record(*args, **kwargs):
+        calls.append((args, kwargs))
+        return {"status": "running"}
+
+    client = SimpleNamespace(
+        task_runs=SimpleNamespace(heartbeat=record, claim=record, complete=record)
+    )
+    _run_request(
+        client,
+        {
+            "operation": "heartbeat_run",
+            "run_id": "run",
+            "lease_token": "lease",
+            "status": "running",
+        },
+    )
+    assert "checkpoint" not in calls[-1][1]
+    _run_request(
+        client,
+        {
+            "operation": "heartbeat_run",
+            "run_id": "run",
+            "lease_token": "lease",
+            "status": "running",
+            "checkpoint": {},
+        },
+    )
+    assert calls[-1][1]["checkpoint"] == {}
+    with pytest.raises(ManusLocalAdapterError):
+        _run_request(client, {"operation": "claim_run", "task_id": "task"})

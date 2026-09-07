@@ -39,6 +39,9 @@ EXPECTED_TOOLS = {
     "agentpost_resolve_recipient",
     "agentpost_resolve_task",
     "agentpost_get_task",
+    "agentpost_handshake",
+    "agentpost_task_activities",
+    "agentpost_send_task_text",
     "agentpost_send_task_message",
     "agentpost_list_inbox",
     "agentpost_read_message",
@@ -164,6 +167,8 @@ def test_exact_tools_have_strict_public_parameters_and_v2_annotations() -> None:
             "agentpost_resolve_recipient",
             "agentpost_resolve_task",
             "agentpost_get_task",
+            "agentpost_handshake",
+            "agentpost_task_activities",
             "agentpost_list_pending_task_runs",
             "agentpost_search_directory",
         }:
@@ -505,3 +510,20 @@ def test_settings_and_unexpected_failure_logging_do_not_expose_api_keys(caplog) 
         result = failure(RuntimeError(f"unexpected {api_key}"), operation="read_message")
     assert structured(result)["error"]["code"] == "INTERNAL_ERROR"
     assert api_key not in caplog.text
+
+
+def test_host_text_tool_has_explicit_types():
+    server = create_server(
+        Settings(
+            server="https://post.example",
+            api_key="test-key",
+            timeout_seconds=30,
+            log_level="WARNING",
+        )
+    )
+    tools = {tool.name: tool for tool in server._tool_manager.list_tools()}
+    properties = tools["agentpost_send_task_text"].parameters["properties"]
+    assert properties["body"]["type"] == "string"
+    assert properties["attachment_ids"]["type"] == "array"
+    assert all(field.get("type") for field in properties.values())
+    assert all("anyOf" not in field for field in properties.values())

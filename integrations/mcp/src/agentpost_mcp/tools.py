@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from agentpost_sdk import AgentPost
+from agentpost_sdk import AgentPost, ConfigurationError
 from mcp.types import CallToolResult, ToolAnnotations
 from pydantic import AfterValidator, Field, JsonValue, WithJsonSchema
 
@@ -122,6 +122,15 @@ def register_tools(mcp: Any, create_client: ClientFactory) -> None:
         except Exception as exc:
             return failure(exc, operation="resolve_task")
 
+    @mcp.tool(name="agentpost_handshake", annotations=READ_ONLY, structured_output=False)
+    def handshake() -> CallToolResult:
+        """Start here: read authenticated identity, server version, task index and read contract."""
+        try:
+            with create_client() as client:
+                return success(client.handshake(), external=True)
+        except Exception as exc:
+            return failure(exc, operation="handshake")
+
     @mcp.tool(
         name="agentpost_get_task",
         description=(
@@ -132,13 +141,65 @@ def register_tools(mcp: Any, create_client: ClientFactory) -> None:
         annotations=READ_ONLY,
         structured_output=False,
     )
-    def get_task(task_id: UUID) -> CallToolResult:
+    def get_task(task_id: UUID, include_history: bool = True) -> CallToolResult:
         try:
             with create_client() as client:
-                result = client.get_task(task_id)
+                result = client.get_task(
+                    task_id, **({"include_history": False} if not include_history else {})
+                )
             return success(result, external=True)
         except Exception as exc:
             return failure(exc, operation="get_task")
+
+    @mcp.tool(name="agentpost_task_activities", annotations=READ_ONLY, structured_output=False)
+    def task_activities(
+        task_id: UUID, cursor: str = "", limit: int = 50, activity_id: str = ""
+    ) -> CallToolResult:
+        """Read Task history incrementally in ascending order. Save next_cursor after processing.
+
+        Use activity_id for an exact record or reply parent. Never use Inbox as full Task history.
+        """
+        try:
+            with create_client() as client:
+                return success(
+                    client.task_activities(
+                        task_id, cursor=cursor, limit=limit, activity_id=activity_id
+                    ),
+                    external=True,
+                )
+        except Exception as exc:
+            return failure(exc, operation="task_activities")
+
+    @mcp.tool(name="agentpost_send_task_text", annotations=WRITE_ONCE, structured_output=False)
+    def send_task_text(
+        task_id: UUID,
+        body: str,
+        subject: str = "",
+        content_format: ContentFormat = "text",
+        attachment_ids: tuple[UUID, ...] = (),
+        reply_to_activity_id: str = "",
+        referenced_activity_ids: tuple[UUID, ...] = (),
+        idempotency_key: str = "",
+        publication_origin: Literal["human_delegated", "agent_autonomous"] = "agent_autonomous",
+    ) -> CallToolResult:
+        """Host-compatible text/Markdown Task publication with explicit parameter types.
+
+        Human-delegated publication requires Human authorization. JSON content is serialized text.
+        """
+        try:
+            return send_task_message(
+                task_id,
+                body,
+                subject,
+                content_format,
+                list(attachment_ids),
+                publication_origin,
+                UUID(reply_to_activity_id) if reply_to_activity_id else None,
+                list(referenced_activity_ids),
+                idempotency_key or None,
+            )
+        except (ValueError, TypeError):
+            return failure(ConfigurationError("invalid activity ID"), operation="send_task_message")
 
     @mcp.tool(
         name="agentpost_send_task_message",
@@ -400,7 +461,7 @@ def register_tools(mcp: Any, create_client: ClientFactory) -> None:
     ) -> CallToolResult:
         try:
             with create_client() as client:
-                client.task_runs.complete(
+                result = client.task_runs.complete(
                     run_id,
                     lease_token=lease_token,
                     status=status,
@@ -408,6 +469,9 @@ def register_tools(mcp: Any, create_client: ClientFactory) -> None:
                     checkpoint=checkpoint,
                     idempotency_key=idempotency_key,
                 )
-            return success({"run_id": str(run_id), "status": status}, external=False)
+            return success(
+                result or {"run_id": str(run_id), "status": status, "snapshot_available": False},
+                external=True,
+            )
         except Exception as exc:
             return failure(exc, operation="complete_task_run")

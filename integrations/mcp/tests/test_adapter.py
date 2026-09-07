@@ -115,7 +115,10 @@ async def test_v2_tool_contract_and_calls(adapter: tuple[object, list[tuple[str,
         assert [tool.name for tool in listed.tools] == [
             "agentpost_resolve_recipient",
             "agentpost_resolve_task",
+            "agentpost_handshake",
             "agentpost_get_task",
+            "agentpost_task_activities",
+            "agentpost_send_task_text",
             "agentpost_send_task_message",
             "agentpost_list_inbox",
             "agentpost_read_message",
@@ -341,3 +344,33 @@ async def test_local_attachment_tools_reject_relative_and_existing_paths(adapter
         assert downloaded.is_error
         assert target.read_text() == "keep"
         assert not calls
+
+
+@pytest.mark.anyio
+async def test_text_entry_forwards_reply_attachments_and_idempotency(adapter):
+    server, calls = adapter
+    identifier = "33333333-3333-3333-3333-333333333333"
+    async with Client(server) as client:
+        response = await client.call_tool(
+            "agentpost_send_task_text",
+            {
+                "task_id": identifier,
+                "body": "兼容正文",
+                "attachment_ids": [identifier],
+                "reply_to_activity_id": identifier,
+                "referenced_activity_ids": [identifier],
+                "idempotency_key": "compat-test",
+                "publication_origin": "human_delegated",
+            },
+        )
+        assert not response.is_error
+        invocation = [args for name, args in calls if name == "send_task_message"][-1]
+        assert invocation[1] == "兼容正文"
+        assert invocation[2]["idempotency_key"] == "compat-test"
+        assert invocation[2]["attachments"] == [UUID(identifier)]
+        assert invocation[2]["reply_to_activity_id"] == UUID(identifier)
+        invalid = await client.call_tool(
+            "agentpost_send_task_text",
+            {"task_id": identifier, "body": "invalid", "reply_to_activity_id": "not-a-uuid"},
+        )
+        assert invalid.is_error
