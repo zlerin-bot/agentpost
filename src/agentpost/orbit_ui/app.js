@@ -51,6 +51,11 @@ const state = {
   projectFilter: "active",
   taskRecordFilter: "discussion",
   taskActivityLimit: 200,
+  taskFiles: [],
+  taskFileQuery: "",
+  taskFileUploader: "",
+  taskFileType: "",
+  taskFileMine: false,
   taskRequestSequence: 0,
   taskLoadError: "",
   taskReplyDrafts: new Map(),
@@ -179,6 +184,12 @@ const elements = {
   projectArchive: document.querySelector("#project-archive"),
   projectActivityList: document.querySelector("#project-activity-list"),
   projectCollaborationList: document.querySelector("#project-collaboration-list"),
+  taskFileCount: document.querySelector("#task-file-count"),
+  taskFileSearch: document.querySelector("#task-file-search"),
+  taskFileUploader: document.querySelector("#task-file-uploader"),
+  taskFileType: document.querySelector("#task-file-type"),
+  taskFileMine: document.querySelector("#task-file-mine"),
+  taskFileList: document.querySelector("#task-file-list"),
   taskOwnerControls: document.querySelector("#task-owner-controls"),
   taskAssignmentForm: document.querySelector("#task-assignment-form"),
   taskAssignmentAgent: document.querySelector("#task-assignment-agent"),
@@ -634,13 +645,17 @@ async function loadProjectDetail(projectId) {
     return;
   }
   try {
-    const project = await requestJson("/api/v1/tasks/" + encodeURIComponent(projectId)
-      + "?activity_limit=" + encodeURIComponent(state.taskActivityLimit));
+    const [project, files] = await Promise.all([
+      requestJson("/api/v1/tasks/" + encodeURIComponent(projectId)
+        + "?activity_limit=" + encodeURIComponent(state.taskActivityLimit)),
+      requestJson("/api/v1/tasks/" + encodeURIComponent(projectId) + "/files"),
+    ]);
     if (state.selectedProjectId !== projectId || sequence !== state.taskRequestSequence) {
       return;
     }
     if (project.task_id !== projectId) throw new Error("任务信息不匹配，请重新读取。");
     state.selectedProject = project;
+    state.taskFiles = Array.isArray(files?.items) ? files.items : [];
     renderTaskPreferences(project);
     const url = new URL(window.location.href);
     if (state.activeModule === "projects" && url.searchParams.get("task") !== projectId) {
@@ -653,6 +668,7 @@ async function loadProjectDetail(projectId) {
   } catch (error) {
     if (state.selectedProjectId !== projectId || sequence !== state.taskRequestSequence) return;
     state.selectedProject = null;
+    state.taskFiles = [];
     state.taskLoadError = error.status === 404 ? "任务不可用，或你当前没有访问权限。" : error.message;
     renderProjectDetail();
   }
@@ -694,6 +710,13 @@ async function selectTask(taskId, { updateHistory = true } = {}) {
   state.taskLoadError = "";
   state.taskActivityLimit = 200;
   state.taskRecordFilter = "discussion";
+  state.taskFiles = [];
+  state.taskFileQuery = "";
+  state.taskFileUploader = "";
+  state.taskFileType = "";
+  state.taskFileMine = false;
+  elements.taskFileSearch.value = "";
+  elements.taskFileMine.checked = false;
   elements.taskAssignmentForm.reset();
   elements.projectActionResult.textContent = "";
   document.querySelectorAll(".task-settings, .task-compose-panel").forEach((item) => { item.open = false; });
@@ -1018,23 +1041,6 @@ function taskDiscussionGroups(activities) {
   ))).sort((a, b) => b.at(-1).created_at.localeCompare(a.at(-1).created_at));
 }
 
-function taskCollaborationUpdates(project) {
-  const latestByHuman = new Map();
-  for (const group of taskDiscussionGroups(
-    (project.activities || []).filter((activity) => activity.kind === "task_message"),
-  )) {
-    const latest = group.at(-1);
-    const humanKey = latest.actor_human_user_id || latest.actor_display_name || latest.activity_id;
-    const previous = latestByHuman.get(humanKey);
-    if (!previous || previous.latest.created_at < latest.created_at) {
-      latestByHuman.set(humanKey, { root: group[0], latest, count: group.length });
-    }
-  }
-  return [...latestByHuman.values()]
-    .sort((a, b) => b.latest.created_at.localeCompare(a.latest.created_at))
-    .slice(0, 8);
-}
-
 function suggestedTaskReplyParent(project, activity) {
   if (activity.kind !== "task_message" || activity.metadata?.reply_to_activity_id
       || activity.metadata?.reply_suggestion_dismissed || !activity.actor_agent_display_name) {
@@ -1282,6 +1288,117 @@ function renderTaskAttention(project, ownerAccess) {
   });
 }
 
+function taskFileTypeLabel(contentType) {
+  const type = safeText(contentType, "").split(";", 1)[0].trim().toLowerCase();
+  if (["text/markdown", "text/x-markdown", "application/markdown"].includes(type)) return "Markdown";
+  if (type === "application/json") return "JSON";
+  if (type === "text/html") return "HTML";
+  if (type === "application/pdf") return "PDF";
+  if (type.startsWith("text/")) return "文本";
+  return type ? "其他" : "未知类型";
+}
+
+async function openTaskFileSource(activityId) {
+  let project = currentTaskForAction();
+  if (!project) return;
+  const loaded = () => (project.activities || []).some(
+    (activity) => String(activity.activity_id) === String(activityId),
+  );
+  if (!loaded() && project.activities_truncated && state.taskActivityLimit < 2000) {
+    state.taskActivityLimit = 2000;
+    await loadProjectDetail(project.task_id);
+    project = currentTaskForAction();
+  }
+  if (project && loaded()) {
+    openTaskRecord(activityId, "discussion");
+  } else {
+    elements.projectActionResult.textContent = "来源记录较早，当前页面未能定位；文件仍可直接预览或下载。";
+  }
+}
+
+function renderTaskFiles(project) {
+  const allFiles = state.taskFiles || [];
+  elements.taskFileCount.textContent = String(allFiles.length);
+  const previousUploader = state.taskFileUploader;
+  const previousType = state.taskFileType;
+  const uploaders = [...new Map(allFiles.map((file) => [
+    String(file.uploader_human_user_id || file.uploader_display_name),
+    file.uploader_display_name,
+  ])).entries()].sort((a, b) => a[1].localeCompare(b[1], "zh-CN"));
+  const types = [...new Set(allFiles.map((file) => taskFileTypeLabel(file.content_type)))].sort();
+  elements.taskFileUploader.replaceChildren(new Option("全部上传人", ""));
+  uploaders.forEach(([value, label]) => elements.taskFileUploader.append(new Option(label, value)));
+  elements.taskFileUploader.value = previousUploader;
+  elements.taskFileType.replaceChildren(new Option("全部类型", ""));
+  types.forEach((label) => elements.taskFileType.append(new Option(label, label)));
+  elements.taskFileType.value = previousType;
+
+  const query = state.taskFileQuery.toLocaleLowerCase("zh-CN");
+  const currentHumanId = String(state.dashboard?.user?.id || "");
+  const files = allFiles.filter((file) => {
+    const uploaderKey = String(file.uploader_human_user_id || file.uploader_display_name);
+    const searchable = `${file.filename} ${file.source_subject || ""}`.toLocaleLowerCase("zh-CN");
+    return (!query || searchable.includes(query))
+      && (!state.taskFileUploader || uploaderKey === state.taskFileUploader)
+      && (!state.taskFileType || taskFileTypeLabel(file.content_type) === state.taskFileType)
+      && (!state.taskFileMine || String(file.uploader_human_user_id) === currentHumanId);
+  });
+  elements.taskFileList.replaceChildren();
+  if (!allFiles.length) {
+    elements.taskFileList.append(emptyState("这个任务还没有已关联的文件。"));
+    return;
+  }
+  if (!files.length) {
+    elements.taskFileList.append(emptyState("没有符合当前筛选条件的文件。"));
+    return;
+  }
+  files.forEach((file) => {
+    const card = document.createElement("article");
+    card.className = "task-file-card";
+    const heading = document.createElement("div");
+    const title = document.createElement("strong");
+    title.textContent = safeText(file.filename, "未命名附件");
+    const type = document.createElement("span");
+    type.className = "data-chip";
+    type.textContent = taskFileTypeLabel(file.content_type);
+    heading.append(title, type);
+    const meta = document.createElement("p");
+    meta.textContent = `${file.uploader_display_name} · 通过 ${file.uploader_agent_display_name} · ${dateText(file.uploaded_at)} · ${formatFileSize(file.size)}`;
+    const source = document.createElement("p");
+    source.className = "task-file-source";
+    source.textContent = `来源：${file.source_subject || "未命名讨论"}`;
+    const actions = document.createElement("div");
+    actions.className = "task-file-actions";
+    const attachment = { ...file, id: file.attachment_id };
+    const normalizedType = safeText(file.content_type, "").split(";", 1)[0].trim().toLowerCase();
+    const previewable = new Set([
+      "application/json", "application/markdown", "application/pdf", "text/html",
+      "text/markdown", "text/plain", "text/x-markdown",
+    ]).has(normalizedType);
+    if (previewable) {
+      const preview = document.createElement("button");
+      preview.type = "button";
+      preview.className = "text-button";
+      preview.textContent = normalizedType === "application/pdf" ? "打开预览" : "查看内容";
+      preview.addEventListener("click", () => openAttachmentPreview(attachment));
+      actions.append(preview);
+    }
+    const download = document.createElement("a");
+    download.className = "task-record-link";
+    download.href = `/api/v1/orbit/attachments/${encodeURIComponent(file.attachment_id)}`;
+    download.download = safeText(file.filename, "attachment");
+    download.textContent = "下载";
+    const locate = document.createElement("button");
+    locate.type = "button";
+    locate.className = "text-button";
+    locate.textContent = "查看来源讨论";
+    locate.addEventListener("click", () => void openTaskFileSource(file.source_activity_id));
+    actions.append(download, locate);
+    card.append(heading, meta, source, actions);
+    elements.taskFileList.append(card);
+  });
+}
+
 function renderProjectDetail() {
   const project = state.selectedProjectId === state.selectedProject?.task_id
     ? state.selectedProject
@@ -1346,6 +1463,7 @@ function renderProjectDetail() {
     ? `还有 ${unfinishedAssignments} 个 AI 执行单元未完成。查看“提交前待处理”了解具体原因。`
     : "提交后任务进入“待验收”，不能再创建新的 AI 执行单元。";
   renderTaskAssignmentForm(project);
+  renderTaskFiles(project);
   elements.projectArchive.textContent = project.status === "paused" ? "继续任务" : "暂停任务";
 
   elements.projectAcceptAgentOptions.replaceChildren();
@@ -1603,46 +1721,10 @@ function renderProjectDetail() {
       elements.projectCollaborationList.append(history);
     } else elements.projectCollaborationList.append(row);
   });
-  const collaborationUpdates = taskCollaborationUpdates(project);
-  if (collaborationUpdates.length) {
-    const updates = document.createElement("section");
-    updates.className = "task-collaboration-updates";
-    const title = document.createElement("h4");
-    title.textContent = "近期协作更新";
-    const note = document.createElement("p");
-    note.textContent = "来自任务讨论，不代表已经形成执行结果或通过验收。";
-    updates.append(title, note);
-    collaborationUpdates.forEach(({ root, latest, count }) => {
-      const item = document.createElement("article");
-      item.className = `task-collaboration-update human-tone-${humanColorTone(latest.actor_human_user_id)}`;
-      const heading = document.createElement("div");
-      const actor = document.createElement("strong");
-      actor.textContent = latest.actor_display_name || "Human 待确认";
-      const time = document.createElement("time");
-      time.textContent = dateText(latest.created_at);
-      const badge = document.createElement("span");
-      badge.textContent = count > 1 ? `讨论更新 · ${count - 1} 条回复` : "协作更新";
-      heading.append(actor, time, badge);
-      const agent = document.createElement("small");
-      agent.textContent = latest.actor_agent_display_name
-        ? `通过 AI：${latest.actor_agent_display_name}`
-        : "Human 直接发布";
-      const body = document.createElement("p");
-      const format = latest.metadata?.content_format || "text";
-      body.textContent = format === "html" ? "HTML 内容，打开后按安全文本查看。"
-        : plainTaskExcerpt(latest.metadata?.body || activityText(latest), 180);
-      const subject = document.createElement("h4");
-      subject.textContent = taskContentTitle(latest);
-      item.append(heading, subject, agent, body);
-      appendTaskRecordLink(item, root.activity_id, "查看讨论", "discussion");
-      updates.append(item);
-    });
-    elements.projectCollaborationList.prepend(updates);
-  }
-  if (!visibleAssignments.length && !collaborationUpdates.length) {
+  if (!visibleAssignments.length) {
     const empty = document.createElement("p");
     empty.className = "prototype-inline-empty";
-    empty.textContent = "还没有明确工作、执行结果或协作更新。";
+    empty.textContent = "还没有明确工作或执行结果。讨论内容统一在下方“讨论”中查看。";
     elements.projectCollaborationList.append(empty);
   }
   const execution = document.createElement("details");
@@ -1749,14 +1831,14 @@ function renderProjectDetail() {
           !discussionKinds.has(activity.kind) && !workKinds.has(activity.kind)
         ))
         : currentActivities));
-  const latestActivity = currentActivities[0];
+  const latestActivity = currentActivities.find((activity) => discussionKinds.has(activity.kind));
   const latestButton = document.querySelector("#task-jump-latest");
   latestButton.hidden = !latestActivity;
   latestButton.textContent = project.unread_count > 0
-    ? `最新动态 · ${project.unread_count} 条新内容`
-    : "最新动态";
+    ? `最新讨论 · ${project.unread_count} 条新内容`
+    : "最新讨论";
   latestButton.onclick = latestActivity
-    ? () => revealTaskRecord(latestActivity.activity_id)
+    ? () => openTaskRecord(latestActivity.activity_id, "discussion")
     : null;
   const renderActivitiesInto = (activities, container) => activities.forEach((activity) => {
     const row = document.createElement("article");
@@ -5775,9 +5857,9 @@ async function loadDashboard() {
       (agent) => agent.work_availability === "working",
     ).length;
     setConnection(
-      `${readyAgentCount} 个 AI 可接任务 · ${workingAgentCount} 个执行中`,
+      `我的 AI：${readyAgentCount} 个可接任务 · ${workingAgentCount} 个执行中`,
       readyAgentCount + workingAgentCount > 0 ? "success" : "",
-      `${readyAgentCount} 可接 · ${workingAgentCount} 执行`,
+      `我的 AI：${readyAgentCount} 可接 · ${workingAgentCount} 执行`,
     );
     await maybeOpenRequestedPairing();
   } catch (error) {
@@ -6210,6 +6292,22 @@ async function restoreSession() {
 }
 
 elements.loginForm.addEventListener("submit", loginHuman);
+elements.taskFileSearch.addEventListener("input", () => {
+  state.taskFileQuery = elements.taskFileSearch.value.trim();
+  if (currentTaskForAction()) renderTaskFiles(currentTaskForAction());
+});
+elements.taskFileUploader.addEventListener("change", () => {
+  state.taskFileUploader = elements.taskFileUploader.value;
+  if (currentTaskForAction()) renderTaskFiles(currentTaskForAction());
+});
+elements.taskFileType.addEventListener("change", () => {
+  state.taskFileType = elements.taskFileType.value;
+  if (currentTaskForAction()) renderTaskFiles(currentTaskForAction());
+});
+elements.taskFileMine.addEventListener("change", () => {
+  state.taskFileMine = elements.taskFileMine.checked;
+  if (currentTaskForAction()) renderTaskFiles(currentTaskForAction());
+});
 elements.attachmentPreviewClose.addEventListener("click", closeAttachmentPreview);
 elements.attachmentPreviewDone.addEventListener("click", closeAttachmentPreview);
 elements.attachmentPreviewDialog.addEventListener("close", () => {

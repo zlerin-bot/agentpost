@@ -8,7 +8,9 @@ const section = (start, end) => script.slice(script.indexOf(start), script.index
 test("late task responses, including failures and A-B-A races, cannot replace current detail", async () => {
   const state = { selectedProjectId: "A", selectedProject: null, taskRequestSequence: 0, taskActivityLimit: 200 };
   const requests = [];
-  const request = () => new Promise((resolve, reject) => requests.push({ resolve, reject }));
+  const request = path => path.endsWith("/files")
+    ? Promise.resolve({ items: [] })
+    : new Promise((resolve, reject) => requests.push({ resolve, reject }));
   let renders = 0;
   const load = new Function("state", "requestJson", "renderProjectDetail", "window", "history", "taskRouteUrl", "renderTaskPreferences", "document", "markTaskSnapshotViewed",
     section("async function loadProjectDetail(", "function taskRouteUrl(") + ";return loadProjectDetail;")(

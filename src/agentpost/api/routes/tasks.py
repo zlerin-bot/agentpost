@@ -32,6 +32,7 @@ from agentpost.tasks.schemas import (
     TaskAssignmentCreate,
     TaskCreate,
     TaskDetail,
+    TaskFileList,
     TaskFinalSubmission,
     TaskInvitationDecision,
     TaskMembersInvite,
@@ -69,6 +70,7 @@ from agentpost.tasks.service import (
     list_friend_suggestions,
     list_friends,
     list_pending_agent_runs,
+    list_task_files,
     list_task_invitation_candidates,
     list_tasks,
     read_agent_activity_page,
@@ -267,10 +269,15 @@ def get_agent_task(
     current_agent: CurrentAgentDep,
     session: SessionDep,
     include_history: bool = True,
+    include_assignments: bool = True,
 ) -> TaskDetail:
     try:
         return get_task_for_agent(
-            session, agent=current_agent, task_id=task_id, include_history=include_history
+            session,
+            agent=current_agent,
+            task_id=task_id,
+            include_history=include_history,
+            include_assignments=include_assignments,
         )
     except TaskNotFoundError as exc:
         raise _not_found() from exc
@@ -378,6 +385,18 @@ def get_human_task(
             task_id=task_id,
             activity_limit=activity_limit,
         )
+    except TaskNotFoundError as exc:
+        raise _not_found() from exc
+
+
+@router.get("/tasks/{task_id}/files", response_model=TaskFileList)
+def get_human_task_files(
+    task_id: UUID,
+    current_human: CurrentHumanDep,
+    session: SessionDep,
+) -> TaskFileList:
+    try:
+        return list_task_files(session, user=current_human, task_id=task_id)
     except TaskNotFoundError as exc:
         raise _not_found() from exc
 

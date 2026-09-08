@@ -381,6 +381,29 @@ class TaskPreferenceUpdate(TaskModel):
     seen_activity_ids: list[UUID] = Field(default_factory=list, max_length=2000)
 
 
+class TaskFileEntry(TaskModel):
+    attachment_id: UUID
+    filename: str
+    content_type: str
+    size: int
+    sha256: str
+    uploaded_at: datetime
+    uploader_human_user_id: UUID | None = None
+    uploader_display_name: str
+    uploader_agent_id: UUID
+    uploader_agent_display_name: str
+    source_activity_id: UUID
+    source_subject: str | None = None
+    source_created_at: datetime
+    source_kind: str
+
+
+class TaskFileList(TaskModel):
+    task_id: UUID
+    count: int
+    items: list[TaskFileEntry]
+
+
 class TaskSummary(TaskModel):
     personal_state: str = "active"
     unread_count: int = 0

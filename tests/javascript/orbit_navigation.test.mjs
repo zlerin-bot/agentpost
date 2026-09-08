@@ -131,10 +131,10 @@ test("tasks and formal friends are separate API-backed collaboration modules", (
   assert.match(script, /activateRoute\("friends", "directory"/);
   assert.doesNotMatch(`${html}\n${script}`, /本地体验|本地演示|交互原型|不连接生产|演示项目/);
   assert.doesNotMatch(html, /id="project-create-friend"|首位协作好友/);
-  assert.match(html, /工作、结果与最新协作/);
-  assert.match(html, /任务进展/);
-  assert.match(html, /原始事实与审计记录/);
-  assert.match(html, /任务记录/);
+  assert.match(html, /明确工作、阶段成果与验收状态/);
+  assert.match(html, /工作与结果/);
+  assert.match(html, /交流正文集中在这里/);
+  assert.match(html, /文件与交付/);
   assert.match(html, /选择参与的 AI（至少一个）/);
   assert.doesNotMatch(script, /DEMO_FRIENDS|demoProjects|confirmDemoAcceptance|inviteDemoFriend/);
   assert.doesNotMatch(`${html}\n${script}`, /李月|张冠群|崔孝林|胡曦元|zhangziliang|panyongtong/);
@@ -153,8 +153,7 @@ test("task progress is Human-first and structured content stays collapsed as a s
   assert.match(script, /human-response/);
   assert.match(script, /保存回答，等待 AI 继续/);
   assert.match(script, /查看完整任务记录/);
-  assert.match(script, /近期协作更新/);
-  assert.match(script, /不代表已经形成执行结果或通过验收/);
+  assert.doesNotMatch(script, /近期协作更新/);
   assert.match(script, /AI 执行状态/);
   assert.match(script, /不等同于业务进展或 Human 验收/);
   assert.match(script, /\["human_directed", "revision"\]/);
@@ -348,13 +347,28 @@ test("mobile Star Orbit keeps only processing and tasks as compact shortcuts", (
 test("mobile connection status stays on one line and reports task availability", () => {
   assert.match(html, /connection-label-full/);
   assert.match(html, /connection-label-compact/);
-  assert.match(script, /`\$\{readyAgentCount\} 个 AI 可接任务 · \$\{workingAgentCount\} 个执行中`/);
-  assert.match(script, /`\$\{readyAgentCount\} 可接 · \$\{workingAgentCount\} 执行`/);
+  assert.match(script, /`我的 AI：\$\{readyAgentCount\} 个可接任务 · \$\{workingAgentCount\} 个执行中`/);
+  assert.match(script, /`我的 AI：\$\{readyAgentCount\} 可接 · \$\{workingAgentCount\} 执行`/);
   assert.match(script, /readyAgentCount \+ workingAgentCount > 0 \? "success" : ""/);
   assert.match(stylesheet, /\.connection-label-compact \{\s*display: none;/);
   assert.match(stylesheet, /@media \(max-width: 580px\)[\s\S]*?\.connection \{[\s\S]*?white-space: nowrap;/);
   assert.match(stylesheet, /\.connection-label-full \{\s*display: none;/);
   assert.match(stylesheet, /\.connection-label-compact \{\s*display: inline;/);
+});
+
+test("task files stay discoverable outside collapsed discussions", () => {
+  assert.match(html, /id="task-files"/);
+  assert.match(html, /全任务附件，不受讨论折叠影响/);
+  assert.match(html, /id="task-file-search"/);
+  assert.match(html, /id="task-file-uploader"/);
+  assert.match(html, /id="task-file-type"/);
+  assert.match(html, /只看我上传的/);
+  assert.match(script, /\/api\/v1\/tasks\/" \+ encodeURIComponent\(projectId\) \+ "\/files"/);
+  assert.match(script, /function renderTaskFiles\(/);
+  assert.match(script, /查看来源讨论/);
+  assert.match(script, /openAttachmentPreview\(attachment\)/);
+  assert.match(stylesheet, /\.task-primary-grid/);
+  assert.match(stylesheet, /\.task-file-card/);
 });
 
 test("opening a conversation remains read-only for Agent state", () => {

@@ -366,6 +366,47 @@ def _seed(settings: Settings) -> None:
             ),
             201,
         )
+        task_markdown = _require(
+            client.post(
+                "/api/v1/attachments",
+                headers=_agent_headers(personal),
+                files={
+                    "file": (
+                        "行业研究阶段结论.md",
+                        "# 阶段结论\n\n- 已核对公开报告\n- 待补充风险边界\n".encode(),
+                        "text/markdown",
+                    )
+                },
+            ),
+            201,
+        )
+        task_json = _require(
+            client.post(
+                "/api/v1/attachments",
+                headers=_agent_headers(personal),
+                files={
+                    "file": (
+                        "来源核对状态.json",
+                        b'{"checked":2,"status":"partial","next":"risk_review"}',
+                        "application/json",
+                    )
+                },
+            ),
+            201,
+        )
+        _require(
+            client.post(
+                f"/api/v1/agent/tasks/{task['task_id']}/messages",
+                headers=_agent_headers(personal, "demo-task-files"),
+                json={
+                    "subject": "阶段文件已整理",
+                    "content_format": "text",
+                    "body": "阶段结论和来源核对状态已附在任务中。",
+                    "attachments": [task_markdown["id"], task_json["id"]],
+                },
+            ),
+            201,
+        )
         update = _require(
             client.post(
                 "/api/v1/messages",

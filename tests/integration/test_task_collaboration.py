@@ -1179,6 +1179,32 @@ def test_task_messages_use_legacy_inbox_and_native_run_without_breaking_old_conn
             and item["source_activity_id"] == native_activity["activity_id"]
             for item in task_detail.json()["assignments"]
         )
+        task_files = client.get(f"/api/v1/tasks/{task_id}/files")
+        assert task_files.status_code == 200, task_files.text
+        files_by_id = {item["attachment_id"]: item for item in task_files.json()["items"]}
+        assert task_files.json()["count"] == 2
+        assert set(files_by_id) == {legacy_attachment_id, attachment_id}
+        assert files_by_id[attachment_id] == {
+            "attachment_id": attachment_id,
+            "filename": "协同说明.md",
+            "content_type": "text/markdown",
+            "size": len(b"# task attachment"),
+            "sha256": uploaded.json()["sha256"],
+            "uploaded_at": files_by_id[attachment_id]["uploaded_at"],
+            "uploader_human_user_id": owner["user"]["id"],
+            "uploader_display_name": "message-owner",
+            "uploader_agent_id": owner_agent["agent"]["id"],
+            "uploader_agent_display_name": "message-owner-ai",
+            "source_activity_id": native_activity["activity_id"],
+            "source_subject": None,
+            "source_created_at": native_activity["created_at"],
+            "source_kind": "task_message",
+        }
+        _login(client, "message-member")
+        assert client.get(f"/api/v1/tasks/{task_id}/files").status_code == 200
+        _login(client, "message-outsider")
+        assert client.get(f"/api/v1/tasks/{task_id}/files").status_code == 404
+        owner_csrf = _login(client, "message-owner")
 
         with database.session_factory() as session:
             message_activities = list(
@@ -1214,6 +1240,15 @@ def test_task_messages_use_legacy_inbox_and_native_run_without_breaking_old_conn
             },
         )
         assert directed.status_code == 200, directed.text
+        compact = client.get(
+            f"/api/v1/agent/tasks/{task_id}?include_history=false&include_assignments=false",
+            headers={"Authorization": f"Bearer {member_agent['api_key']}"},
+        )
+        assert compact.status_code == 200, compact.text
+        assert compact.json()["activities"] == []
+        assert compact.json()["assignments"] == []
+        assert compact.json()["assignment_count"] == directed.json()["assignment_count"]
+        assert compact.json()["state_axes"] == directed.json()["state_axes"]
         directed_assignment = next(
             item
             for item in directed.json()["assignments"]
@@ -1369,6 +1404,7 @@ def test_task_messages_use_legacy_inbox_and_native_run_without_breaking_old_conn
             session.commit()
         _login(client, "message-member")
         assert client.get(f"/api/v1/orbit/attachments/{attachment_id}").status_code == 404
+        assert client.get(f"/api/v1/tasks/{task_id}/files").status_code == 404
         assert (
             client.get(
                 f"/api/v1/attachments/{attachment_id}",

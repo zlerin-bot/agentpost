@@ -54,6 +54,8 @@ from agentpost.tasks.schemas import (
     TaskAssignmentResponse,
     TaskCreate,
     TaskDetail,
+    TaskFileEntry,
+    TaskFileList,
     TaskFinalSubmission,
     TaskMember,
     TaskRunHumanResponse,
@@ -751,7 +753,6 @@ def _task_detail(
         session.scalars(
             select(TaskAssignment)
             .where(TaskAssignment.task_id == task.id)
-            .where(include_assignments)
             .order_by(TaskAssignment.created_at.desc())
         )
     )
@@ -1092,7 +1093,7 @@ def _task_detail(
         created_at=_as_utc(task.created_at),
         updated_at=_as_utc(task.updated_at),
         members=members,
-        assignments=assignments,
+        assignments=assignments if include_assignments else [],
         activities=activities,
         activity_total=activity_total,
         activities_truncated=activity_total > activity_limit,
@@ -1147,6 +1148,106 @@ def get_task(
         viewer_membership=membership,
         activity_limit=activity_limit,
     )
+
+
+def list_task_files(
+    session: Session,
+    *,
+    user: HumanUser,
+    task_id: UUID,
+) -> TaskFileList:
+    """Return every attached file in an authorized Task without depending on loaded history."""
+    task, _ = _task_context(session, task_id=task_id, user=user)
+    rows = session.execute(
+        select(Attachment, Message)
+        .join(Message, Message.id == Attachment.message_id)
+        .where(
+            Attachment.state == "attached",
+            Message.thread_id == task.thread_id,
+        )
+        .order_by(Attachment.created_at.desc(), Attachment.id)
+    ).all()
+    task_rows = [
+        (attachment, message)
+        for attachment, message in rows
+        if message.message_metadata.get("agentpost_task_source")
+        or message.message_metadata.get("agentpost_task_bridge")
+    ]
+    activity_ids: set[UUID] = set()
+    for _, message in task_rows:
+        value = message.message_metadata.get("agentpost_task_activity_id")
+        try:
+            activity_ids.add(UUID(str(value)))
+        except (TypeError, ValueError):
+            continue
+    activities = {
+        activity.id: activity
+        for activity in session.scalars(
+            select(TaskActivity).where(
+                TaskActivity.task_id == task_id,
+                TaskActivity.id.in_(activity_ids),
+            )
+        )
+    }
+    agent_ids = {attachment.uploader_agent_id for attachment, _ in task_rows}
+    agents = {
+        agent.id: agent for agent in session.scalars(select(Agent).where(Agent.id.in_(agent_ids)))
+    }
+    participant_humans = {
+        participant.agent_id: participant.human_user_id
+        for participant in session.scalars(
+            select(TaskAgentParticipant).where(
+                TaskAgentParticipant.task_id == task_id,
+                TaskAgentParticipant.agent_id.in_(agent_ids),
+            )
+        )
+    }
+    human_ids = {
+        *(
+            activity.actor_human_user_id
+            for activity in activities.values()
+            if activity.actor_human_user_id
+        ),
+        *participant_humans.values(),
+    }
+    humans = {
+        human.id: human
+        for human in session.scalars(select(HumanUser).where(HumanUser.id.in_(human_ids)))
+    }
+    items: list[TaskFileEntry] = []
+    for attachment, message in task_rows:
+        raw_activity_id = message.message_metadata.get("agentpost_task_activity_id")
+        try:
+            activity_id = UUID(str(raw_activity_id))
+        except (TypeError, ValueError):
+            continue
+        activity = activities.get(activity_id)
+        if activity is None:
+            continue
+        human_id = activity.actor_human_user_id or participant_humans.get(
+            attachment.uploader_agent_id
+        )
+        human = humans.get(human_id)
+        agent = agents.get(attachment.uploader_agent_id)
+        items.append(
+            TaskFileEntry(
+                attachment_id=attachment.id,
+                filename=attachment.filename,
+                content_type=attachment.content_type,
+                size=attachment.size,
+                sha256=attachment.sha256,
+                uploaded_at=_as_utc(attachment.created_at),
+                uploader_human_user_id=human_id,
+                uploader_display_name=human.display_name if human else "Human 待确认",
+                uploader_agent_id=attachment.uploader_agent_id,
+                uploader_agent_display_name=agent.display_name if agent else "Agent 待确认",
+                source_activity_id=activity.id,
+                source_subject=activity.activity_metadata.get("subject") or None,
+                source_created_at=_as_utc(activity.created_at),
+                source_kind=activity.activity_type,
+            )
+        )
+    return TaskFileList(task_id=task_id, count=len(items), items=items)
 
 
 def confirm_task_activity_reply(
@@ -1613,7 +1714,12 @@ def agent_handshake(session: Session, *, agent: Agent, limit: int = 50) -> dict:
 
 
 def get_task_for_agent(
-    session: Session, *, agent: Agent, task_id: UUID, include_history: bool = True
+    session: Session,
+    *,
+    agent: Agent,
+    task_id: UUID,
+    include_history: bool = True,
+    include_assignments: bool = True,
 ) -> TaskDetail:
     task, _, membership = _task_participation_for_agent(session, agent=agent, task_id=task_id)
     detail = _task_detail(
@@ -1621,6 +1727,7 @@ def get_task_for_agent(
         task=task,
         viewer_membership=membership,
         activity_limit=200 if include_history else 0,
+        include_assignments=include_assignments,
     )
     if not include_history:
         detail.activity_total = (
