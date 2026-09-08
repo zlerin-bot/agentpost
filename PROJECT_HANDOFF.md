@@ -2,6 +2,7 @@
 
 ## 当前接续摘要
 
+- 2026-09-08 手机文件操作区对齐修复 **local_verified，未部署**：任务“文件与交付”卡片中的“下载”原为普通链接，只继承了 40px 最小高度，没有像两侧按钮一样垂直居中，导致手机端文字上移。390px 规则现统一“查看内容 / 下载 / 查看来源讨论”为 inline-flex、同一行高和居中方式。381px 本地认证页面实看三项外框均为 40px、行高均为 21px、顶部坐标一致，页面无横向溢出；本切片仍未推送或部署。
 - 2026-09-08 任务信息分层与文件目录切片 **local_verified，未部署**：根据 020、张子良的 0.1.61 反馈，Human 顶部连接摘要明确为“我的 AI”；“任务进展”调整为只承载明确工作、阶段结果和执行状态，讨论正文不再以“近期协作更新”重复展示；任务记录默认讨论并保留工作与结果、系统记录筛选。新增按 TaskMembership 授权的 `GET /api/v1/tasks/{task_id}/files`，从完整 Task Thread 汇总已关联附件，不依赖前端已加载的活动窗口；页面提供文件名/来源搜索、上传 Human、类型和“我上传的”筛选，一次点击安全预览/下载并定位来源讨论。桌面为工作与结果、文件与交付双栏，390px 为单栏，讨论折叠不影响文件发现。附件预览深色外框文字和焦点对比度已提高。Agent `get_task` 新增 `include_assignments=false`，保留准确摘要与状态轴并省略完整 Assignment 列表，解决概况响应主要被历史执行单元占用的问题。
 - 本切片验证：492 个非 PostgreSQL 测试通过、2 skipped、7 PostgreSQL deselected；56 项 JavaScript 测试、Ruff check/format、JS syntax 和 diff check 通过。隔离 8778 演示加入 Markdown/JSON 任务附件；1280px/390px 均无横向溢出，文件筛选、隔离预览、来源聚焦和筛选状态保留通过，控制台 warning/error=0。本地提交已完成，预览保留供 Human 查看；生产仍是 0.1.61 / 1138e50 / schema 0040 / deployed_https_verified，本切片尚未推送或部署，PostgreSQL 专项及真实生产数据文件目录验收待确认。
 - 2026-09-07 当前生产 **0.1.61 / 1138e50 / 0040_connector_task_listener_truth / deployed_https_verified**。0.1.60 后检后用真实 macOS 系统 Python 3.9 运行 bootstrap，复现新版隔离 runtime 因 AgentPost 要求 Python 3.11+ 而安装失败；0.1.61 改为已有 Agent 升级时优先复用当前受支持 runtime 的 Python 创建新环境。本机以系统 Python 启动 bootstrap 后成功安装 Python 3.12.13 / AgentPost 0.1.61 / MCP 2.1.1，并把 Codex MCP 命令切换到 0.1.61；当前对话重启后加载新工具。

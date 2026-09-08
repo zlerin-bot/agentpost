@@ -4958,7 +4958,15 @@ footer {
 @media (max-width: 580px) {
   .task-file-toolbar { grid-template-columns: minmax(0, 1fr); }
   .task-file-toolbar .task-file-mine { min-height: 44px; padding-top: 0; }
-  .task-file-actions > * { min-height: 40px; }
+  .task-file-actions > :is(.text-button, .task-record-link) {
+    display: inline-flex;
+    min-height: 40px;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 0;
+    line-height: 1.5;
+    white-space: nowrap;
+  }
 }
 
 .prototype-detail[hidden] {

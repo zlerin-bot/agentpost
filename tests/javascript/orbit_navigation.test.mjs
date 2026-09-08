@@ -369,6 +369,7 @@ test("task files stay discoverable outside collapsed discussions", () => {
   assert.match(script, /openAttachmentPreview\(attachment\)/);
   assert.match(stylesheet, /\.task-primary-grid/);
   assert.match(stylesheet, /\.task-file-card/);
+  assert.match(stylesheet, /\.task-file-actions > :is\(\.text-button, \.task-record-link\) \{[\s\S]*?display: inline-flex;[\s\S]*?align-items: center;/);
 });
 
 test("opening a conversation remains read-only for Agent state", () => {
