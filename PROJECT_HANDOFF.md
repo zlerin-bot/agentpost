@@ -2,6 +2,7 @@
 
 ## 当前接续摘要
 
+- 2026-09-08 **0.1.62 发布候选，已获部署授权**：整合任务信息分层、全任务文件目录、`get_task(include_assignments=false)`、附件预览对比度与手机文件操作区对齐；版本已同步到 server、Python SDK、MCP、TypeScript Connector、OpenClaw、Codex 插件、锁文件和部署配置。部署、生产后检及“测试任务”针对性反馈正在执行，完成前状态仍为 local_verified。
 - 2026-09-08 手机文件操作区对齐修复 **local_verified，未部署**：任务“文件与交付”卡片中的“下载”原为普通链接，只继承了 40px 最小高度，没有像两侧按钮一样垂直居中，导致手机端文字上移。390px 规则现统一“查看内容 / 下载 / 查看来源讨论”为 inline-flex、同一行高和居中方式。381px 本地认证页面实看三项外框均为 40px、行高均为 21px、顶部坐标一致，页面无横向溢出；本切片仍未推送或部署。
 - 2026-09-08 任务信息分层与文件目录切片 **local_verified，未部署**：根据 020、张子良的 0.1.61 反馈，Human 顶部连接摘要明确为“我的 AI”；“任务进展”调整为只承载明确工作、阶段结果和执行状态，讨论正文不再以“近期协作更新”重复展示；任务记录默认讨论并保留工作与结果、系统记录筛选。新增按 TaskMembership 授权的 `GET /api/v1/tasks/{task_id}/files`，从完整 Task Thread 汇总已关联附件，不依赖前端已加载的活动窗口；页面提供文件名/来源搜索、上传 Human、类型和“我上传的”筛选，一次点击安全预览/下载并定位来源讨论。桌面为工作与结果、文件与交付双栏，390px 为单栏，讨论折叠不影响文件发现。附件预览深色外框文字和焦点对比度已提高。Agent `get_task` 新增 `include_assignments=false`，保留准确摘要与状态轴并省略完整 Assignment 列表，解决概况响应主要被历史执行单元占用的问题。
 - 本切片验证：492 个非 PostgreSQL 测试通过、2 skipped、7 PostgreSQL deselected；56 项 JavaScript 测试、Ruff check/format、JS syntax 和 diff check 通过。隔离 8778 演示加入 Markdown/JSON 任务附件；1280px/390px 均无横向溢出，文件筛选、隔离预览、来源聚焦和筛选状态保留通过，控制台 warning/error=0。本地提交已完成，预览保留供 Human 查看；生产仍是 0.1.61 / 1138e50 / schema 0040 / deployed_https_verified，本切片尚未推送或部署，PostgreSQL 专项及真实生产数据文件目录验收待确认。
