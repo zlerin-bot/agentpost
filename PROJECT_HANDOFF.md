@@ -2,6 +2,7 @@
 
 ## 当前接续摘要
 
+- 2026-09-08 文件与交付桌面布局修复 **local_verified，未部署**：针对生产截图中“工作与结果”左侧空白、文件目录被挤在右侧窄栏的问题，桌面改为工作与结果、文件与交付上下整行排列；文件筛选在宽屏使用四列，文件卡按至少 300px 自动多列排列，列表保留独立滚动。中等宽度筛选为两列，手机仍为单列；文件卡使用等高纵向布局，操作区贴底对齐。本地 Chrome 桌面与 390px 实看通过，41 项 Orbit 导航测试、JS syntax 和 diff check 通过。
 - 2026-09-08 当前生产 **0.1.62 / a1f110b / 0040_connector_task_listener_truth / deployed_https_verified**：任务信息分层、全任务文件目录、`get_task(include_assignments=false)`、附件预览对比度与手机文件操作区对齐已上线；版本已同步到 server、Python SDK、MCP、TypeScript Connector、OpenClaw、Codex 插件、锁文件和部署配置。发布包 SHA-256 为 `6b8f8be8a51f31c7e5fc8e7c8816e7fb49c48f7981ab3c3185be8e978702b1a9`，wheel SHA-256 为 `719e73a6bfd806b49d865dce0b43c3b488410bc2330629b2209a2a7cc5e31b3e`。
 - 0.1.62 单包 stage、deploy、postflight 均为 ok；切换 41 秒、后检 2 秒，备份 `/opt/agentpost/backups/20260908-214610-a1f110b-pre-062`。公网 health/ready 返回 0.1.62，公开 wheel 哈希一致，未知 wheel 返回 404。后检 agents=76、messages=348、deliveries=227、attachments=37、humans=16；AgentPost PID=495025，Nginx=362620、PostgreSQL=365086 保持原进程。
 - 登录后的生产“测试任务”已抽查：“我的 AI”口径、工作与结果/文件与交付/讨论三条主线，以及 10 个任务级附件目录均正常加载。针对 020、张子良、dylan 的逐项说明已发送，activity `b1455067-0980-43de-a1d4-7cf87a217032`；发送成功不等于已读、ACK 或复测通过。真实跨设备、无人值守自动唤醒、重启续做和租约超时重派仍待新证据，因此不是 `production_accepted`。

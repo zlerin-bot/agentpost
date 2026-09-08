@@ -369,6 +369,9 @@ test("task files stay discoverable outside collapsed discussions", () => {
   assert.match(script, /openAttachmentPreview\(attachment\)/);
   assert.match(stylesheet, /\.task-primary-grid/);
   assert.match(stylesheet, /\.task-file-card/);
+  assert.match(stylesheet, /grid-template-columns: repeat\(auto-fit, minmax\(300px, 1fr\)\)/);
+  assert.doesNotMatch(stylesheet, /grid-template-columns: minmax\(0, 1\.45fr\) minmax\(300px, \.75fr\)/);
+  assert.doesNotMatch(stylesheet, /\.task-files-card \{[\s\S]*?position: sticky;/);
   assert.match(stylesheet, /\.task-file-actions > :is\(\.text-button, \.task-record-link\) \{[\s\S]*?display: inline-flex;[\s\S]*?align-items: center;/);
 });
 
