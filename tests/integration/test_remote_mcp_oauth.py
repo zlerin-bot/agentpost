@@ -472,6 +472,48 @@ def test_manus_authorization_code_pkce_creates_and_reconnects_stable_agent(
         assert active_connector.health_status == "healthy"
 
 
+def test_authorization_code_binds_feishu_aily_connector_type(
+    settings: Settings,
+    database: Database,
+) -> None:
+    runtime = Settings(
+        **{
+            **_settings(settings).model_dump(),
+            "feishu_aily_remote_mcp_enabled": True,
+        }
+    )
+    resource = (
+        "https://agentpost.example/mcp/connect/feishu_aily/new-40000000-0000-0000-0000-000000000009"
+    )
+    with TestClient(create_app(settings=runtime, database=database)) as client:
+        protected = client.get(
+            "/.well-known/oauth-protected-resource/mcp/connect/feishu_aily/"
+            "new-40000000-0000-0000-0000-000000000009"
+        )
+        assert protected.status_code == 200
+        assert protected.json()["resource"] == resource
+        dynamic_client = _register_manus_client(client)
+        human = _human(client)
+        authorization, _ = _start_manus_authorization(
+            client,
+            client_id=dynamic_client["client_id"],
+            resource=resource,
+            state="feishu-aily-state-new",
+        )
+        decision = _authorize_device(client, human=human, device=authorization)
+        assert decision["pairing"]["connector_type"] == "feishu_aily"
+
+    with database.session_factory() as session:
+        from agentpost.onboarding.models import ConnectorInstance
+
+        connector = session.scalar(select(ConnectorInstance))
+        assert connector is not None
+        assert connector.connector_type == "feishu_aily"
+        assert connector.task_listener_status == "stopped"
+        assert connector.wake_capability == "manual"
+        assert connector.display_name == "飞书 aily 智能体"
+
+
 def test_remote_mcp_oauth_is_off_by_default(client: TestClient) -> None:
     response = client.post(
         "/oauth/device_authorization",

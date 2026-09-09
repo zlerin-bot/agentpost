@@ -1365,6 +1365,73 @@ footer {
   gap: 14px;
 }
 
+.agent-wake-channel {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+  border: 1px solid #c6dafc;
+  border-left: 4px solid var(--google-blue);
+  border-radius: 16px;
+  background: #f8fafd;
+  padding: 18px;
+}
+
+.agent-wake-heading,
+.agent-wake-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.agent-wake-heading h3,
+.agent-wake-heading p,
+.agent-wake-copy,
+.agent-wake-security {
+  margin: 0;
+}
+
+.agent-wake-heading h3 {
+  margin-top: 3px;
+  font-size: var(--font-title-sm);
+}
+
+.agent-wake-copy,
+.agent-wake-security {
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.agent-wake-security {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  font-size: var(--font-caption);
+}
+
+.agent-wake-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.agent-wake-form label {
+  display: grid;
+  gap: 7px;
+  color: var(--muted);
+  font-size: var(--font-caption);
+}
+
+.agent-wake-form input {
+  width: 100%;
+  min-width: 0;
+}
+
+.agent-wake-actions,
+.agent-wake-form .form-status {
+  grid-column: 1 / -1;
+}
+
 .agent-connection-banner {
   border: 1px solid var(--line-strong);
   border-left: 3px solid var(--muted);
@@ -3863,6 +3930,14 @@ footer {
   .agent-overview-groups,
   .agent-detail-summary {
     grid-template-columns: 1fr;
+  }
+
+  .agent-wake-form {
+    grid-template-columns: 1fr;
+  }
+
+  .agent-wake-actions > * {
+    flex: 1 1 100%;
   }
 
   .agent-detail-heading {

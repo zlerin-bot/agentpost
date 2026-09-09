@@ -624,6 +624,10 @@ def decide_pairing(
             display_name=pairing.connector_display_name,
             device_name=pairing.device_name,
             client_version=pairing.client_version,
+            task_listener_status=("stopped" if pairing.connector_type == "feishu_aily" else None),
+            wake_capability=(
+                "manual" if pairing.connector_type == "feishu_aily" else "unsupported"
+            ),
             status="active",
             created_at=now,
             activated_at=now,

@@ -63,6 +63,7 @@ from agentpost.tasks.schemas import (
     TaskStateAxes,
     TaskSummary,
 )
+from agentpost.wakeup.service import enqueue_run_wake
 
 RUN_LEASE_SECONDS = 90
 
@@ -614,7 +615,16 @@ def _queue_collaboration_assignment(
     )
     session.add(assignment)
     session.flush()
-    session.add(AgentRun(assignment_id=assignment.id, agent_id=agent_id))
+    run = AgentRun(assignment_id=assignment.id, agent_id=agent_id)
+    session.add(run)
+    session.flush()
+    enqueue_run_wake(
+        session,
+        agent_id=agent_id,
+        task_id=task.id,
+        assignment_id=assignment.id,
+        run_id=run.id,
+    )
     if join_activity is not None:
         join_activity.activity_metadata = {
             **join_activity.activity_metadata,

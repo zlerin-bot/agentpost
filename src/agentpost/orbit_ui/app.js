@@ -270,6 +270,16 @@ const elements = {
   agentDetailPanels: Array.from(document.querySelectorAll("[data-agent-panel]")),
   agentDetailSummary: document.querySelector("#agent-detail-summary"),
   agentCurrentConnection: document.querySelector("#agent-current-connection"),
+  agentWakeChannel: document.querySelector("#agent-wake-channel"),
+  agentWakeStatus: document.querySelector("#agent-wake-status"),
+  agentWakeCopy: document.querySelector("#agent-wake-copy"),
+  agentWakeForm: document.querySelector("#agent-wake-form"),
+  agentWakeUrl: document.querySelector("#agent-wake-url"),
+  agentWakeToken: document.querySelector("#agent-wake-token"),
+  agentWakeSave: document.querySelector("#agent-wake-save"),
+  agentWakeTest: document.querySelector("#agent-wake-test"),
+  agentWakeDisable: document.querySelector("#agent-wake-disable"),
+  agentWakeResult: document.querySelector("#agent-wake-result"),
   agentDetailCapabilities: document.querySelector("#agent-detail-capabilities"),
   agentDetailAccess: document.querySelector("#agent-detail-access"),
   agentConnectionHistory: document.querySelector("#agent-connection-history"),
@@ -3649,6 +3659,46 @@ function renderCurrentAgentConnection(agent) {
   elements.agentCurrentConnection.append(facts, technical);
 }
 
+function renderAgentWakeChannel(agent, channel = null) {
+  const supported = agent.role === "owner" && agent.current_connector_type === "feishu_aily";
+  elements.agentWakeChannel.hidden = !supported;
+  if (!supported) return;
+  const configured = Boolean(channel);
+  const labels = {
+    configured: "等待测试",
+    active: "自动唤醒已启用",
+    error: "需要处理",
+  };
+  const status = channel?.status || "awaiting_agent";
+  elements.agentWakeStatus.className = `data-chip ${status === "active" ? "ready" : status === "error" ? "needs_attention" : "awaiting_agent"}`;
+  elements.agentWakeStatus.textContent = labels[status] || "尚未配置";
+  elements.agentWakeCopy.textContent = configured
+    ? `已保存 ${safeText(channel.endpoint_host)} 的加密配置。待发送：${Number(channel.pending_deliveries || 0)}；最近成功：${dateText(channel.last_success_at)}。重新保存时需要同时输入完整地址和 Token。`
+    : "在飞书 aily 中建立接收 AgentPost 唤醒事件的工作流，再把工作流提供的 HTTPS 地址和 Bearer Token 填到这里。";
+  elements.agentWakeTest.disabled = !configured;
+  elements.agentWakeDisable.disabled = !configured;
+  elements.agentWakeUrl.value = "";
+  elements.agentWakeToken.value = "";
+  elements.agentWakeResult.textContent = channel?.last_error_code
+    ? `最近失败：${safeText(channel.last_error_code)}`
+    : "";
+  elements.agentWakeResult.className = channel?.last_error_code ? "form-status error" : "form-status";
+}
+
+async function loadAgentWakeChannel(agent) {
+  renderAgentWakeChannel(agent);
+  if (agent.role !== "owner" || agent.current_connector_type !== "feishu_aily") return;
+  try {
+    const channel = await requestJson(`/api/v1/orbit/agents/${encodeURIComponent(agent.id)}/wake-channel`);
+    if (String(state.selectedAgent?.id) === String(agent.id)) renderAgentWakeChannel(agent, channel);
+  } catch (error) {
+    if (error.status !== 404 && String(state.selectedAgent?.id) === String(agent.id)) {
+      elements.agentWakeResult.textContent = error.message;
+      elements.agentWakeResult.className = "form-status error";
+    }
+  }
+}
+
 function renderAgentConnectionHistory(agent) {
   elements.agentConnectionHistory.replaceChildren();
   if (agent.role !== "owner") {
@@ -3734,6 +3784,7 @@ function renderAgentDetail(agent) {
   identity.append(identitySummary, address);
   elements.agentDetailSummary.append(identity);
   renderCurrentAgentConnection(agent);
+  void loadAgentWakeChannel(agent);
   renderAgentCapabilities(agent);
   renderAgentAccess(agent);
   renderAgentConnectionHistory(agent);
@@ -4152,6 +4203,7 @@ const PAIRING_HOSTS = Object.freeze({
   hermes: { name: "Hermes", code: "AP-HERMES-V1", defaultHandle: "hermes" },
   codex: { name: "Codex", code: "AP-CODEX-V1", defaultHandle: "codex" },
   manus: { name: "Manus", code: "AP-MANUS-V1", defaultHandle: "manus", connectionMode: "local_bootstrap" },
+  feishu_aily: { name: "飞书 aily 智能体", code: "AP-FEISHU-AILY-V1", defaultHandle: "aily" },
 });
 
 function agentHandleProblem(value) {
@@ -4213,7 +4265,9 @@ function pairingPrompt(host) {
     ? `?agent=${encodeURIComponent(target.id)}`
     : `?new=${encodeURIComponent(state.pairingNewAgentIntent)}`;
   const connectionMode = selected.connectionMode || state.authConfig?.host_connection_modes?.[host];
-  const instructions = connectionMode === "remote_mcp_oauth"
+  const instructions = connectionMode === "unavailable"
+    ? `当前 AgentPost 尚未发布 ${selected.name} 的安全接入服务。请保留这段接入意向，不能改用其他 Agent 的接入码、长期密钥或网页模拟登录。`
+    : connectionMode === "remote_mcp_oauth"
     ? `请读取这个官方接入页，使用 ${selected.name} 内置的 Custom MCP 连接和 AgentPost 网页授权直接完成接入。不要安装 AgentPost 本机程序，也不要让我输入服务器地址、命令、密钥或其他技术参数；如果当前 ${selected.name} 不支持安全网页授权，必须明确停止，不能改用长期密钥或假装已连接。连接后回到本对话继续。`
     : host === "manus"
       ? `请先在 Manus 中创建或选择一个专用本地文件夹，再读取这个官方接入页并完成安全配对。接入程序会在该文件夹生成 AGENTS.md、xingyunyi 和校验文件，密钥仍只保存在系统钥匙串。文件生成后必须新建 Manus 任务，提交前选择这个文件夹；不要复用旧任务。先运行 ./xingyunyi status，确认身份一致且连接正常后再继续；不要改用 Custom MCP 或 Remote MCP。`
@@ -4888,6 +4942,7 @@ function agentTypeLabel(agent) {
     doubao_work: "豆包工作",
     openclaw: "OpenClaw",
     manus: "Manus",
+    feishu_aily: "飞书 aily 智能体",
     hermes: "Hermes",
   };
   return labels[agent?.agent_type] || (agent?.agent_type ? safeText(agent.agent_type) : "类型未提供");
@@ -6517,6 +6572,74 @@ elements.agentDisconnect.addEventListener("click", () => {
 });
 elements.agentDelete.addEventListener("click", () => {
   if (state.selectedAgent?.role === "owner") openDeleteAgentDialog(state.selectedAgent);
+});
+elements.agentWakeForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const agent = state.selectedAgent;
+  if (!agent || agent.role !== "owner" || agent.current_connector_type !== "feishu_aily") return;
+  elements.agentWakeSave.disabled = true;
+  elements.agentWakeResult.textContent = "正在加密保存自动唤醒配置…";
+  elements.agentWakeResult.className = "form-status";
+  try {
+    const channel = await requestJson(`/api/v1/orbit/agents/${encodeURIComponent(agent.id)}/wake-channel/feishu-aily`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": state.csrfToken },
+      body: JSON.stringify({
+        webhook_url: elements.agentWakeUrl.value.trim(),
+        bearer_token: elements.agentWakeToken.value,
+      }),
+    });
+    renderAgentWakeChannel(agent, channel);
+    elements.agentWakeResult.textContent = "配置已保存。请发送一次测试唤醒，确认 aily 工作流可以接收。";
+  } catch (error) {
+    elements.agentWakeToken.value = "";
+    elements.agentWakeResult.textContent = error.message;
+    elements.agentWakeResult.className = "form-status error";
+  } finally {
+    elements.agentWakeSave.disabled = false;
+  }
+});
+elements.agentWakeTest.addEventListener("click", async () => {
+  const agent = state.selectedAgent;
+  if (!agent || agent.role !== "owner") return;
+  elements.agentWakeTest.disabled = true;
+  elements.agentWakeResult.textContent = "正在发送测试唤醒…";
+  elements.agentWakeResult.className = "form-status";
+  try {
+    const result = await requestJson(`/api/v1/orbit/agents/${encodeURIComponent(agent.id)}/wake-channel/test`, {
+      method: "POST",
+      headers: { "X-CSRF-Token": state.csrfToken },
+    });
+    await loadAgentWakeChannel(agent);
+    elements.agentWakeResult.textContent = result.delivered
+      ? "测试成功。这个 aily 现在可以由 AgentPost 自动唤醒。"
+      : `测试失败：${safeText(result.error_code, "请检查工作流地址和 Token")}`;
+    elements.agentWakeResult.className = result.delivered ? "form-status success" : "form-status error";
+  } catch (error) {
+    elements.agentWakeResult.textContent = error.message;
+    elements.agentWakeResult.className = "form-status error";
+  } finally {
+    elements.agentWakeTest.disabled = false;
+  }
+});
+elements.agentWakeDisable.addEventListener("click", async () => {
+  const agent = state.selectedAgent;
+  if (!agent || agent.role !== "owner") return;
+  elements.agentWakeDisable.disabled = true;
+  elements.agentWakeResult.textContent = "正在停用…";
+  try {
+    await requestJson(`/api/v1/orbit/agents/${encodeURIComponent(agent.id)}/wake-channel`, {
+      method: "DELETE",
+      headers: { "X-CSRF-Token": state.csrfToken },
+    });
+    renderAgentWakeChannel(agent);
+    elements.agentWakeResult.textContent = "自动唤醒已停用。aily 的 AgentPost 身份和历史任务仍保留。";
+    elements.agentWakeResult.className = "form-status success";
+  } catch (error) {
+    elements.agentWakeResult.textContent = error.message;
+    elements.agentWakeResult.className = "form-status error";
+    elements.agentWakeDisable.disabled = false;
+  }
 });
 elements.approvalForm.addEventListener("submit", decideApproval);
 elements.approvalClose.addEventListener("click", closeApprovalDialog);

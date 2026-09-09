@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     remote_mcp_oauth_enabled: bool = False
     doubao_work_remote_mcp_enabled: bool = False
     manus_remote_mcp_enabled: bool = False
+    feishu_aily_remote_mcp_enabled: bool = False
+    wake_dispatch_enabled: bool = False
+    wake_dispatch_poll_seconds: int = Field(default=5, ge=1, le=60)
+    wake_dispatch_max_attempts: int = Field(default=5, ge=1, le=12)
+    feishu_aily_wake_allowed_hosts: str = ""
     codex_setup_platforms: str = ""
     workbuddy_setup_platforms: str = ""
     doubao_work_setup_platforms: str = ""
@@ -141,6 +146,33 @@ class Settings(BaseSettings):
         if any(item not in supported for item in canonical):
             raise ValueError("Agent setup platforms may contain only mac, windows, or linux")
         return ",".join(dict.fromkeys(canonical))
+
+    @field_validator("feishu_aily_wake_allowed_hosts")
+    @classmethod
+    def wake_hosts_are_dns_names(cls, value: str) -> str:
+        hosts = [item.strip().casefold().rstrip(".") for item in value.split(",") if item.strip()]
+        for host in hosts:
+            candidate = host[2:] if host.startswith("*.") else host
+            if host.startswith(".") or not candidate or len(candidate) > 253:
+                raise ValueError("Feishu aily wake hosts must be DNS names")
+            labels = candidate.split(".")
+            if any(
+                not label
+                or len(label) > 63
+                or not label[0].isalnum()
+                or not label[-1].isalnum()
+                or any(
+                    not (character.isascii() and (character.isalnum() or character == "-"))
+                    for character in label
+                )
+                for label in labels
+            ):
+                raise ValueError("Feishu aily wake hosts must be DNS names")
+        return ",".join(dict.fromkeys(hosts))
+
+    @property
+    def enabled_feishu_aily_wake_hosts(self) -> tuple[str, ...]:
+        return tuple(item for item in self.feishu_aily_wake_allowed_hosts.split(",") if item)
 
     @field_validator("connector_release_version")
     @classmethod
@@ -255,6 +287,8 @@ class Settings(BaseSettings):
             "openclaw": openclaw or codex,
             # Hermes was added after the shared Codex policy and must be released explicitly.
             "hermes": hermes,
+            # 飞书 aily is cloud-hosted and never uses the local bootstrap.
+            "feishu_aily": (),
         }
 
     @property
@@ -264,7 +298,15 @@ class Settings(BaseSettings):
         platforms = self.enabled_host_setup_platforms
         local_mode = {
             host: "local_bootstrap" if platforms[host] else "unavailable"
-            for host in ("workbuddy", "doubao_work", "openclaw", "hermes", "codex", "manus")
+            for host in (
+                "workbuddy",
+                "doubao_work",
+                "openclaw",
+                "hermes",
+                "codex",
+                "manus",
+                "feishu_aily",
+            )
         }
         doubao_mode = (
             local_mode["doubao_work"]
@@ -289,6 +331,11 @@ class Settings(BaseSettings):
                     if self.remote_mcp_oauth_enabled and self.manus_remote_mcp_enabled
                     else "unavailable"
                 )
+            ),
+            "feishu_aily": (
+                "remote_mcp_oauth"
+                if self.remote_mcp_oauth_enabled and self.feishu_aily_remote_mcp_enabled
+                else "unavailable"
             ),
         }
 
@@ -343,6 +390,11 @@ class Settings(BaseSettings):
         if self.manus_remote_mcp_enabled and not self.remote_mcp_oauth_enabled:
             raise ValueError(
                 "AGENTPOST_REMOTE_MCP_OAUTH_ENABLED must be true when Manus Remote MCP is enabled"
+            )
+        if self.feishu_aily_remote_mcp_enabled and not self.remote_mcp_oauth_enabled:
+            raise ValueError(
+                "AGENTPOST_REMOTE_MCP_OAUTH_ENABLED must be true when "
+                "Feishu aily Remote MCP is enabled"
             )
         if not self.is_production:
             return self
@@ -405,6 +457,22 @@ class Settings(BaseSettings):
                 self.remote_mcp_resource_url.startswith("https://")
             ):
                 raise ValueError("AGENTPOST_REMOTE_MCP_RESOURCE_URL must use HTTPS in production")
+        if self.feishu_aily_remote_mcp_enabled:
+            if not self.wake_dispatch_enabled:
+                raise ValueError(
+                    "AGENTPOST_WAKE_DISPATCH_ENABLED must be true when Feishu aily is enabled "
+                    "in production"
+                )
+            if self.human_mfa_encryption_key.get_secret_value() in unsafe:
+                raise ValueError(
+                    "AGENTPOST_HUMAN_MFA_ENCRYPTION_KEY must be replaced when Feishu aily "
+                    "is enabled in production"
+                )
+            if not self.enabled_feishu_aily_wake_hosts:
+                raise ValueError(
+                    "AGENTPOST_FEISHU_AILY_WAKE_ALLOWED_HOSTS must list the approved aily "
+                    "workflow endpoint hosts in production"
+                )
         return self
 
 

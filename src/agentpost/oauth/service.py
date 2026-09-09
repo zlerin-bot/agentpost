@@ -137,7 +137,7 @@ def oauth_resource(settings: Settings) -> str:
 def _canonical_remote_resource(
     settings: Settings,
     resource: str,
-) -> tuple[str, UUID | None, UUID | None]:
+) -> tuple[str, str, UUID | None, UUID | None]:
     cleaned = resource.strip().rstrip("/")
     configured = oauth_resource(settings).rstrip("/")
     configured_parts = urlsplit(configured)
@@ -150,11 +150,19 @@ def _canonical_remote_resource(
     ):
         raise OAuthInvalidTargetError
     if parts.path == configured_parts.path:
-        return cleaned, None, None
+        return cleaned, "remote_mcp", None, None
     prefix = configured_parts.path.rstrip("/") + "/connect/"
     if not parts.path.startswith(prefix):
         raise OAuthInvalidTargetError
-    target = parts.path[len(prefix) :]
+    path_suffix = parts.path[len(prefix) :]
+    path_parts = path_suffix.split("/", maxsplit=1)
+    if len(path_parts) == 1:
+        # Preserve the already-published Manus resource shape.
+        connector_type, target = "manus", path_parts[0]
+    else:
+        connector_type, target = path_parts
+    if connector_type not in {"manus", "doubao_work", "feishu_aily"}:
+        raise OAuthInvalidTargetError
     match = re.fullmatch(r"(new|agent)-([0-9a-fA-F-]{36})", target)
     if match is None:
         raise OAuthInvalidTargetError
@@ -163,8 +171,8 @@ def _canonical_remote_resource(
     except ValueError as exc:
         raise OAuthInvalidTargetError from exc
     if match.group(1) == "agent":
-        return cleaned, target_id, None
-    return cleaned, None, target_id
+        return cleaned, connector_type, target_id, None
+    return cleaned, connector_type, None, target_id
 
 
 def _valid_redirect_uri(value: str) -> str:
@@ -260,9 +268,12 @@ def start_authorization_code(
     normalized_scope = " ".join(sorted(set(scope.split())))
     if normalized_scope != MESSAGING_SCOPE:
         raise OAuthInvalidScopeError
-    canonical_resource, existing_agent_id, new_agent_intent_id = _canonical_remote_resource(
-        settings, resource
-    )
+    (
+        canonical_resource,
+        connector_type,
+        existing_agent_id,
+        new_agent_intent_id,
+    ) = _canonical_remote_resource(settings, resource)
     if (
         new_agent_intent_id is not None
         and session.scalar(
@@ -277,8 +288,12 @@ def start_authorization_code(
         session,
         settings,
         payload=PairingCreate(
-            connector_type="manus",
-            display_name="Manus",
+            connector_type=connector_type,
+            display_name={
+                "manus": "Manus",
+                "doubao_work": "豆包工作",
+                "feishu_aily": "飞书 aily 智能体",
+            }[connector_type],
             capabilities=["agentpost-messaging"],
             requested_existing_agent_id=existing_agent_id,
         ),

@@ -93,17 +93,22 @@ def oauth_protected_resource_metadata(settings: SettingsDep) -> dict[str, object
     }
 
 
-@router.get("/.well-known/oauth-protected-resource/mcp/connect/{intent}", response_model=None)
+@router.get("/.well-known/oauth-protected-resource/mcp/connect/{intent:path}", response_model=None)
 def oauth_intent_protected_resource_metadata(
     intent: str,
     settings: SettingsDep,
 ) -> dict[str, object] | JSONResponse:
+    path_parts = intent.split("/", maxsplit=1)
+    if len(path_parts) == 1:
+        connector_type, target = "manus", path_parts[0]
+    else:
+        connector_type, target = path_parts
     try:
-        prefix, raw_id = intent.split("-", maxsplit=1)
+        prefix, raw_id = target.split("-", maxsplit=1)
         valid_intent = prefix in {"new", "agent"} and len(raw_id) == 36
     except ValueError:
         valid_intent = False
-    if not valid_intent:
+    if not valid_intent or connector_type not in {"manus", "doubao_work", "feishu_aily"}:
         return _oauth_error("invalid_target", "The requested resource is not supported")
     return {
         "resource": f"{oauth_resource(settings).rstrip('/')}/connect/{intent}",

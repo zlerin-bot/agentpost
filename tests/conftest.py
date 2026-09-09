@@ -45,6 +45,7 @@ from agentpost.tasks.models import (
     TaskAssignment,
     TaskMembership,
 )
+from agentpost.wakeup.models import AgentWakeChannel, AgentWakeDelivery
 
 _MODELS = (
     Agent,
@@ -80,6 +81,8 @@ _MODELS = (
     OAuthAccessToken,
     OAuthRefreshToken,
     RateLimitBucket,
+    AgentWakeChannel,
+    AgentWakeDelivery,
 )
 
 

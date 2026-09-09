@@ -47,7 +47,7 @@ def _resource_url(value: str) -> str:
     cleaned = value.strip().rstrip("/")
     parsed = urlsplit(cleaned)
     resource_path = re.fullmatch(
-        r"/mcp(?:/connect/[A-Za-z0-9_-]{20,128})?",
+        r"/mcp(?:/connect/(?:[A-Za-z0-9_-]{2,32}/)?[A-Za-z0-9_-]{20,128})?",
         parsed.path,
     )
     if (
@@ -60,7 +60,7 @@ def _resource_url(value: str) -> str:
         or resource_path is None
     ):
         raise ConfigurationError(
-            "AGENTPOST_MCP_RESOURCE_URL must use /mcp or one opaque /mcp/connect/<intent> path"
+            "AGENTPOST_MCP_RESOURCE_URL must use /mcp or one /mcp/connect/<host>/<intent> path"
         )
     return cleaned
 
@@ -242,7 +242,8 @@ class DynamicRemoteMCPApp:
         self._apps: OrderedDict[str, Any] = OrderedDict()
         base = re.escape(settings.resource_path.rstrip("/"))
         self._resource_pattern = re.compile(
-            rf"^{base}(?:/connect/(?:new|agent)-[0-9a-fA-F-]{{36}})?$"
+            rf"^{base}(?:/connect/(?:[A-Za-z0-9_-]{{2,32}}/)?"
+            rf"(?:new|agent)-[0-9a-fA-F-]{{36}})?$"
         )
 
     def _resource_path(self, path: str) -> str | None:

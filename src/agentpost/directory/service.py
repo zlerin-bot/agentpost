@@ -50,6 +50,7 @@ _TYPE_LABELS = {
     "openclaw": "OpenClaw",
     "hermes": "Hermes",
     "manus": "Manus",
+    "feishu_aily": "飞书 aily 智能体",
 }
 _KNOWN_AGENT_TYPE_TERMS = frozenset(
     {

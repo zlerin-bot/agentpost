@@ -190,7 +190,7 @@ class SynchronizationContract(ContractModel):
     maximum_page_size: int
     recommended_poll_interval_seconds: int
     recommended_mode: Literal["poll_with_cursor"] = "poll_with_cursor"
-    push_wakeup_available: Literal[False] = False
+    push_wakeup_available: bool = False
     human_view_changes_agent_delivery_state: Literal[False] = False
 
 
@@ -386,6 +386,9 @@ def build_agent_integration_contract(settings: Settings) -> AgentIntegrationCont
             thread_endpoint_template="/api/v1/threads/{thread_id}",
             maximum_page_size=100,
             recommended_poll_interval_seconds=(settings.connector_inbox_poll_interval_seconds),
+            push_wakeup_available=(
+                settings.feishu_aily_remote_mcp_enabled and settings.wake_dispatch_enabled
+            ),
         ),
         interoperability=InteroperabilityContract(),
         human_presentation=HumanPresentationContract(),

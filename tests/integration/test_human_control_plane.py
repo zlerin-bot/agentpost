@@ -38,6 +38,7 @@ def _control_client(settings: Settings, database: Database) -> TestClient:
         remote_mcp_oauth_enabled=settings.remote_mcp_oauth_enabled,
         doubao_work_remote_mcp_enabled=settings.doubao_work_remote_mcp_enabled,
         manus_remote_mcp_enabled=settings.manus_remote_mcp_enabled,
+        feishu_aily_remote_mcp_enabled=settings.feishu_aily_remote_mcp_enabled,
         codex_setup_platforms=settings.codex_setup_platforms,
         workbuddy_setup_platforms=settings.workbuddy_setup_platforms,
         doubao_work_setup_platforms=settings.doubao_work_setup_platforms,
@@ -155,6 +156,7 @@ def test_orbit_site_is_branded_and_does_not_persist_credentials(
         "manus": [],
         "openclaw": [],
         "hermes": [],
+        "feishu_aily": [],
     }
     assert auth_config.json()["host_connection_modes"] == {
         "workbuddy": "unavailable",
@@ -163,6 +165,7 @@ def test_orbit_site_is_branded_and_does_not_persist_credentials(
         "hermes": "unavailable",
         "codex": "unavailable",
         "manus": "unavailable",
+        "feishu_aily": "unavailable",
     }
     assert auth_config.json()["connector_release"] == {
         "version": "0.1.0",
@@ -214,10 +217,12 @@ def test_orbit_site_is_branded_and_does_not_persist_credentials(
     assert 'data-connector-type="openclaw"' in orbit.text
     assert 'data-connector-type="manus"' in orbit.text
     assert 'data-connector-type="hermes"' in orbit.text
+    assert 'data-connector-type="feishu_aily"' in orbit.text
     assert "AP-CODEX-V1" in script.text
     assert "AP-DOUBAO-WORK-V1" in script.text
     assert "AP-MANUS-V1" in script.text
     assert "AP-HERMES-V1" in script.text
+    assert "AP-FEISHU-AILY-V1" in script.text
     assert "https://agentpost.me/connect/${host}" in script.text
     assert "请先选择要连接的 Agent" in script.text
     assert "复制安装命令" not in orbit.text
@@ -411,7 +416,7 @@ def test_manus_connection_contract_keeps_remote_fallback_fail_closed(
     assert "target_host=manus" in instructions.text
     assert "connection_mode=remote_mcp_oauth" in instructions.text
     assert (
-        "mcp_url=https://agentpost.example/mcp/connect/"
+        "mcp_url=https://agentpost.example/mcp/connect/manus/"
         "new-40000000-0000-0000-0000-000000000001" in instructions.text
     )
     assert "do not download or run the" in instructions.text
@@ -419,7 +424,7 @@ def test_manus_connection_contract_keeps_remote_fallback_fail_closed(
     assert "Do not ask the Human for a server URL, API key, Bearer token" in instructions.text
     assert reconnect.status_code == 200
     assert (
-        "mcp_url=https://agentpost.example/mcp/connect/"
+        "mcp_url=https://agentpost.example/mcp/connect/manus/"
         "agent-5a7044c7-6a5e-48e9-90dd-78680c91dcb9" in reconnect.text
     )
     assert "existing_agent_id=5a7044c7-6a5e-48e9-90dd-78680c91dcb9" in reconnect.text
@@ -529,6 +534,102 @@ def test_doubao_work_connection_contract_prefers_verified_local_stdio(
     assert "Remote MCP gate" in instructions.text
 
 
+def test_feishu_aily_connection_contract_uses_remote_mcp_and_fails_closed(
+    client: TestClient,
+    settings: Settings,
+    database: Database,
+) -> None:
+    intent = "40000000-0000-0000-0000-000000000001"
+    unavailable = client.get(f"/connect/feishu_aily?new={intent}")
+    assert unavailable.status_code == 409
+    assert "feishu_aily_remote_mcp_not_released" in unavailable.text
+
+    staged = Settings(
+        environment="test",
+        database_url=settings.database_url,
+        storage_path=settings.storage_path,
+        remote_mcp_oauth_enabled=True,
+        feishu_aily_remote_mcp_enabled=True,
+        public_base_url="https://agentpost.example",
+        remote_mcp_resource_url="https://agentpost.example/mcp",
+        log_level="WARNING",
+    )
+    with _control_client(staged, database) as remote_client:
+        instructions = remote_client.get(f"/connect/feishu_aily?new={intent}")
+
+    assert instructions.status_code == 200
+    assert instructions.headers["X-AgentPost-Connection-Code"] == "AP-FEISHU-AILY-V1"
+    assert "target_host=feishu_aily" in instructions.text
+    assert "target_name=飞书 aily 智能体" in instructions.text
+    assert "connection_mode=remote_mcp_oauth" in instructions.text
+    assert (
+        f"mcp_url=https://agentpost.example/mcp/connect/feishu_aily/new-{intent}"
+        in instructions.text
+    )
+    assert "工具/MCP 服务" in instructions.text
+    assert "Do not reuse a 豆包工作 connection" in instructions.text
+    assert "feishu_aily_custom_mcp_oauth_unavailable" in instructions.text
+
+
+def test_feishu_aily_owner_can_store_wake_channel_without_secret_echo(
+    settings: Settings,
+    database: Database,
+) -> None:
+    with _control_client(settings, database) as client:
+        human = _create_human(client, "aily-owner@example.com", "Aily Owner")
+        agent = _create_agent(client, "aily-owner@agents.local", "mars的小跟班")
+        _grant(
+            client,
+            human_id=human["user"]["id"],
+            agent_id=agent["agent"]["id"],
+            role="owner",
+        )
+        with database.session_factory() as session:
+            connector = ConnectorInstance(
+                connector_id="con_feishu_aily_owner",
+                agent_id=UUID(agent["agent"]["id"]),
+                human_user_id=UUID(human["user"]["id"]),
+                connector_type="feishu_aily",
+                display_name="飞书 aily 智能体",
+                status="active",
+            )
+            session.add(connector)
+            session.flush()
+            session.add(
+                AgentConnectorBinding(
+                    agent_id=UUID(agent["agent"]["id"]),
+                    connector_instance_id=connector.id,
+                )
+            )
+            session.commit()
+
+        headers = {"Authorization": f"Bearer {human['access_key']}"}
+        missing = client.get(
+            f"/api/v1/orbit/agents/{agent['agent']['id']}/wake-channel",
+            headers=headers,
+        )
+        configured = client.put(
+            f"/api/v1/orbit/agents/{agent['agent']['id']}/wake-channel/feishu-aily",
+            headers=headers,
+            json={
+                "webhook_url": "https://aily.example.com/hooks/agentpost",
+                "bearer_token": "this-is-a-secret-token",
+            },
+        )
+        read_back = client.get(
+            f"/api/v1/orbit/agents/{agent['agent']['id']}/wake-channel",
+            headers=headers,
+        )
+
+    assert missing.status_code == 404
+    assert configured.status_code == read_back.status_code == 200
+    assert configured.json()["status"] == "configured"
+    assert configured.json()["endpoint_host"] == "aily.example.com"
+    assert configured.json() == read_back.json()
+    assert "hooks/agentpost" not in configured.text
+    assert "this-is-a-secret-token" not in configured.text
+
+
 def test_auth_config_exposes_release_platforms_per_host(
     settings: Settings,
     database: Database,
@@ -555,15 +656,18 @@ def test_auth_config_exposes_release_platforms_per_host(
     assert response.status_code == 200
     assert response.json()["codex_setup_platforms"] == ["mac", "linux", "windows"]
     assert response.json()["host_setup_platforms"] == {
-        host: ["mac", "linux", "windows"]
-        for host in (
-            "codex",
-            "workbuddy",
-            "doubao_work",
-            "manus",
-            "openclaw",
-            "hermes",
-        )
+        **{
+            host: ["mac", "linux", "windows"]
+            for host in (
+                "codex",
+                "workbuddy",
+                "doubao_work",
+                "manus",
+                "openclaw",
+                "hermes",
+            )
+        },
+        "feishu_aily": [],
     }
     assert response.json()["host_connection_modes"] == {
         "workbuddy": "local_bootstrap",
@@ -572,6 +676,7 @@ def test_auth_config_exposes_release_platforms_per_host(
         "hermes": "local_bootstrap",
         "codex": "local_bootstrap",
         "manus": "local_bootstrap",
+        "feishu_aily": "unavailable",
     }
     assert response.json()["connector_release"] == {
         "version": "0.1.1",

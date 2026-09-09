@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+from agentpost.config import Settings
+from agentpost.db import Database
+from agentpost.main import create_app
+
 
 def test_public_agent_integration_contract_preserves_machine_and_human_semantics(
     client: TestClient,
@@ -138,6 +142,23 @@ def test_public_agent_integration_contract_preserves_machine_and_human_semantics
     assert task["collaboration_scope"] == "task_only"
     assert task["participant_authority"] == "task_membership"
     assert task["one_thread_per_task"] is True
+
+
+def test_protocol_contract_advertises_feishu_push_only_when_dispatch_is_enabled(
+    settings: Settings,
+    database: Database,
+) -> None:
+    staged = settings.model_copy(
+        update={
+            "remote_mcp_oauth_enabled": True,
+            "feishu_aily_remote_mcp_enabled": True,
+            "wake_dispatch_enabled": True,
+        }
+    )
+    with TestClient(create_app(settings=staged, database=database)) as client:
+        response = client.get("/api/v1/protocol/contract")
+    assert response.status_code == 200
+    assert response.json()["synchronization"]["push_wakeup_available"] is True
 
 
 def test_agent_integration_contract_is_in_openapi(client: TestClient) -> None:

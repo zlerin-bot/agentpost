@@ -18,9 +18,12 @@ from mcp.server.transport_security import TransportSecuritySettings
 from starlette.testclient import TestClient
 
 EXPECTED_TOOLS = {
+    "agentpost_handshake",
     "agentpost_resolve_recipient",
     "agentpost_resolve_task",
     "agentpost_get_task",
+    "agentpost_task_activities",
+    "agentpost_send_task_text",
     "agentpost_send_task_message",
     "agentpost_list_inbox",
     "agentpost_read_message",
@@ -187,10 +190,16 @@ def test_remote_server_supports_one_opaque_canary_resource_path() -> None:
     assert metadata.json()["resource"] == runtime.resource_url
 
 
-def test_dynamic_remote_server_routes_mac_and_windows_neutral_manus_intents() -> None:
+@pytest.mark.parametrize(
+    "resource_path",
+    [
+        "/mcp/connect/new-40000000-0000-0000-0000-000000000001",
+        "/mcp/connect/feishu_aily/new-40000000-0000-0000-0000-000000000001",
+    ],
+)
+def test_dynamic_remote_server_routes_host_bound_intents(resource_path: str) -> None:
     runtime = settings()
     app = create_dynamic_remote_app(runtime)
-    resource_path = "/mcp/connect/new-40000000-0000-0000-0000-000000000001"
     with TestClient(app) as client:
         unauthorized = client.post(
             resource_path,

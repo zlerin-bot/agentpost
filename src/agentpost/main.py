@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
+import asyncio
+import logging
+from contextlib import asynccontextmanager, suppress
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
@@ -24,9 +26,25 @@ from agentpost.api.routes.orbit import router as orbit_router
 from agentpost.api.routes.protocol import router as protocol_router
 from agentpost.api.routes.system import router as system_router
 from agentpost.api.routes.tasks import router as tasks_router
+from agentpost.api.routes.wakeup import router as wakeup_router
 from agentpost.config import Settings, get_settings
 from agentpost.db import Database
 from agentpost.observability.logging import configure_logging
+from agentpost.wakeup.service import dispatch_pending_wakes
+
+logger = logging.getLogger(__name__)
+
+
+async def _wake_dispatch_loop(database: Database, settings: Settings) -> None:
+    while True:
+        try:
+            with database.session_factory() as session:
+                await asyncio.to_thread(dispatch_pending_wakes, session, settings)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("wake_dispatch_iteration_failed")
+        await asyncio.sleep(settings.wake_dispatch_poll_seconds)
 
 
 def create_app(settings: Settings | None = None, database: Database | None = None) -> FastAPI:
@@ -36,8 +54,19 @@ def create_app(settings: Settings | None = None, database: Database | None = Non
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
-        yield
-        runtime_database.dispose()
+        wake_task = (
+            asyncio.create_task(_wake_dispatch_loop(runtime_database, runtime_settings))
+            if runtime_settings.wake_dispatch_enabled
+            else None
+        )
+        try:
+            yield
+        finally:
+            if wake_task is not None:
+                wake_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await wake_task
+            runtime_database.dispose()
 
     app = FastAPI(
         title="AgentPost API",
@@ -58,6 +87,7 @@ def create_app(settings: Settings | None = None, database: Database | None = Non
     app.include_router(orbit_router)
     app.include_router(human_auth_router)
     app.include_router(tasks_router)
+    app.include_router(wakeup_router)
     app.include_router(approvals_router)
     app.include_router(onboarding_router)
     app.include_router(agents_router)

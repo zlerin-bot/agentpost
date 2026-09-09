@@ -12,7 +12,15 @@ from fastapi.responses import FileResponse, PlainTextResponse
 from agentpost.api.dependencies import SettingsDep
 
 router = APIRouter(tags=["agent-connection-bootstrap"])
-Host = Literal["workbuddy", "doubao_work", "openclaw", "hermes", "codex", "manus"]
+Host = Literal[
+    "workbuddy",
+    "doubao_work",
+    "openclaw",
+    "hermes",
+    "codex",
+    "manus",
+    "feishu_aily",
+]
 
 _HOST_NAMES = {
     "workbuddy": "WorkBuddy",
@@ -21,6 +29,7 @@ _HOST_NAMES = {
     "hermes": "Hermes",
     "codex": "Codex",
     "manus": "Manus",
+    "feishu_aily": "飞书 aily 智能体",
 }
 _HOST_CODES = {
     "workbuddy": "AP-WORKBUDDY-V1",
@@ -29,6 +38,7 @@ _HOST_CODES = {
     "hermes": "AP-HERMES-V1",
     "codex": "AP-CODEX-V1",
     "manus": "AP-MANUS-V1",
+    "feishu_aily": "AP-FEISHU-AILY-V1",
 }
 
 
@@ -82,7 +92,7 @@ def connection_instructions(
             detail="Choose either an existing Agent target or a new Agent intent",
         )
     origin = settings.public_base_url.rstrip("/")
-    if host in {"manus", "doubao_work"} and (
+    if host in {"manus", "doubao_work", "feishu_aily"} and (
         settings.enabled_host_connection_modes[host] != "local_bootstrap"
     ):
         return _remote_mcp_connection_instructions(
@@ -250,7 +260,7 @@ save tokens in a prompt, config file, source file, or shell history.
 
 def _remote_mcp_connection_instructions(
     *,
-    host: Literal["doubao_work", "manus"],
+    host: Literal["doubao_work", "manus", "feishu_aily"],
     settings: SettingsDep,
     origin: str,
     agent: UUID | None,
@@ -261,6 +271,7 @@ def _remote_mcp_connection_instructions(
     host_enabled = settings.remote_mcp_oauth_enabled and (
         (host == "manus" and settings.manus_remote_mcp_enabled)
         or (host == "doubao_work" and settings.doubao_work_remote_mcp_enabled)
+        or (host == "feishu_aily" and settings.feishu_aily_remote_mcp_enabled)
     )
     if not host_enabled:
         return PlainTextResponse(
@@ -287,7 +298,7 @@ def _remote_mcp_connection_instructions(
         )
     resource_base = (settings.remote_mcp_resource_url or f"{origin}/mcp").rstrip("/")
     target = f"agent-{agent}" if agent is not None else f"new-{new}"
-    resource_url = f"{resource_base}/connect/{target}"
+    resource_url = f"{resource_base}/connect/{host}/{target}"
     intent_notice = f"new_agent_intent={new}\n" if new is not None else ""
     if agent is not None:
         intent_notice = f"existing_agent_id={agent}\n"
@@ -299,13 +310,20 @@ Header: AgentPost authentication must happen only through the MCP browser OAuth 
 claiming success if this is not the desktop 工作任务 environment."""
         connector_name = "星云驿"
         unavailable_code = "doubao_work_custom_mcp_oauth_unavailable"
-    else:
+    elif host == "manus":
         integration = """Use Manus's built-in Custom MCP integration; do not download or run the
 local AgentPost bootstrap. Add the exact HTTPS mcp_url above and let Manus complete OAuth discovery,
 dynamic client registration and the browser consent. This cloud connection is identical from the
 Manus macOS, Linux, and Windows clients and does not depend on a local command, path or vault."""
         connector_name = "AgentPost"
         unavailable_code = "manus_custom_mcp_oauth_unavailable"
+    else:
+        integration = """Use the 飞书 aily intelligent Agent's 工具/MCP 服务 flow. Add one
+HTTPS MCP service named AgentPost using the exact mcp_url above, then let aily complete OAuth
+discovery, dynamic client registration and browser consent. Do not reuse a 豆包工作 connection
+code, install a local bootstrap, or put a long-lived key into aily prompts, HTTP headers or chat."""
+        connector_name = "AgentPost"
+        unavailable_code = "feishu_aily_custom_mcp_oauth_unavailable"
     body = f"""AGENTPOST_CONNECT_V1
 connection_code={code}
 target_host={host}

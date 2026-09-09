@@ -74,6 +74,7 @@ def test_pairing_configuration_is_bounded_and_canonical() -> None:
         "manus": ("mac", "windows"),
         "openclaw": ("linux", "mac"),
         "hermes": ("linux", "windows"),
+        "feishu_aily": (),
     }
     assert settings.enabled_host_connection_modes == {
         "workbuddy": "local_bootstrap",
@@ -82,6 +83,7 @@ def test_pairing_configuration_is_bounded_and_canonical() -> None:
         "hermes": "local_bootstrap",
         "codex": "local_bootstrap",
         "manus": "local_bootstrap",
+        "feishu_aily": "unavailable",
     }
     assert settings.connector_release_version == "0.1.1"
     assert settings.connector_wheel_sha256 == "a" * 64
@@ -115,6 +117,7 @@ def test_host_setup_platforms_fall_back_to_codex_policy_for_compatibility() -> N
         "manus": (),
         "openclaw": ("mac",),
         "hermes": (),
+        "feishu_aily": (),
     }
     with pytest.raises(ValidationError, match="safe HTTPS wheel URL"):
         Settings(connector_wheel_url="https://agentpost.me/downloads/pkg.whl';touch x")
@@ -141,7 +144,7 @@ def test_all_released_hosts_can_publish_all_desktop_platforms() -> None:
         connector_wheel_sha256="a" * 64,
     )
 
-    assert settings.enabled_host_setup_platforms == {
+    expected = {
         host: ("mac", "linux", "windows")
         for host in (
             "codex",
@@ -152,6 +155,8 @@ def test_all_released_hosts_can_publish_all_desktop_platforms() -> None:
             "hermes",
         )
     }
+    expected["feishu_aily"] = ()
+    assert settings.enabled_host_setup_platforms == expected
 
 
 def test_manus_prefers_local_stdio_and_keeps_remote_oauth_as_fallback() -> None:
@@ -191,6 +196,52 @@ def test_doubao_work_connection_mode_requires_its_gate_and_remote_mcp_oauth() ->
         connector_wheel_url="https://agentpost.me/downloads/agentpost-0.1.1-py3-none-any.whl",
     )
     assert local.enabled_host_connection_modes["doubao_work"] == "local_bootstrap"
+
+
+def test_feishu_aily_requires_remote_oauth_and_production_wake_dispatch() -> None:
+    settings = Settings(
+        remote_mcp_oauth_enabled=True,
+        feishu_aily_remote_mcp_enabled=True,
+    )
+    assert settings.enabled_host_connection_modes["feishu_aily"] == "remote_mcp_oauth"
+    with pytest.raises(ValidationError, match="Remote MCP"):
+        Settings(feishu_aily_remote_mcp_enabled=True)
+
+    production = {
+        "environment": "production",
+        "api_key_pepper": "production-pepper",
+        "human_api_key_pepper": "production-human-pepper",
+        "cursor_secret": "production-cursor-secret",
+        "pairing_secret": "production-pairing-secret",
+        "oauth_token_pepper": "production-oauth-pepper",
+        "rate_limit_secret": "production-rate-limit-secret",
+        "registration_token": "registration-secret",
+        "admin_token": "production-admin-token-at-least-32",
+        "public_base_url": "https://agentpost.example",
+        "remote_mcp_oauth_enabled": True,
+        "feishu_aily_remote_mcp_enabled": True,
+    }
+    with pytest.raises(ValidationError, match="WAKE_DISPATCH_ENABLED"):
+        Settings(**production)
+    with pytest.raises(ValidationError, match="HUMAN_MFA_ENCRYPTION_KEY"):
+        Settings(**production, wake_dispatch_enabled=True)
+    with pytest.raises(ValidationError, match="WAKE_ALLOWED_HOSTS"):
+        Settings(
+            **production,
+            wake_dispatch_enabled=True,
+            human_mfa_encryption_key="production-wake-encryption-key",
+        )
+    configured = Settings(
+        **production,
+        wake_dispatch_enabled=True,
+        human_mfa_encryption_key="production-wake-encryption-key",
+        feishu_aily_wake_allowed_hosts="hooks.aily.example,*.aily.example",
+    )
+    assert configured.wake_dispatch_enabled is True
+    assert configured.enabled_feishu_aily_wake_hosts == (
+        "hooks.aily.example",
+        "*.aily.example",
+    )
 
 
 def test_remote_mcp_resource_allows_one_opaque_connect_path() -> None:

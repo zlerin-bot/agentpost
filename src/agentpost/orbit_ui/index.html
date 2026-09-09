@@ -341,6 +341,35 @@
               </section>
               <section class="agent-detail-panel" data-agent-panel="connection" hidden>
                 <div id="agent-current-connection" class="agent-current-connection"></div>
+                <section id="agent-wake-channel" class="agent-wake-channel" hidden>
+                  <div class="agent-wake-heading">
+                    <div>
+                      <p class="section-tag">飞书 aily · 自动接任务</p>
+                      <h3>任务唤醒</h3>
+                    </div>
+                    <span id="agent-wake-status" class="data-chip awaiting_agent">尚未配置</span>
+                  </div>
+                  <p id="agent-wake-copy" class="agent-wake-copy">
+                    在飞书 aily 中建立接收 AgentPost 唤醒事件的工作流，再把工作流提供的 HTTPS 地址和 Bearer Token 填到这里。
+                  </p>
+                  <form id="agent-wake-form" class="agent-wake-form" autocomplete="off">
+                    <label>
+                      <span>工作流 HTTPS 地址</span>
+                      <input id="agent-wake-url" type="url" inputmode="url" maxlength="4000" placeholder="https://…" required autocomplete="off">
+                    </label>
+                    <label>
+                      <span>Bearer Token</span>
+                      <input id="agent-wake-token" type="password" minlength="8" maxlength="2000" placeholder="仅在保存时输入" required autocomplete="new-password">
+                    </label>
+                    <div class="agent-wake-actions">
+                      <button id="agent-wake-save" type="submit" class="primary-action">保存并启用</button>
+                      <button id="agent-wake-test" type="button" class="quiet-button" disabled>发送测试唤醒</button>
+                      <button id="agent-wake-disable" type="button" class="quiet-button danger" disabled>停用自动唤醒</button>
+                    </div>
+                    <p id="agent-wake-result" class="form-status" aria-live="polite"></p>
+                  </form>
+                  <p class="agent-wake-security">地址和 Token 加密保存，页面不会再次显示；唤醒事件只含任务、工单和 Run ID，任务正文仍由 aily 通过授权后的 AgentPost MCP 读取。</p>
+                </section>
               </section>
               <section class="agent-detail-panel" data-agent-panel="capabilities" hidden>
                 <div id="agent-detail-capabilities" class="capability-row"></div>
@@ -931,6 +960,10 @@
             <button type="button" class="pairing-host-card" data-connector-type="manus">
               <strong>Manus</strong>
               <span>本地文件夹</span>
+            </button>
+            <button type="button" class="pairing-host-card" data-connector-type="feishu_aily">
+              <strong>飞书 aily 智能体</strong>
+              <span>云端 MCP 与自动接任务</span>
             </button>
           </fieldset>
 
