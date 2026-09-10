@@ -21,6 +21,7 @@ from agentpost.wakeup.service import (
     WakeChannelInvalidEndpointError,
     WakeChannelNotFoundError,
     WakeDeliveryError,
+    configure_feishu_notification_channel,
     configure_wake_channel,
     disable_wake_channel,
     get_wake_channel,
@@ -118,6 +119,47 @@ def put_feishu_aily_wake_channel(
     return result
 
 
+@router.put(
+    "/api/v1/orbit/agents/{agent_id}/notification-channel/feishu",
+    response_model=WakeChannelStatus,
+)
+def put_feishu_notification_channel(
+    agent_id: UUID,
+    payload: FeishuAilyWakeChannelCreate,
+    request: Request,
+    response: Response,
+    current_human: CurrentHumanDep,
+    session: SessionDep,
+    settings: SettingsDep,
+    csrf: HumanCsrfDep,
+) -> WakeChannelStatus:
+    _ = csrf
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        result = configure_feishu_notification_channel(
+            session, settings, user=current_human, agent_id=agent_id, payload=payload
+        )
+    except WakeChannelAccessDeniedError as exc:
+        raise _not_found() from exc
+    except WakeChannelInvalidEndpointError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={
+                "code": "notification_endpoint_invalid",
+                "message": "请使用一个公开 HTTPS 飞书工作流地址及其 Token",
+            },
+        ) from exc
+    _audit(
+        request,
+        session,
+        current_human,
+        action="control.feishu_notification_configured",
+        agent_id=agent_id,
+        outcome="success",
+    )
+    return result
+
+
 @router.post(
     "/api/v1/orbit/agents/{agent_id}/wake-channel/test",
     response_model=WakeChannelTestResult,
@@ -142,7 +184,7 @@ def verify_agent_wake_channel(
             request,
             session,
             current_human,
-            action="control.feishu_aily_wake_tested",
+            action="control.feishu_channel_tested",
             agent_id=agent_id,
             outcome="failed",
         )
@@ -151,7 +193,7 @@ def verify_agent_wake_channel(
         request,
         session,
         current_human,
-        action="control.feishu_aily_wake_tested",
+        action="control.feishu_channel_tested",
         agent_id=agent_id,
         outcome="success",
     )
@@ -179,7 +221,7 @@ def delete_agent_wake_channel(
         request,
         session,
         current_human,
-        action="control.feishu_aily_wake_disabled",
+        action="control.feishu_channel_disabled",
         agent_id=agent_id,
         outcome="success",
     )

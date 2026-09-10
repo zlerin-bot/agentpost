@@ -98,6 +98,92 @@ _TEXT_PREVIEW_TYPES = {
 }
 
 
+def _safe_markdown_fragment(content: str) -> str:
+    """Render a small readable Markdown subset after escaping every source character."""
+
+    lines = content.splitlines()
+    output: list[str] = []
+    index = 0
+    in_code = False
+    list_kind = ""
+
+    def close_list() -> None:
+        nonlocal list_kind
+        if list_kind:
+            output.append(f"</{list_kind}>")
+            list_kind = ""
+
+    while index < len(lines):
+        raw = lines[index]
+        stripped = raw.strip()
+        if stripped.startswith("```"):
+            close_list()
+            output.append("</code></pre>" if in_code else "<pre><code>")
+            in_code = not in_code
+            index += 1
+            continue
+        if in_code:
+            output.append(html.escape(raw) + "\n")
+            index += 1
+            continue
+        if not stripped:
+            close_list()
+            index += 1
+            continue
+        if (
+            "|" in stripped
+            and index + 1 < len(lines)
+            and all(
+                cell.strip().replace(":", "").replace("-", "") == "" and "-" in cell
+                for cell in lines[index + 1].strip().strip("|").split("|")
+            )
+        ):
+            close_list()
+            headers = [html.escape(cell.strip()) for cell in stripped.strip("|").split("|")]
+            output.append("<div class=table-wrap><table><thead><tr>")
+            output.extend(f"<th>{cell}</th>" for cell in headers)
+            output.append("</tr></thead><tbody>")
+            index += 2
+            while index < len(lines) and "|" in lines[index] and lines[index].strip():
+                cells = [
+                    html.escape(cell.strip()) for cell in lines[index].strip().strip("|").split("|")
+                ]
+                output.append("<tr>")
+                output.extend(f"<td>{cell}</td>" for cell in cells)
+                output.append("</tr>")
+                index += 1
+            output.append("</tbody></table></div>")
+            continue
+        heading_level = len(stripped) - len(stripped.lstrip("#"))
+        if 1 <= heading_level <= 6 and stripped[heading_level : heading_level + 1] == " ":
+            close_list()
+            output.append(
+                f"<h{heading_level}>{html.escape(stripped[heading_level + 1 :])}</h{heading_level}>"
+            )
+            index += 1
+            continue
+        unordered = stripped.startswith(("- ", "* ", "+ "))
+        ordered_head, separator, ordered_body = stripped.partition(". ")
+        ordered = bool(separator and ordered_head.isdigit())
+        if unordered or ordered:
+            kind = "ul" if unordered else "ol"
+            if list_kind != kind:
+                close_list()
+                output.append(f"<{kind}>")
+                list_kind = kind
+            body = stripped[2:] if unordered else ordered_body
+            output.append(f"<li>{html.escape(body)}</li>")
+            index += 1
+            continue
+        close_list()
+        output.append(f"<p>{html.escape(stripped)}</p>")
+        index += 1
+    close_list()
+    if in_code:
+        output.append("</code></pre>")
+    return "".join(output)
+
+
 def _text_attachment_preview(attachment: Attachment, source: BinaryIO) -> bytes:
     try:
         content = source.read().decode("utf-8", errors="replace")
@@ -109,7 +195,15 @@ def _text_attachment_preview(attachment: Attachment, source: BinaryIO) -> bytes:
         except json.JSONDecodeError:
             pass
     filename = html.escape(attachment.filename)
-    safe_content = html.escape(content)
+    content_type = attachment.content_type.partition(";")[0].strip().lower()
+    is_markdown = content_type in {"application/markdown", "text/markdown", "text/x-markdown"}
+    safe_content = _safe_markdown_fragment(content) if is_markdown else html.escape(content)
+    content_markup = (
+        f'<article class="markdown-body">{safe_content}</article>'
+        if is_markdown
+        else f"<pre>{safe_content}</pre>"
+    )
+    preview_label = "Markdown 安全阅读预览" if is_markdown else "只读文字预览"
     return f"""<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -131,9 +225,29 @@ def _text_attachment_preview(attachment: Attachment, source: BinaryIO) -> bytes:
       white-space: pre-wrap; overflow-wrap: anywhere;
       font: 15px/1.75 ui-monospace, SFMono-Regular, Menlo, monospace;
     }}
+    .markdown-body {{
+      border: 1px solid #c8d7ec; border-radius: 14px; background: #fff;
+      padding: 20px; line-height: 1.75;
+    }}
+    .markdown-body :first-child {{ margin-top: 0; }}
+    .markdown-body :last-child {{ margin-bottom: 0; }}
+    .markdown-body h1, .markdown-body h2, .markdown-body h3 {{
+      line-height: 1.35; overflow-wrap: anywhere;
+    }}
+    .markdown-body p, .markdown-body li {{
+      color: #26354a; font-size: 15px; overflow-wrap: anywhere;
+    }}
+    .markdown-body pre {{ overflow: auto; }}
+    .table-wrap {{ overflow-x: auto; }}
+    table {{ width: 100%; border-collapse: collapse; }}
+    th, td {{
+      border: 1px solid #c8d7ec; padding: 8px 10px;
+      text-align: left; vertical-align: top;
+    }}
+    th {{ background: #eef4fc; }}
   </style>
 </head>
-<body><main><header><h1>{filename}</h1><p>只读文字预览</p></header><pre>{safe_content}</pre></main></body>
+<body><main><header><h1>{filename}</h1><p>{preview_label}</p></header>{content_markup}</main></body>
 </html>""".encode()
 
 

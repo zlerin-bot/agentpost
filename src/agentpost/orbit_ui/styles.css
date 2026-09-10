@@ -1376,6 +1376,10 @@ footer {
   padding: 18px;
 }
 
+.agent-wake-channel[hidden] {
+  display: none;
+}
+
 .agent-wake-heading,
 .agent-wake-actions {
   display: flex;
@@ -2575,6 +2579,16 @@ summary:focus-visible {
 
 .pairing-host-card.selected span {
   color: var(--cyan);
+}
+
+.pairing-host-card.unavailable,
+.pairing-host-card:disabled {
+  border-color: var(--line);
+  background: rgba(5, 14, 28, 0.38);
+  color: var(--muted);
+  cursor: not-allowed;
+  opacity: .72;
+  box-shadow: none;
 }
 
 .pairing-progress {
@@ -4987,6 +5001,10 @@ footer {
   color: var(--text);
 }
 .task-file-mine input { width: 18px; height: 18px; }
+.task-file-clear {
+  align-self: end;
+  min-height: 40px;
+}
 .task-file-list {
   display: grid;
   gap: 10px;
@@ -5022,7 +5040,7 @@ footer {
 
 @media (min-width: 1180px) {
   .task-file-toolbar {
-    grid-template-columns: minmax(260px, 1.5fr) minmax(160px, .8fr) minmax(160px, .8fr) max-content;
+    grid-template-columns: minmax(250px, 1.4fr) minmax(150px, .75fr) minmax(150px, .75fr) max-content max-content;
     align-items: end;
   }
   .task-file-toolbar .task-file-mine {

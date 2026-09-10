@@ -81,9 +81,9 @@ def _assert_allowed_host(settings: Settings, hostname: str) -> None:
     raise WakeChannelInvalidEndpointError
 
 
-def _owned_feishu_connector(
+def _owned_agent_connector(
     session: Session, *, user: HumanUser, agent_id: UUID
-) -> tuple[Agent, ConnectorInstance]:
+) -> tuple[Agent, ConnectorInstance | None]:
     ownership = session.get(AgentOwnership, agent_id)
     agent = session.get(Agent, agent_id)
     binding = session.get(AgentConnectorBinding, agent_id)
@@ -92,6 +92,13 @@ def _owned_feishu_connector(
         connector = session.get(ConnectorInstance, binding.connector_instance_id)
     if ownership is None or ownership.human_user_id != user.id or agent is None:
         raise WakeChannelAccessDeniedError
+    return agent, connector
+
+
+def _owned_feishu_connector(
+    session: Session, *, user: HumanUser, agent_id: UUID
+) -> tuple[Agent, ConnectorInstance]:
+    agent, connector = _owned_agent_connector(session, user=user, agent_id=agent_id)
     if (
         connector is None
         or connector.status != "active"
@@ -115,7 +122,7 @@ def _status(session: Session, channel: AgentWakeChannel, settings: Settings) -> 
         )
     )
     return WakeChannelStatus(
-        channel_type="feishu_aily_webhook",
+        channel_type=channel.channel_type,  # type: ignore[arg-type]
         status=channel.status,  # type: ignore[arg-type]
         endpoint_host=endpoint_host,
         last_tested_at=channel.last_tested_at,
@@ -128,7 +135,7 @@ def _status(session: Session, channel: AgentWakeChannel, settings: Settings) -> 
 def get_wake_channel(
     session: Session, settings: Settings, *, user: HumanUser, agent_id: UUID
 ) -> WakeChannelStatus:
-    _owned_feishu_connector(session, user=user, agent_id=agent_id)
+    _owned_agent_connector(session, user=user, agent_id=agent_id)
     channel = session.scalar(
         select(AgentWakeChannel).where(
             AgentWakeChannel.agent_id == agent_id,
@@ -137,6 +144,51 @@ def get_wake_channel(
     )
     if channel is None:
         raise WakeChannelNotFoundError
+    return _status(session, channel, settings)
+
+
+def _save_channel(
+    session: Session,
+    settings: Settings,
+    *,
+    user: HumanUser,
+    agent_id: UUID,
+    connector: ConnectorInstance | None,
+    channel_type: str,
+    payload: FeishuAilyWakeChannelCreate,
+) -> WakeChannelStatus:
+    endpoint, hostname = _endpoint_parts(payload.webhook_url.get_secret_value())
+    _assert_allowed_host(settings, hostname)
+    token = payload.bearer_token.get_secret_value().strip()
+    if not token:
+        raise WakeChannelInvalidEndpointError
+    channel = session.scalar(select(AgentWakeChannel).where(AgentWakeChannel.agent_id == agent_id))
+    if channel is None:
+        channel = AgentWakeChannel(
+            agent_id=agent_id,
+            human_user_id=user.id,
+            connector_instance_id=connector.id if connector else None,
+            channel_type=channel_type,
+            encrypted_endpoint="",
+            encrypted_bearer_token="",
+        )
+        session.add(channel)
+    channel.human_user_id = user.id
+    channel.connector_instance_id = connector.id if connector else None
+    channel.channel_type = channel_type
+    channel.encrypted_endpoint = encrypt_application_secret(
+        endpoint, settings.human_mfa_encryption_key
+    )
+    channel.encrypted_bearer_token = encrypt_application_secret(
+        token, settings.human_mfa_encryption_key
+    )
+    channel.status = "configured"
+    channel.last_tested_at = None
+    channel.last_success_at = None
+    channel.last_error_code = None
+    channel.updated_at = utc_now()
+    session.flush()
+    _enqueue_existing_runs(session, channel=channel)
     return _status(session, channel, settings)
 
 
@@ -149,55 +201,59 @@ def configure_wake_channel(
     payload: FeishuAilyWakeChannelCreate,
 ) -> WakeChannelStatus:
     _, connector = _owned_feishu_connector(session, user=user, agent_id=agent_id)
-    endpoint, hostname = _endpoint_parts(payload.webhook_url.get_secret_value())
-    _assert_allowed_host(settings, hostname)
-    token = payload.bearer_token.get_secret_value().strip()
-    if not token:
-        raise WakeChannelInvalidEndpointError
-    channel = session.scalar(select(AgentWakeChannel).where(AgentWakeChannel.agent_id == agent_id))
-    if channel is None:
-        channel = AgentWakeChannel(
-            agent_id=agent_id,
-            human_user_id=user.id,
-            connector_instance_id=connector.id,
-            channel_type="feishu_aily_webhook",
-            encrypted_endpoint="",
-            encrypted_bearer_token="",
-        )
-        session.add(channel)
-    channel.connector_instance_id = connector.id
-    channel.encrypted_endpoint = encrypt_application_secret(
-        endpoint, settings.human_mfa_encryption_key
+    result = _save_channel(
+        session,
+        settings,
+        user=user,
+        agent_id=agent_id,
+        connector=connector,
+        channel_type="feishu_aily_webhook",
+        payload=payload,
     )
-    channel.encrypted_bearer_token = encrypt_application_secret(
-        token, settings.human_mfa_encryption_key
-    )
-    channel.status = "configured"
-    channel.last_tested_at = None
-    channel.last_success_at = None
-    channel.last_error_code = None
-    channel.updated_at = utc_now()
     connector.task_listener_status = "stopped"
     connector.task_listener_last_heartbeat_at = utc_now()
     connector.wake_capability = "manual"
-    session.flush()
-    _enqueue_existing_runs(session, channel=channel)
     session.commit()
-    return _status(session, channel, settings)
+    return result
+
+
+def configure_feishu_notification_channel(
+    session: Session,
+    settings: Settings,
+    *,
+    user: HumanUser,
+    agent_id: UUID,
+    payload: FeishuAilyWakeChannelCreate,
+) -> WakeChannelStatus:
+    _agent, connector = _owned_agent_connector(session, user=user, agent_id=agent_id)
+    if connector is not None and connector.connector_type == "feishu_aily":
+        raise WakeChannelAccessDeniedError
+    result = _save_channel(
+        session,
+        settings,
+        user=user,
+        agent_id=agent_id,
+        connector=None,
+        channel_type="feishu_notification_webhook",
+        payload=payload,
+    )
+    session.commit()
+    return result
 
 
 def disable_wake_channel(
     session: Session, settings: Settings, *, user: HumanUser, agent_id: UUID
 ) -> None:
-    _, connector = _owned_feishu_connector(session, user=user, agent_id=agent_id)
+    _, connector = _owned_agent_connector(session, user=user, agent_id=agent_id)
     channel = session.scalar(select(AgentWakeChannel).where(AgentWakeChannel.agent_id == agent_id))
     if channel is None or channel.status == "disabled":
         raise WakeChannelNotFoundError
     channel.status = "disabled"
     channel.updated_at = utc_now()
-    connector.wake_capability = "manual"
-    connector.task_listener_status = "stopped"
-    connector.task_listener_last_heartbeat_at = utc_now()
+    if channel.channel_type == "feishu_aily_webhook" and connector is not None:
+        connector.wake_capability = "manual"
+        connector.task_listener_status = "stopped"
+        connector.task_listener_last_heartbeat_at = utc_now()
     for delivery in session.scalars(
         select(AgentWakeDelivery).where(
             AgentWakeDelivery.channel_id == channel.id,
@@ -298,7 +354,17 @@ def send_webhook(endpoint: str, token: str, payload: dict[str, str]) -> None:
         raise WakeDeliveryError(f"WAKE_HTTP_{response.status_code}")
 
 
-def _payload(delivery: AgentWakeDelivery) -> dict[str, str]:
+def _payload(delivery: AgentWakeDelivery, channel: AgentWakeChannel) -> dict[str, str]:
+    if channel.channel_type == "feishu_notification_webhook":
+        return {
+            "schema": "agentpost.feishu.notification.v1",
+            "event_id": str(delivery.id),
+            "task_id": str(delivery.task_id),
+            "assignment_id": str(delivery.assignment_id),
+            "run_id": str(delivery.run_id),
+            "agent_id": str(delivery.agent_id),
+            "action": "task_assignment_notification",
+        }
     return {
         "schema": "agentpost.feishu_aily.wake.v1",
         "event_id": str(delivery.id),
@@ -311,7 +377,7 @@ def _payload(delivery: AgentWakeDelivery) -> dict[str, str]:
 
 def _record_channel_success(
     channel: AgentWakeChannel,
-    connector: ConnectorInstance,
+    connector: ConnectorInstance | None,
     *,
     tested: bool = False,
 ) -> None:
@@ -322,10 +388,11 @@ def _record_channel_success(
     channel.last_success_at = now
     channel.last_error_code = None
     channel.updated_at = now
-    connector.task_listener_status = "listening"
-    connector.task_listener_session_id = "feishu-aily-webhook"
-    connector.task_listener_last_heartbeat_at = now
-    connector.wake_capability = "automatic"
+    if channel.channel_type == "feishu_aily_webhook" and connector is not None:
+        connector.task_listener_status = "listening"
+        connector.task_listener_session_id = "feishu-aily-webhook"
+        connector.task_listener_last_heartbeat_at = now
+        connector.wake_capability = "automatic"
 
 
 def test_wake_channel(
@@ -336,7 +403,7 @@ def test_wake_channel(
     agent_id: UUID,
     sender: WakeSender = send_webhook,
 ) -> None:
-    _, connector = _owned_feishu_connector(session, user=user, agent_id=agent_id)
+    _, connector = _owned_agent_connector(session, user=user, agent_id=agent_id)
     channel = session.scalar(
         select(AgentWakeChannel).where(
             AgentWakeChannel.agent_id == agent_id,
@@ -362,12 +429,20 @@ def test_wake_channel(
             endpoint,
             token,
             {
-                "schema": "agentpost.feishu_aily.wake.v1",
+                "schema": (
+                    "agentpost.feishu_aily.wake.v1"
+                    if channel.channel_type == "feishu_aily_webhook"
+                    else "agentpost.feishu.notification.v1"
+                ),
                 "event_id": str(test_id),
                 "task_id": str(test_id),
                 "assignment_id": str(test_id),
                 "run_id": str(test_id),
-                "action": "verify_agentpost_wake_channel",
+                "action": (
+                    "verify_agentpost_wake_channel"
+                    if channel.channel_type == "feishu_aily_webhook"
+                    else "verify_feishu_notification_channel"
+                ),
             },
         )
     except WakeDeliveryError as exc:
@@ -375,9 +450,10 @@ def test_wake_channel(
         channel.last_tested_at = utc_now()
         channel.last_error_code = exc.code
         channel.updated_at = utc_now()
-        connector.wake_capability = "automatic"
-        connector.task_listener_status = "error"
-        connector.task_listener_last_heartbeat_at = utc_now()
+        if channel.channel_type == "feishu_aily_webhook" and connector is not None:
+            connector.wake_capability = "automatic"
+            connector.task_listener_status = "error"
+            connector.task_listener_last_heartbeat_at = utc_now()
         session.commit()
         raise
     _record_channel_success(channel, connector, tested=True)
@@ -408,9 +484,15 @@ def dispatch_pending_wakes(
     for delivery in rows:
         channel = session.get(AgentWakeChannel, delivery.channel_id)
         connector = (
-            session.get(ConnectorInstance, channel.connector_instance_id) if channel else None
+            session.get(ConnectorInstance, channel.connector_instance_id)
+            if channel is not None and channel.connector_instance_id is not None
+            else None
         )
-        if channel is None or channel.status == "disabled" or connector is None:
+        if (
+            channel is None
+            or channel.status == "disabled"
+            or (channel.channel_type == "feishu_aily_webhook" and connector is None)
+        ):
             delivery.status = "cancelled"
             continue
         run = session.get(AgentRun, delivery.run_id)
@@ -437,7 +519,7 @@ def dispatch_pending_wakes(
             channel.encrypted_bearer_token, settings.human_mfa_encryption_key
         )
         try:
-            sender(endpoint, token, _payload(delivery))
+            sender(endpoint, token, _payload(delivery, channel))
         except WakeDeliveryError as exc:
             delivery.last_error_code = exc.code
             if delivery.attempts >= settings.wake_dispatch_max_attempts:

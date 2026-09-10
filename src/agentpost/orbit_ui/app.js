@@ -189,6 +189,7 @@ const elements = {
   taskFileUploader: document.querySelector("#task-file-uploader"),
   taskFileType: document.querySelector("#task-file-type"),
   taskFileMine: document.querySelector("#task-file-mine"),
+  taskFileClear: document.querySelector("#task-file-clear"),
   taskFileList: document.querySelector("#task-file-list"),
   taskOwnerControls: document.querySelector("#task-owner-controls"),
   taskAssignmentForm: document.querySelector("#task-assignment-form"),
@@ -271,6 +272,8 @@ const elements = {
   agentDetailSummary: document.querySelector("#agent-detail-summary"),
   agentCurrentConnection: document.querySelector("#agent-current-connection"),
   agentWakeChannel: document.querySelector("#agent-wake-channel"),
+  agentWakeTag: document.querySelector("#agent-wake-tag"),
+  agentWakeTitle: document.querySelector("#agent-wake-title"),
   agentWakeStatus: document.querySelector("#agent-wake-status"),
   agentWakeCopy: document.querySelector("#agent-wake-copy"),
   agentWakeForm: document.querySelector("#agent-wake-form"),
@@ -280,6 +283,7 @@ const elements = {
   agentWakeTest: document.querySelector("#agent-wake-test"),
   agentWakeDisable: document.querySelector("#agent-wake-disable"),
   agentWakeResult: document.querySelector("#agent-wake-result"),
+  agentWakeSecurity: document.querySelector("#agent-wake-security"),
   agentDetailCapabilities: document.querySelector("#agent-detail-capabilities"),
   agentDetailAccess: document.querySelector("#agent-detail-access"),
   agentConnectionHistory: document.querySelector("#agent-connection-history"),
@@ -1328,7 +1332,6 @@ async function openTaskFileSource(activityId) {
 
 function renderTaskFiles(project) {
   const allFiles = state.taskFiles || [];
-  elements.taskFileCount.textContent = String(allFiles.length);
   const previousUploader = state.taskFileUploader;
   const previousType = state.taskFileType;
   const uploaders = [...new Map(allFiles.map((file) => [
@@ -1353,6 +1356,13 @@ function renderTaskFiles(project) {
       && (!state.taskFileType || taskFileTypeLabel(file.content_type) === state.taskFileType)
       && (!state.taskFileMine || String(file.uploader_human_user_id) === currentHumanId);
   });
+  const filtersActive = Boolean(
+    state.taskFileQuery || state.taskFileUploader || state.taskFileType || state.taskFileMine,
+  );
+  elements.taskFileCount.textContent = filtersActive
+    ? `匹配 ${files.length} / 共 ${allFiles.length}`
+    : String(allFiles.length);
+  elements.taskFileClear.hidden = !filtersActive;
   elements.taskFileList.replaceChildren();
   if (!allFiles.length) {
     elements.taskFileList.append(emptyState("这个任务还没有已关联的文件。"));
@@ -3494,7 +3504,11 @@ function agentAvailabilityCopy(agent) {
     working: "已有任务 Run 正在执行，进度以任务页的运行记录为准",
     recovering: "AgentPost 正在尝试恢复任务执行",
     needs_attention: agent.connection_state === "connected"
-      ? "连接可以通信，但没有检测到任务监听；新工作会继续排队，不会误报为已执行"
+      ? agent.current_task_listener_status === "listening"
+        ? `平台曾收到任务监听上报，但最近证据已过期（${dateText(agent.current_task_listener_last_heartbeat_at)}）；请重新连接或重启任务监听。`
+        : agent.current_task_listener_status === "stopped"
+          ? "连接可以通信，任务监听已明确停止；新工作会继续排队。"
+          : "连接可以通信，但平台尚未收到任务监听上报；本机存在轮询进程也不能代替服务端心跳证据。"
       : agentConnectionCopy(agent),
   };
   return copies[agent.work_availability] || "暂时没有足够证据判断是否能接任务";
@@ -3645,8 +3659,8 @@ function renderCurrentAgentConnection(agent) {
     ["初始连接时间", dateText(agent.current_connector_activated_at)],
     ["最近连接时间", dateText(agent.current_connector_last_heartbeat_at)],
     ["健康证据", statusLabel(agent.current_connector_health || "unknown")],
-    ["任务监听", statusLabel(agent.current_task_listener_status || "unknown")],
-    ["最近监听确认", dateText(agent.current_task_listener_last_heartbeat_at)],
+    ["平台收到的任务监听", statusLabel(agent.current_task_listener_status || "unknown")],
+    ["平台最近收到监听上报", dateText(agent.current_task_listener_last_heartbeat_at)],
     ["唤醒方式", ({ automatic: "AgentPost 可自动唤醒", manual: "需先手动启动监听", unsupported: "当前宿主不支持" })[agent.current_wake_capability] || "未上报"],
   ].forEach(([label, value]) => facts.append(detailFact(label, value)));
   const technical = document.createElement("details");
@@ -3660,21 +3674,31 @@ function renderCurrentAgentConnection(agent) {
 }
 
 function renderAgentWakeChannel(agent, channel = null) {
-  const supported = agent.role === "owner" && agent.current_connector_type === "feishu_aily";
+  const supported = agent.role === "owner";
   elements.agentWakeChannel.hidden = !supported;
   if (!supported) return;
+  const isAily = agent.current_connector_type === "feishu_aily";
   const configured = Boolean(channel);
   const labels = {
     configured: "等待测试",
-    active: "自动唤醒已启用",
+    active: isAily ? "自动唤醒已启用" : "飞书提醒已启用",
     error: "需要处理",
   };
   const status = channel?.status || "awaiting_agent";
   elements.agentWakeStatus.className = `data-chip ${status === "active" ? "ready" : status === "error" ? "needs_attention" : "awaiting_agent"}`;
   elements.agentWakeStatus.textContent = labels[status] || "尚未配置";
+  elements.agentWakeTag.textContent = isAily ? "飞书 aily · 自动接任务" : "Human 通知 · 飞书 Webhook";
+  elements.agentWakeTitle.textContent = isAily ? "任务唤醒" : "飞书消息提醒";
   elements.agentWakeCopy.textContent = configured
     ? `已保存 ${safeText(channel.endpoint_host)} 的加密配置。待发送：${Number(channel.pending_deliveries || 0)}；最近成功：${dateText(channel.last_success_at)}。重新保存时需要同时输入完整地址和 Token。`
-    : "在飞书 aily 中建立接收 AgentPost 唤醒事件的工作流，再把工作流提供的 HTTPS 地址和 Bearer Token 填到这里。";
+    : isAily
+      ? "在飞书 aily 中建立接收 AgentPost 唤醒事件的工作流，再把工作流提供的 HTTPS 地址和 Bearer Token 填到这里。"
+      : "在飞书自动化中建立 Webhook 触发器和“发送飞书消息”动作，再保存 HTTPS 地址与 Token。这里仅提醒你有新工作，不代表这个 Agent 已启动或开始执行。";
+  elements.agentWakeTest.textContent = isAily ? "发送测试唤醒" : "发送测试提醒";
+  elements.agentWakeDisable.textContent = isAily ? "停用自动唤醒" : "停用飞书提醒";
+  elements.agentWakeSecurity.textContent = isAily
+    ? "地址和 Token 加密保存，页面不会再次显示；唤醒事件只含任务、工单和 Run ID，任务正文仍由 aily 通过授权后的 AgentPost MCP 读取。"
+    : "地址和 Token 加密保存，页面不会再次显示；提醒只含任务、工单、Run 和目标 Agent ID，不授予飞书读取任务正文或代替 Agent 执行的权限。";
   elements.agentWakeTest.disabled = !configured;
   elements.agentWakeDisable.disabled = !configured;
   elements.agentWakeUrl.value = "";
@@ -3687,7 +3711,7 @@ function renderAgentWakeChannel(agent, channel = null) {
 
 async function loadAgentWakeChannel(agent) {
   renderAgentWakeChannel(agent);
-  if (agent.role !== "owner" || agent.current_connector_type !== "feishu_aily") return;
+  if (agent.role !== "owner") return;
   try {
     const channel = await requestJson(`/api/v1/orbit/agents/${encodeURIComponent(agent.id)}/wake-channel`);
     if (String(state.selectedAgent?.id) === String(agent.id)) renderAgentWakeChannel(agent, channel);
@@ -4183,17 +4207,27 @@ function showPairingGuide(targetAgent = state.pairingTargetAgent, preferredHost 
     : "先选择你正在使用的 Agent。AgentPost 会生成一段接入码，复制到它的普通对话框即可。";
   state.selectedPairingHost = "";
   elements.pairingHostCards.forEach((button) => {
+    const host = button.dataset.connectorType;
+    const unavailable = state.authConfig?.host_connection_modes?.[host] === "unavailable";
     button.classList.remove("selected");
+    button.classList.toggle("unavailable", unavailable);
+    button.disabled = unavailable;
+    button.setAttribute("aria-disabled", String(unavailable));
     button.setAttribute("aria-pressed", "false");
+    const description = button.querySelector("span");
+    if (description?.dataset.defaultCopy) {
+      description.textContent = unavailable ? "暂未开放" : description.dataset.defaultCopy;
+    }
   });
   elements.pairingChatCard.hidden = true;
   elements.pairingChatPrompt.textContent = "";
   elements.pairingCopyResult.textContent = "";
   elements.pairingCopyResult.className = "form-status";
-  if (PAIRING_HOSTS[preferredHost]) {
+  if (PAIRING_HOSTS[preferredHost]
+    && state.authConfig?.host_connection_modes?.[preferredHost] !== "unavailable") {
     selectPairingHost(preferredHost);
   }
-  elements.pairingHostCards[0]?.focus();
+  elements.pairingHostCards.find((button) => !button.disabled)?.focus();
 }
 
 const PAIRING_HOSTS = Object.freeze({
@@ -4286,6 +4320,11 @@ function pairingPrompt(host) {
 function selectPairingHost(host) {
   const selected = PAIRING_HOSTS[host];
   if (!selected) {
+    return;
+  }
+  if (state.authConfig?.host_connection_modes?.[host] === "unavailable") {
+    elements.pairingCopyResult.textContent = `${selected.name} 暂未开放，当前不能生成可执行的接入步骤。`;
+    elements.pairingCopyResult.className = "form-status error";
     return;
   }
   state.selectedPairingHost = host;
@@ -6363,6 +6402,17 @@ elements.taskFileMine.addEventListener("change", () => {
   state.taskFileMine = elements.taskFileMine.checked;
   if (currentTaskForAction()) renderTaskFiles(currentTaskForAction());
 });
+elements.taskFileClear.addEventListener("click", () => {
+  state.taskFileQuery = "";
+  state.taskFileUploader = "";
+  state.taskFileType = "";
+  state.taskFileMine = false;
+  elements.taskFileSearch.value = "";
+  elements.taskFileUploader.value = "";
+  elements.taskFileType.value = "";
+  elements.taskFileMine.checked = false;
+  if (currentTaskForAction()) renderTaskFiles(currentTaskForAction());
+});
 elements.attachmentPreviewClose.addEventListener("click", closeAttachmentPreview);
 elements.attachmentPreviewDone.addEventListener("click", closeAttachmentPreview);
 elements.attachmentPreviewDialog.addEventListener("close", () => {
@@ -6576,12 +6626,22 @@ elements.agentDelete.addEventListener("click", () => {
 elements.agentWakeForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const agent = state.selectedAgent;
-  if (!agent || agent.role !== "owner" || agent.current_connector_type !== "feishu_aily") return;
+  if (!agent || agent.role !== "owner") {
+    elements.agentWakeResult.textContent = "当前 Agent 不存在或你没有配置权限。";
+    elements.agentWakeResult.className = "form-status error";
+    return;
+  }
+  const isAily = agent.current_connector_type === "feishu_aily";
   elements.agentWakeSave.disabled = true;
-  elements.agentWakeResult.textContent = "正在加密保存自动唤醒配置…";
+  elements.agentWakeResult.textContent = isAily
+    ? "正在加密保存自动唤醒配置…"
+    : "正在加密保存飞书消息提醒…";
   elements.agentWakeResult.className = "form-status";
   try {
-    const channel = await requestJson(`/api/v1/orbit/agents/${encodeURIComponent(agent.id)}/wake-channel/feishu-aily`, {
+    const endpoint = isAily
+      ? `/api/v1/orbit/agents/${encodeURIComponent(agent.id)}/wake-channel/feishu-aily`
+      : `/api/v1/orbit/agents/${encodeURIComponent(agent.id)}/notification-channel/feishu`;
+    const channel = await requestJson(endpoint, {
       method: "PUT",
       headers: { "Content-Type": "application/json", "X-CSRF-Token": state.csrfToken },
       body: JSON.stringify({
@@ -6590,7 +6650,9 @@ elements.agentWakeForm.addEventListener("submit", async (event) => {
       }),
     });
     renderAgentWakeChannel(agent, channel);
-    elements.agentWakeResult.textContent = "配置已保存。请发送一次测试唤醒，确认 aily 工作流可以接收。";
+    elements.agentWakeResult.textContent = isAily
+      ? "配置已保存。请发送一次测试唤醒，确认 aily 工作流可以接收。"
+      : "配置已保存。请发送一次测试提醒，并在飞书工作流记录中核对是否收到。";
   } catch (error) {
     elements.agentWakeToken.value = "";
     elements.agentWakeResult.textContent = error.message;
@@ -6603,7 +6665,8 @@ elements.agentWakeTest.addEventListener("click", async () => {
   const agent = state.selectedAgent;
   if (!agent || agent.role !== "owner") return;
   elements.agentWakeTest.disabled = true;
-  elements.agentWakeResult.textContent = "正在发送测试唤醒…";
+  const isAily = agent.current_connector_type === "feishu_aily";
+  elements.agentWakeResult.textContent = isAily ? "正在发送测试唤醒…" : "正在发送测试提醒…";
   elements.agentWakeResult.className = "form-status";
   try {
     const result = await requestJson(`/api/v1/orbit/agents/${encodeURIComponent(agent.id)}/wake-channel/test`, {
@@ -6612,7 +6675,9 @@ elements.agentWakeTest.addEventListener("click", async () => {
     });
     await loadAgentWakeChannel(agent);
     elements.agentWakeResult.textContent = result.delivered
-      ? "测试成功。这个 aily 现在可以由 AgentPost 自动唤醒。"
+      ? isAily
+        ? "测试成功。这个 aily 现在可以由 AgentPost 自动唤醒。"
+        : "测试已送达飞书工作流。请继续确认指定接收人确实收到消息；这不代表 Agent 已开始执行。"
       : `测试失败：${safeText(result.error_code, "请检查工作流地址和 Token")}`;
     elements.agentWakeResult.className = result.delivered ? "form-status success" : "form-status error";
   } catch (error) {
@@ -6633,7 +6698,9 @@ elements.agentWakeDisable.addEventListener("click", async () => {
       headers: { "X-CSRF-Token": state.csrfToken },
     });
     renderAgentWakeChannel(agent);
-    elements.agentWakeResult.textContent = "自动唤醒已停用。aily 的 AgentPost 身份和历史任务仍保留。";
+    elements.agentWakeResult.textContent = agent.current_connector_type === "feishu_aily"
+      ? "自动唤醒已停用。aily 的 AgentPost 身份和历史任务仍保留。"
+      : "飞书消息提醒已停用。Agent 的连接、任务权限和历史记录不受影响。";
     elements.agentWakeResult.className = "form-status success";
   } catch (error) {
     elements.agentWakeResult.textContent = error.message;

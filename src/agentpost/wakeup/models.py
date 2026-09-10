@@ -24,7 +24,7 @@ class AgentWakeChannel(Base):
     __table_args__ = (
         UniqueConstraint("agent_id", name="uq_agent_wake_channels_agent"),
         CheckConstraint(
-            "channel_type IN ('feishu_aily_webhook')",
+            "channel_type IN ('feishu_aily_webhook', 'feishu_notification_webhook')",
             name="ck_agent_wake_channels_type",
         ),
         CheckConstraint(
@@ -40,10 +40,10 @@ class AgentWakeChannel(Base):
     human_user_id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("human_users.id", ondelete="CASCADE"), nullable=False
     )
-    connector_instance_id: Mapped[UUID] = mapped_column(
+    connector_instance_id: Mapped[UUID | None] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("connector_instances.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
     )
     channel_type: Mapped[str] = mapped_column(String(40), nullable=False)
     encrypted_endpoint: Mapped[str] = mapped_column(Text, nullable=False)

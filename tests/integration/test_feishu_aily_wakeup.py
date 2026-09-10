@@ -17,6 +17,7 @@ from agentpost.wakeup.schemas import FeishuAilyWakeChannelCreate
 from agentpost.wakeup.service import (
     WakeChannelInvalidEndpointError,
     WakeDeliveryError,
+    configure_feishu_notification_channel,
     configure_wake_channel,
     disable_wake_channel,
     dispatch_pending_wakes,
@@ -68,6 +69,39 @@ def _seed_feishu_agent(database: Database) -> tuple[HumanUser, Agent, ConnectorI
         session.refresh(user)
         session.refresh(agent)
         session.refresh(connector)
+        session.expunge_all()
+        return user, agent, connector
+
+
+def _seed_codex_agent(database: Database) -> tuple[HumanUser, Agent, ConnectorInstance]:
+    with database.session_factory() as session:
+        user = HumanUser(
+            email=f"notify-{uuid4()}@example.com",
+            username=f"notify-{uuid4().hex[:8]}",
+            display_name="Notification Owner",
+        )
+        agent = Agent(
+            address=f"codex-{uuid4().hex[:8]}@agents.local",
+            display_name="Owner Codex",
+            domain="agents.local",
+            capabilities=["task-collaboration"],
+        )
+        session.add_all([user, agent])
+        session.flush()
+        connector = ConnectorInstance(
+            connector_id=f"con_{uuid4().hex}",
+            agent_id=agent.id,
+            human_user_id=user.id,
+            connector_type="codex",
+            display_name="Codex",
+            status="active",
+            task_listener_status=None,
+            wake_capability="manual",
+        )
+        session.add_all([AgentOwnership(agent_id=agent.id, human_user_id=user.id), connector])
+        session.flush()
+        session.add(AgentConnectorBinding(agent_id=agent.id, connector_instance_id=connector.id))
+        session.commit()
         session.expunge_all()
         return user, agent, connector
 
@@ -234,6 +268,55 @@ def test_channel_test_and_dispatch_expose_only_ids_and_mark_listener_ready(
         "action": "claim_agentpost_run",
     }
     assert "验证飞书" not in str(payload)
+
+
+def test_human_feishu_notification_is_independent_from_agent_execution(
+    database: Database, settings: Settings
+) -> None:
+    user, agent, connector = _seed_codex_agent(database)
+    task, assignment, run = _seed_queued_run(database, user=user, agent=agent)
+    sent: list[tuple[str, str, dict[str, str]]] = []
+
+    def sender(endpoint: str, token: str, payload: dict[str, str]) -> None:
+        sent.append((endpoint, token, payload))
+
+    with database.session_factory() as session:
+        status = configure_feishu_notification_channel(
+            session,
+            settings,
+            user=session.get(HumanUser, user.id),
+            agent_id=agent.id,
+            payload=_payload("https://aily.feishu.cn/hooks/notify"),
+        )
+        channel = session.scalar(select(AgentWakeChannel))
+        assert status.channel_type == "feishu_notification_webhook"
+        assert channel is not None and channel.connector_instance_id is None
+        verify_wake_channel(
+            session,
+            settings,
+            user=session.get(HumanUser, user.id),
+            agent_id=agent.id,
+            sender=sender,
+        )
+        assert sent[-1][2]["action"] == "verify_feishu_notification_channel"
+        assert dispatch_pending_wakes(session, settings, sender=sender) == 1
+        refreshed_connector = session.get(ConnectorInstance, connector.id)
+        assert refreshed_connector is not None
+        assert refreshed_connector.task_listener_status is None
+        assert refreshed_connector.wake_capability == "manual"
+        delivery = session.scalar(select(AgentWakeDelivery))
+        assert delivery is not None
+        delivery_id = delivery.id
+
+    assert sent[-1][2] == {
+        "schema": "agentpost.feishu.notification.v1",
+        "event_id": str(delivery_id),
+        "task_id": str(task.id),
+        "assignment_id": str(assignment.id),
+        "run_id": str(run.id),
+        "agent_id": str(agent.id),
+        "action": "task_assignment_notification",
+    }
 
 
 def test_task_assignment_creates_wake_outbox_in_the_same_transaction(

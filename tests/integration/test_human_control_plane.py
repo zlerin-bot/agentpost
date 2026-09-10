@@ -630,6 +630,41 @@ def test_feishu_aily_owner_can_store_wake_channel_without_secret_echo(
     assert "this-is-a-secret-token" not in configured.text
 
 
+def test_owned_codex_can_store_feishu_notification_without_becoming_aily(
+    settings: Settings,
+    database: Database,
+) -> None:
+    with _control_client(settings, database) as client:
+        human = _create_human(client, "notify-owner@example.com", "Notification Owner")
+        agent = _create_agent(client, "notify-codex@agents.local", "Owner Codex")
+        _grant(
+            client,
+            human_id=human["user"]["id"],
+            agent_id=agent["agent"]["id"],
+            role="owner",
+        )
+        headers = {"Authorization": f"Bearer {human['access_key']}"}
+        configured = client.put(
+            f"/api/v1/orbit/agents/{agent['agent']['id']}/notification-channel/feishu",
+            headers=headers,
+            json={
+                "webhook_url": "https://aily.feishu.cn/hooks/notify",
+                "bearer_token": "this-is-a-secret-token",
+            },
+        )
+        read_back = client.get(
+            f"/api/v1/orbit/agents/{agent['agent']['id']}/wake-channel",
+            headers=headers,
+        )
+
+    assert configured.status_code == read_back.status_code == 200
+    assert configured.json()["channel_type"] == "feishu_notification_webhook"
+    assert configured.json()["endpoint_host"] == "aily.feishu.cn"
+    assert configured.json() == read_back.json()
+    assert "hooks/notify" not in configured.text
+    assert "this-is-a-secret-token" not in configured.text
+
+
 def test_auth_config_exposes_release_platforms_per_host(
     settings: Settings,
     database: Database,
@@ -1642,7 +1677,9 @@ def test_human_attachment_open_and_html_preview_are_authorized_and_read_only(
     assert markdown_preview.headers["content-type"].startswith("text/html")
     assert "&lt;script&gt;不能执行&lt;/script&gt;" in markdown_preview.text
     assert "<script>不能执行</script>" not in markdown_preview.text
-    assert "只读文字预览" in markdown_preview.text
+    assert "Markdown 安全阅读预览" in markdown_preview.text
+    assert "<h1>测试说明</h1>" in markdown_preview.text
+    assert "<li>直接阅读</li>" in markdown_preview.text
     assert "default-src 'none'" in markdown_preview.headers["content-security-policy"]
     assert json_preview.status_code == 200
     assert "  &quot;status&quot;: &quot;ready&quot;" in json_preview.text

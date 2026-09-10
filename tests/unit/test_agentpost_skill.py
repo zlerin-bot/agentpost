@@ -78,7 +78,7 @@ def test_plugin_packages_the_same_implicit_skill_without_machine_specific_mcp_co
 
     assert manifest["name"] == "agentpost"
     plugin_version, separator, cachebuster = manifest["version"].partition("+")
-    assert plugin_version == "0.1.63"
+    assert plugin_version == "0.1.64"
     assert separator == "+"
     assert cachebuster.startswith("codex.")
     assert manifest["skills"] == "./skills/"
@@ -117,8 +117,8 @@ def test_production_example_connector_artifact_matches_release_version() -> None
         if line.startswith("AGENTPOST_CONNECTOR_") and "=" in line
     )
 
-    assert values["AGENTPOST_CONNECTOR_RELEASE_VERSION"] == "0.1.63"
-    assert values["AGENTPOST_CONNECTOR_WHEEL_URL"].endswith("/agentpost-0.1.63-py3-none-any.whl")
+    assert values["AGENTPOST_CONNECTOR_RELEASE_VERSION"] == "0.1.64"
+    assert values["AGENTPOST_CONNECTOR_WHEEL_URL"].endswith("/agentpost-0.1.64-py3-none-any.whl")
     assert len(values["AGENTPOST_CONNECTOR_WHEEL_SHA256"]) == 64
     int(values["AGENTPOST_CONNECTOR_WHEEL_SHA256"], 16)
     assert "AGENTPOST_FEISHU_AILY_REMOTE_MCP_ENABLED=false" in production_env
@@ -156,7 +156,7 @@ def test_old_system_python_reuses_current_supported_runtime_to_create_venv(
     current_python = current_root / "0.1.57" / "bin" / "python"
     current_python.parent.mkdir(parents=True)
     current_python.touch()
-    destination = current_root / "0.1.63"
+    destination = current_root / "0.1.64"
     calls: list[tuple[str, ...]] = []
 
     def runner(command, **_kwargs):

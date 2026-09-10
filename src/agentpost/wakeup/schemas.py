@@ -21,7 +21,7 @@ class FeishuAilyWakeChannelCreate(WakeModel):
 
 
 class WakeChannelStatus(WakeModel):
-    channel_type: Literal["feishu_aily_webhook"]
+    channel_type: Literal["feishu_aily_webhook", "feishu_notification_webhook"]
     status: Literal["configured", "active", "error", "disabled"]
     endpoint_host: str
     last_tested_at: datetime | None

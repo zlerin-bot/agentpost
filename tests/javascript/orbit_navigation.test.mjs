@@ -363,10 +363,13 @@ test("task files stay discoverable outside collapsed discussions", () => {
   assert.match(html, /id="task-file-uploader"/);
   assert.match(html, /id="task-file-type"/);
   assert.match(html, /只看我上传的/);
+  assert.match(html, /id="task-file-clear"[^>]*hidden>清除全部筛选/);
   assert.match(script, /\/api\/v1\/tasks\/" \+ encodeURIComponent\(projectId\) \+ "\/files"/);
   assert.match(script, /function renderTaskFiles\(/);
   assert.match(script, /查看来源讨论/);
   assert.match(script, /openAttachmentPreview\(attachment\)/);
+  assert.match(script, /`匹配 \$\{files\.length\} \/ 共 \$\{allFiles\.length\}`/);
+  assert.match(script, /elements\.taskFileClear\.addEventListener\("click"/);
   assert.match(stylesheet, /\.task-primary-grid/);
   assert.match(stylesheet, /\.task-file-card/);
   assert.match(stylesheet, /grid-template-columns: repeat\(auto-fit, minmax\(300px, 1fr\)\)/);
@@ -538,7 +541,7 @@ test("new Agent guide offers seven host-specific paths in the product order", ()
   assert.match(script, /Custom MCP 连接和 AgentPost 网页授权直接完成接入/);
   assert.match(script, /hermes: \{ name: "Hermes", code: "AP-HERMES-V1", defaultHandle: "hermes" \}/);
   assert.match(script, /feishu_aily: \{ name: "飞书 aily 智能体", code: "AP-FEISHU-AILY-V1", defaultHandle: "aily" \}/);
-  assert.match(html, /<strong>飞书 aily 智能体<\/strong>\s*<span>云端 MCP 与自动接任务<\/span>/);
+  assert.match(html, /<strong>飞书 aily 智能体<\/strong>\s*<span[^>]*>云端 MCP 与自动接任务<\/span>/);
   assert.match(script, /当前 AgentPost 尚未发布 \$\{selected\.name\} 的安全接入服务/);
   assert.match(script, /使用 \$\{selected\.name\} 内置的 Custom MCP 连接/);
   assert.match(script, /不能改用长期密钥或假装已连接/);
@@ -580,20 +583,30 @@ test("Agent detail keeps current connection, history, access and actions distinc
   assert.match(script, /\/api\/v1\/orbit\/threads\?limit=200&agent_id=/);
 });
 
-test("Feishu aily owners can configure automatic task wake without credential echo", () => {
+test("Feishu webhooks separate Human notifications from Aily task wake", () => {
   assert.match(html, /id="agent-wake-channel"[^>]*hidden/);
   assert.match(html, /飞书 aily · 自动接任务/);
   assert.match(html, /id="agent-wake-url"[^>]*type="url"/);
   assert.match(html, /id="agent-wake-token"[^>]*type="password"[^>]*autocomplete="new-password"/);
   assert.match(html, /地址和 Token 加密保存，页面不会再次显示/);
-  assert.match(script, /agent\.role === "owner" && agent\.current_connector_type === "feishu_aily"/);
+  assert.match(script, /const supported = agent\.role === "owner"/);
   assert.match(script, /\/wake-channel\/feishu-aily/);
+  assert.match(script, /\/notification-channel\/feishu/);
   assert.match(script, /\/wake-channel\/test/);
+  assert.match(script, /仅提醒你有新工作，不代表这个 Agent 已启动或开始执行/);
+  assert.match(script, /当前 Agent 不存在或你没有配置权限/);
   assert.match(script, /elements\.agentWakeUrl\.value = ""/);
   assert.match(script, /elements\.agentWakeToken\.value = ""/);
   assert.doesNotMatch(script, /localStorage\.setItem\([^\n]*(wake|token|webhook)/i);
   assert.match(stylesheet, /\.agent-wake-form\s*\{[^}]*repeat\(2, minmax\(0, 1fr\)\)/s);
   assert.match(stylesheet, /@media \(max-width: 860px\)[\s\S]*\.agent-wake-form\s*\{\s*grid-template-columns: 1fr/);
+  assert.match(stylesheet, /\.agent-wake-channel\[hidden\]\s*\{\s*display: none/);
+});
+
+test("unavailable Agent types stop before copying an unusable connection prompt", () => {
+  assert.match(script, /host_connection_modes\?\.\[host\] === "unavailable"/);
+  assert.match(script, /description\.textContent = unavailable \? "暂未开放"/);
+  assert.match(script, /当前不能生成可执行的接入步骤/);
 });
 
 test("Agent owners can find the short-name action in the detail heading", () => {

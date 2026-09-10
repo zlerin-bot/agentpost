@@ -344,8 +344,8 @@
                 <section id="agent-wake-channel" class="agent-wake-channel" hidden>
                   <div class="agent-wake-heading">
                     <div>
-                      <p class="section-tag">飞书 aily · 自动接任务</p>
-                      <h3>任务唤醒</h3>
+                      <p id="agent-wake-tag" class="section-tag">飞书 aily · 自动接任务</p>
+                      <h3 id="agent-wake-title">任务唤醒</h3>
                     </div>
                     <span id="agent-wake-status" class="data-chip awaiting_agent">尚未配置</span>
                   </div>
@@ -368,7 +368,7 @@
                     </div>
                     <p id="agent-wake-result" class="form-status" aria-live="polite"></p>
                   </form>
-                  <p class="agent-wake-security">地址和 Token 加密保存，页面不会再次显示；唤醒事件只含任务、工单和 Run ID，任务正文仍由 aily 通过授权后的 AgentPost MCP 读取。</p>
+                  <p id="agent-wake-security" class="agent-wake-security">地址和 Token 加密保存，页面不会再次显示；唤醒事件只含任务、工单和 Run ID，任务正文仍由 aily 通过授权后的 AgentPost MCP 读取。</p>
                 </section>
               </section>
               <section class="agent-detail-panel" data-agent-panel="capabilities" hidden>
@@ -530,6 +530,7 @@
                     <label><span>上传人</span><select id="task-file-uploader"><option value="">全部上传人</option></select></label>
                     <label><span>类型</span><select id="task-file-type"><option value="">全部类型</option></select></label>
                     <label class="task-file-mine"><input id="task-file-mine" type="checkbox">只看我上传的</label>
+                    <button id="task-file-clear" type="button" class="quiet-button task-file-clear" hidden>清除全部筛选</button>
                   </div>
                   <div id="task-file-list" class="task-file-list" aria-live="polite"></div>
                 </section>
@@ -963,7 +964,7 @@
             </button>
             <button type="button" class="pairing-host-card" data-connector-type="feishu_aily">
               <strong>飞书 aily 智能体</strong>
-              <span>云端 MCP 与自动接任务</span>
+              <span data-default-copy="云端 MCP 与自动接任务">云端 MCP 与自动接任务</span>
             </button>
           </fieldset>
 
