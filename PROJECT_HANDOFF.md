@@ -2,10 +2,11 @@
 
 ## 当前接续摘要
 
-- 2026-09-10 **0.1.64 飞书通知与反馈修复候选 / local_verified，未部署**：把“飞书 aily 自动执行”和“Human 的飞书消息提醒”拆成两类真实能力。飞书 aily Agent 仍配置自动唤醒；Human 可为自己拥有的 Codex、WorkBuddy、豆包工作等非 aily Agent 配置飞书 Webhook 提醒。提醒载荷只含 task/assignment/run/event/agent ID，明确不代表目标 Agent 已启动、已执行或正在监听；测试成功也不会伪造目标 Agent 的监听与自动唤醒状态。新增 schema `0042_feishu_human_notifications`，通知通道可不绑定 Connector，原 aily 通道约束保持不变。
+- 2026-09-10 当前生产 **0.1.64 / a2f04ef / 0042_feishu_human_notifications / deployed_https_verified**：把“飞书 aily 自动执行”和“Human 的飞书消息提醒”拆成两类真实能力。飞书 aily Agent 仍配置自动唤醒；Human 可为自己拥有的 Codex、WorkBuddy、豆包工作等非 aily Agent 配置飞书 Webhook 提醒。提醒载荷只含 task/assignment/run/event/agent ID，明确不代表目标 Agent 已启动、已执行或正在监听；测试成功也不会伪造目标 Agent 的监听与自动唤醒状态。通知通道可不绑定 Connector，原 aily 通道约束保持不变。
 - 同一候选修复 020 指出的界面问题：`hidden` 的唤醒表单现在具有最高显示优先级，选择 Codex 不再出现 aily 表单或静默提交；未开放的宿主卡立即禁用并标注“暂未开放”。连接详情将服务端最近收到的监听上报与本地进程事实分开表达。任务文件筛选显示“匹配 N / 共 N”并支持一键清空全部筛选；Markdown 以转义后的安全标题、列表、表格与代码块直接阅读，原始 HTML、脚本和网络内容不会执行。
 - 0.1.64 本地证据：514 个非 PostgreSQL 测试通过、2 skipped、7 PostgreSQL deselected；43 项 Orbit JavaScript、8 项 TypeScript Connector、16 项 MCP、4 项 OpenClaw 测试通过；Ruff check/format、JS syntax、TypeScript build 和 diff check 通过。隔离 `http://127.0.0.1:8780` 已实看桌面与 390px：Codex 只显示飞书消息提醒、保存结果有明确反馈，文件匹配/清空和 Markdown 安全阅读通过，页面无横向溢出且控制台 error/warning=0。0.1.64 wheel SHA-256 为 `2c72770354cacedb8b9860dd69ba5a8c3857b9c7fb9f59c92babcc4fac750d3f`。
-- 当前生产仍为下述 **0.1.63 / a874bd7 / deployed_https_verified**。0.1.64 尚未部署、未向“测试任务”发送更新；真实飞书 Webhook 通知、真实 aily OAuth/唤醒、PostgreSQL 0042 迁移、跨设备和 Human 验收待确认，因此不得标记 `production_accepted`。
+- 0.1.64 单包 stage、deploy、postflight 均为 ok；切换 44 秒、后检 1 秒，备份 `/opt/agentpost/backups/20260910-144250-a2f04ef-pre-064`。公网 health/ready 返回 0.1.64，公开 wheel SHA-256 与本地发布物一致，未知 wheel 返回 404。后检 agents=77、messages=399、deliveries=265、attachments=45、humans=16；AgentPost PID=526726，Nginx=362620、PostgreSQL=365086 保持原进程。已登录生产任务页刷新后正常加载。
+- 针对 020、Dylan、张子良反馈的更新与复测清单已回复到“测试任务”中 020 的飞书 Aily 反馈讨论，activity `26b5f29a-bc16-581c-864e-ca2cfab5378f`。发送成功不等于其他成员已读、ACK、完成 Run 或通过 Human 验收。真实飞书 Webhook 通知、真实 aily OAuth/唤醒、跨设备和 Human 验收仍待确认，因此本版不是 `production_accepted`。
 - 2026-09-09 当前生产 **0.1.63 / a874bd7 / 0041_feishu_aily_wake_channels / deployed_https_verified**：单包 stage、deploy、postflight 均为 ok；切换 42 秒、后检 2 秒，备份 `/opt/agentpost/backups/20260909-083408-a874bd7-pre-063`。公网 health/ready 返回 0.1.63，公开 wheel SHA-256 `ac4d8e3ddc33b4e4b72fbdf1d5531355326131f2287cb9c87452b9dea69747f2` 与本地制品一致，未知 wheel 返回 404。后检 agents=76、messages=367、deliveries=243、attachments=37、humans=16；AgentPost PID=503547，Nginx=362620、PostgreSQL=365086 保持原进程。刷新已登录生产页面后，“AI”页可见“飞书 aily 智能体”入口并正常加载。
 - 生产尚未取得真实飞书 aily 工作流地址及其获批域名，因此 `host_setup_platforms.feishu_aily=[]`、`host_connection_modes.feishu_aily=unavailable`、协议 `push_wakeup_available=false`；未启用真实 OAuth/webhook 自动唤醒。真实飞书连接、跨设备及 Human 验收仍待确认，本版不是 `production_accepted`。
 - 2026-09-09 **0.1.63 飞书 aily 接入候选实现与本地证据**：新增独立“飞书 aily 智能体”入口，以宿主绑定的 Remote MCP OAuth 建立 Agent 身份；Human 在 Agent“当前连接”中配置加密的 HTTPS 唤醒地址与 Bearer Token，页面只回显域名。每个新 Agent Run 与业务事务同时写入 durable wake outbox，后台按租约互斥发送、退避重试并在停用后取消待发；唤醒载荷只含 task/assignment/run/event ID，任务正文仍由 aily 使用 OAuth MCP 读取。Connector 状态区分 MCP 连接、手动可用、自动唤醒测试成功和异常，协议合同仅在飞书功能与 dispatcher 同时启用时声明 push wake。生产启用时强制 HTTPS、加密密钥和工作流域名 allowlist。schema 为 `0041_feishu_aily_wake_channels`；server、Python SDK、MCP、TypeScript Connector、OpenClaw、Codex 插件、锁文件和部署示例已统一为 0.1.63。
@@ -97,9 +98,9 @@
 - 0.1.51 发布候选：整合任务页标题/接收方降噪与显式回复串；server/SDK/MCP/OpenClaw/插件/锁文件版本已同步。schema 保持 `0036_cancel_auto_ack_runs`。已获部署授权，按单上传包 Workbench 流程执行，生产切换与后检结果待记录。
 - 本地待发布回复关联切片：Task 消息支持 `reply_to_activity_id`、`referenced_activity_ids`，服务端验证同任务并生成 `discussion_root_activity_id`；无回复参数的旧连接与既有幂等哈希保持兼容，不推断历史关联。Python SDK/MCP/OpenClaw/机器合同同步新增可选参数。Human 可在任务记录直接回复，使用 Human 会话、CSRF、幂等键与真实 Human 身份，写入共享 TaskActivity，不代替 Run/Human 验收；该入口不产生旧 Inbox 投递或唤醒工单，Agent 通过 Task API 读取。页面默认按讨论折叠、可切换时间视图，支持原文定位；附加引用目前由 Agent API 提供，网站回复入口只选择一条直接回复对象。462 项非 PostgreSQL 测试通过、1 沙箱 skip、5 PostgreSQL deselected；35 项导航测试通过，Ruff/format/JS syntax 通过。隔离 Chrome 实测两级 Human 回复、讨论/时间切换、原文定位、390px 无横向溢出与控制台错误。未部署、未修改历史生产消息。
 - 本地待发布 UI 小切片：任务记录接收范围默认折叠为“共享给 N 人”，按 Human ID 去重；展开后查看 Human/AI 与简短状态，兼容投递及未知状态在摘要提示。只调整展示，不改变投递、已读或 Run 状态。前端导航测试 34 项、JS 语法及 diff check 通过；隔离浏览器因本地 Chrome 沙箱启动失败，桌面/390px 交互验证待确认；未部署。
-- 交接阶段：`0.1.55-deployed-https-verified`
-- 本地发布提交与生产：`a7470ba / 0.1.55 / 0037_task_activity_relations`；保留历史版本即时回退点。
-- 当前生产：`a7470ba / 0.1.55 / 0037_task_activity_relations / deployed_https_verified`（2026-09-05 22:08 +08:00 完成后检）。
+- 交接阶段：`0.1.64-deployed-https-verified`
+- 本地发布提交与生产：`a2f04ef / 0.1.64 / 0042_feishu_human_notifications`；保留历史版本即时回退点。
+- 当前生产：`a2f04ef / 0.1.64 / 0042_feishu_human_notifications / deployed_https_verified`（2026-09-10 14:43 +08:00 完成后检）。
 - 生产接受状态：不是 `production_accepted`
 - 本切片：修复旧 Thread 列表/详情混入无 Delivery 的 Task 源消息导致 500；保留当前 Agent 的实际投递视图，并要求 TaskMembership 与 Agent 参与资格均有效。共享完整上下文继续使用 Task API，不恢复无任务私信。
 - OpenAPI 版本使用实际包版本；意外异常返回安全 JSON 和 request_id，不输出异常正文或凭据。心跳显式返回 version_status、原因、推荐与最低版本，未上报保持 unknown；Python SDK 兼容旧响应缺少这些字段。
