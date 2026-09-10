@@ -336,8 +336,11 @@ def test_bootstrap_passes_selected_local_folder_to_manus_setup(tmp_path: Path) -
 
 def test_bootstrap_installs_hash_pinned_release_once_and_resumes_original_send(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     bootstrap = _load_bootstrap()
+    monkeypatch.setattr(bootstrap.Path, "home", classmethod(lambda cls: tmp_path))
+    monkeypatch.delenv("AGENTPOST_PROFILE", raising=False)
     runtime = tmp_path / "runtime"
     state = {"installed": False}
     calls: list[tuple[str, ...]] = []
@@ -383,6 +386,77 @@ def test_bootstrap_installs_hash_pinned_release_once_and_resumes_original_send(
     assert exit_code == 0
     assert calls[-1] == (str(runtime / "bin" / "agentpost-connect"), *operation)
     assert sum("pip" in call for call in calls) == 1
+
+
+def test_bootstrap_reuses_codex_profile_from_active_mcp_config(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bootstrap = _load_bootstrap()
+    monkeypatch.setattr(bootstrap.Path, "home", classmethod(lambda cls: tmp_path))
+    monkeypatch.delenv("AGENTPOST_PROFILE", raising=False)
+    runtime = tmp_path / "runtime"
+    connector = runtime / "bin" / "agentpost-connect"
+    connector.parent.mkdir(parents=True)
+    connector.touch()
+    config = tmp_path / ".codex" / "config.toml"
+    config.parent.mkdir(parents=True)
+    profile = "codex:existing-device:11111111-1111-4111-8111-111111111111"
+    config.write_text(
+        '[mcp_servers.agentpost]\ncommand = "/tmp/agentpost-mcp"\n\n'
+        "[mcp_servers.agentpost.env]\n"
+        f'AGENTPOST_PROFILE = "{profile}"\n',
+        encoding="utf-8",
+    )
+    calls: list[tuple[str, ...]] = []
+
+    def runner(command, **_kwargs):
+        normalized = tuple(str(item) for item in command)
+        calls.append(normalized)
+        if "-I" in normalized:
+            return SimpleNamespace(returncode=0, stdout="0.1.1\n")
+        return SimpleNamespace(returncode=0, stdout="")
+
+    operation = ["send", "--ensure-host", "codex", "--task", "测试任务", "--body", "更新"]
+    assert (
+        bootstrap.execute(
+            operation,
+            fetcher=lambda **_kwargs: _release(bootstrap),
+            runtime=runtime,
+            runner=runner,
+        )
+        == 0
+    )
+    assert calls[-1] == (str(connector), "--profile", profile, *operation)
+
+
+def test_bootstrap_refuses_new_pairing_when_codex_mcp_profile_is_missing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bootstrap = _load_bootstrap()
+    monkeypatch.setattr(bootstrap.Path, "home", classmethod(lambda cls: tmp_path))
+    monkeypatch.delenv("AGENTPOST_PROFILE", raising=False)
+    runtime = tmp_path / "runtime"
+    connector = runtime / "bin" / "agentpost-connect"
+    connector.parent.mkdir(parents=True)
+    connector.touch()
+    config = tmp_path / ".codex" / "config.toml"
+    config.parent.mkdir(parents=True)
+    config.write_text('[mcp_servers.agentpost]\ncommand = "/tmp/agentpost-mcp"\n', encoding="utf-8")
+
+    def runner(command, **_kwargs):
+        if "-I" in command:
+            return SimpleNamespace(returncode=0, stdout="0.1.1\n")
+        return SimpleNamespace(returncode=0, stdout="")
+
+    with pytest.raises(bootstrap.BootstrapError, match="current_profile_unavailable"):
+        bootstrap.execute(
+            ["send", "--ensure-host", "codex", "--task", "测试任务", "--body", "更新"],
+            fetcher=lambda **_kwargs: _release(bootstrap),
+            runtime=runtime,
+            runner=runner,
+        )
 
 
 def test_bootstrap_reports_install_timeout_without_traceback(tmp_path: Path) -> None:

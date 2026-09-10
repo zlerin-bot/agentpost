@@ -149,6 +149,46 @@ def requested_host(argv: Sequence[str]) -> str:
     return host_name
 
 
+def _codex_active_profile(*, home: Path | None = None) -> tuple[bool, str | None]:
+    config = (home or Path.home()) / ".codex" / "config.toml"
+    try:
+        lines = config.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return False, None
+    section = ""
+    agentpost_configured = False
+    for raw_line in lines:
+        line = raw_line.strip()
+        if line.startswith("[") and line.endswith("]"):
+            section = line[1:-1].strip()
+            if section in {"mcp_servers.agentpost", "mcp_servers.agentpost.env"}:
+                agentpost_configured = True
+            continue
+        if section != "mcp_servers.agentpost.env" or not line.startswith("AGENTPOST_PROFILE"):
+            continue
+        key, separator, value = line.partition("=")
+        if not separator or key.strip() != "AGENTPOST_PROFILE":
+            continue
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+            value = value[1:-1]
+        if value and len(value) <= 200:
+            return True, value
+        return True, None
+    return agentpost_configured, None
+
+
+def active_profile(*, host_name: str) -> tuple[bool, str | None]:
+    configured = os.environ.get("AGENTPOST_PROFILE", "").strip()
+    if configured:
+        if len(configured) > 200:
+            raise BootstrapError("current_profile_unavailable")
+        return True, configured
+    if host_name == "codex":
+        return _codex_active_profile()
+    return False, None
+
+
 def runtime_home(*, host_name: str, version: str) -> Path:
     configured = os.environ.get("AGENTPOST_RUNTIME_HOME", "").strip()
     if configured:
@@ -308,7 +348,15 @@ def execute(
     connector_argv = list(argv)
     if connector_argv[:2] == ["setup", "manus"]:
         connector_argv.extend(["--workspace", str((workspace or Path.cwd()).resolve())])
-    completed = runner([str(connector), *connector_argv], check=False)
+    command = [str(connector)]
+    if connector_argv[0] == "send":
+        profile_configured, profile = active_profile(host_name=host_name)
+        if profile_configured and profile is None:
+            raise BootstrapError("current_profile_unavailable")
+        if profile is not None:
+            command.extend(["--profile", profile])
+    command.extend(connector_argv)
+    completed = runner(command, check=False)
     return completed.returncode
 
 

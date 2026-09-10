@@ -322,7 +322,7 @@ os.chmod(temporary, 0o600)
 os.replace(temporary, path)
 PY
 
-sudo -u agentpost "${venv}/bin/python" - "${env_file}" <<'PY'
+"${venv}/bin/python" - "${env_file}" <<'PY'
 import sys
 from pathlib import Path
 
