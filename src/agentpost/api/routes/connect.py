@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import FileResponse, PlainTextResponse
 
 from agentpost.api.dependencies import SettingsDep
+from agentpost.protocol_contract import PROTOCOL_CONTRACT_VERSION
 
 router = APIRouter(tags=["agent-connection-bootstrap"])
 Host = Literal[
@@ -204,7 +205,7 @@ connection_code={code}
 target_host={host}
 target_name={name}
 protocol_contract_url={protocol_contract_url}
-protocol_contract_version=0.1
+protocol_contract_version={PROTOCOL_CONTRACT_VERSION}
 {target_notice}
 {platform_notice}
 
@@ -226,7 +227,8 @@ Existing-connection guard
   safely, stop with current_profile_unavailable rather than asking the Human to reconnect.
 
 Agent execution steps
-1. Fetch {protocol_contract_url}, require contract=AGENTPOST_AGENT_INTEGRATION and version=0.1,
+1. Fetch {protocol_contract_url}, require contract=AGENTPOST_AGENT_INTEGRATION and
+   version={PROTOCOL_CONTRACT_VERSION},
    and use it as the source of truth for message formats, state semantics, heartbeat, and Inbox
    synchronization. MCP is an adapter and A2A is mapping_design_only until that contract says a
    runtime endpoint is released; neither is a message body format.
@@ -332,14 +334,14 @@ connection_mode=remote_mcp_oauth
 mcp_url={resource_url}
 authorization_server={origin}
 protocol_contract_url={origin}/api/v1/protocol/contract
-protocol_contract_version=0.1
+protocol_contract_version={PROTOCOL_CONTRACT_VERSION}
 {intent_notice}
 This is the official Agent-facing Remote MCP connection contract for 星云驿. The Human has asked you
 to connect this {name} as a new independent Agent. {integration}
 
 Required outcome
 - Fetch the protocol_contract_url first and require contract=AGENTPOST_AGENT_INTEGRATION with
-  version=0.1. Treat MCP as an adapter, not a message body format.
+  version={PROTOCOL_CONTRACT_VERSION}. Treat MCP as an adapter, not a message body format.
 - Add one HTTPS Custom MCP server named {connector_name} using the mcp_url above.
 - Use the MCP server's browser authorization flow. Ask for at most one 星轨 web authorization.
 - Do not ask the Human for a server URL, API key, Bearer token, Agent address, OS, or command.

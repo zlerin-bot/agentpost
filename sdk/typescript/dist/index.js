@@ -1,5 +1,5 @@
 const RUNTIME_CAPABILITIES = ["task_context_read", "task_message_send", "durable_task_run"];
-const RUNTIME_VERSION = "agentpost-connect/0.1.64";
+const RUNTIME_VERSION = "agentpost-connect/0.1.65";
 const RUNTIME_SESSION_STARTED_AT = new Date().toISOString();
 export class AgentPostError extends Error {
     code;

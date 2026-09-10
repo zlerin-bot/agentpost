@@ -36,12 +36,14 @@ public_wheel="/opt/agentpost/public/downloads/${wheel_name}"
 
 [[ "$(readlink -f /opt/agentpost/current)" == "${release}" ]]
 [[ "$(systemctl is-active agentpost)" == "active" ]]
+[[ "$(systemctl is-active agentpost-mcp)" == "active" ]]
 [[ "$(systemctl is-active nginx)" == "active" ]]
 [[ "$(systemctl is-active postgresql)" == "active" ]]
 [[ "$(stat -c '%a:%U:%G' /opt/agentpost/shared/agentpost.env)" == "600:root:root" ]]
 [[ "$(sudo -u postgres psql -d agentpost -Atc 'select version_num from alembic_version')" == "${target_schema}" ]]
 [[ "$(sha256sum "${public_wheel}" | awk '{print $1}')" == "${wheel_sha}" ]]
 [[ "$(systemctl cat agentpost --no-pager | grep -Fc "/opt/agentpost/venvs/${release_id}")" == "2" ]]
+[[ "$(systemctl cat agentpost-mcp --no-pager | grep -Fc "/opt/agentpost/venvs/${release_id}")" == "1" ]]
 nginx -t
 
 expected_health="{\"status\":\"ok\",\"version\":\"${version}\"}"
@@ -50,6 +52,8 @@ expected_ready="{\"status\":\"ready\",\"version\":\"${version}\"}"
 [[ "$(curl -fsS http://127.0.0.1:8000/ready)" == "${expected_ready}" ]]
 [[ "$(curl -fsS https://agentpost.me/health)" == "${expected_health}" ]]
 [[ "$(curl -fsS https://agentpost.me/ready)" == "${expected_ready}" ]]
+[[ "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8001/mcp)" == "401" ]]
+[[ "$(curl -sS -o /dev/null -w '%{http_code}' https://agentpost.me/mcp)" == "401" ]]
 auth_config="$(mktemp)"
 protocol_contract="$(mktemp)"
 public_copy="$(mktemp)"
@@ -69,6 +73,8 @@ published = payload.get("host_setup_platforms", {})
 incorrect = {host: published.get(host) for host in hosts if published.get(host) != expected}
 if incorrect:
     raise SystemExit(f"public host platform contract mismatch: {incorrect}")
+if payload.get("host_connection_modes", {}).get("feishu_aily") != "remote_mcp_oauth":
+    raise SystemExit("public Feishu aily Remote MCP mode is unavailable")
 PY
 curl -fsS https://agentpost.me/api/v1/protocol/contract -o "${protocol_contract}"
 python3 - "${protocol_contract}" <<'PY'
@@ -102,11 +108,14 @@ unknown_status="$(curl -sS -o /dev/null -w '%{http_code}' "https://agentpost.me/
 [[ -s /opt/agentpost/shared/DEPLOYED_AT ]]
 warning_output="$(journalctl -u agentpost --since "$(cat /opt/agentpost/shared/DEPLOYED_AT)" --no-pager -p warning -o cat)"
 [[ -z "${warning_output}" ]]
+mcp_warning_output="$(journalctl -u agentpost-mcp --since "$(cat /opt/agentpost/shared/DEPLOYED_AT)" --no-pager -p warning -o cat)"
+[[ -z "${mcp_warning_output}" ]]
 
 backup="$(cat /opt/agentpost/shared/DEPLOYED_BACKUP)"
 [[ "${backup}" =~ ^/opt/agentpost/backups/[0-9]{8}-[0-9]{6}-[0-9a-f]{7,12}-pre-[0-9]{3}$ ]]
 [[ "$(stat -c '%a:%U:%G' "${backup}")" == "700:root:root" ]]
 [[ "$(stat -c '%a:%U:%G' "${backup}/agentpost.dump")" == "600:root:root" ]]
+[[ "$(cat "${backup}/agentpost-mcp.unit-state")" =~ ^(present|absent)$ ]]
 (cd "${backup}" && sha256sum -c SHA256SUMS.backup)
 bash -n "${backup}/rollback-immediate-${version}.sh"
 
@@ -136,6 +145,7 @@ PY
 
 cat "${current_counts}"
 printf 'agentpost_pid=%s\n' "$(systemctl show -p MainPID --value agentpost)"
+printf 'agentpost_mcp_pid=%s\n' "$(systemctl show -p MainPID --value agentpost-mcp)"
 printf 'nginx_pid=%s\n' "$(systemctl show -p MainPID --value nginx)"
 printf 'postgres_pid=%s\n' "$(pgrep -o postgres)"
 echo "postflight_status=ok release=${version} commit=${release_id} schema=${target_schema} duration_seconds=$(($(date +%s) - postflight_started_epoch))"

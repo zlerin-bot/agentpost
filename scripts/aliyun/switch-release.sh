@@ -53,6 +53,7 @@ release="/opt/agentpost/releases/${release_id}"
 venv="/opt/agentpost/venvs/${release_id}"
 env_file="/opt/agentpost/shared/agentpost.env"
 unit_file="/etc/systemd/system/agentpost.service"
+mcp_unit_file="/etc/systemd/system/agentpost-mcp.service"
 nginx_file="/etc/nginx/sites-available/agentpost"
 public_wheel="/opt/agentpost/public/downloads/${wheel_name}"
 current_release="$(readlink -f /opt/agentpost/current)"
@@ -125,6 +126,12 @@ printf '%s\n' "${prior_version}" > "${backup}/prior-version.txt"
 printf '%s\n' "${prior_schema}" > "${backup}/prior-schema.txt"
 install -o root -g root -m 600 "${env_file}" "${backup}/agentpost.env"
 install -o root -g root -m 644 "${unit_file}" "${backup}/agentpost.service"
+if [[ -f "${mcp_unit_file}" ]]; then
+  install -o root -g root -m 644 "${mcp_unit_file}" "${backup}/agentpost-mcp.service"
+  printf 'present\n' > "${backup}/agentpost-mcp.unit-state"
+else
+  printf 'absent\n' > "${backup}/agentpost-mcp.unit-state"
+fi
 install -o root -g root -m 644 "${nginx_file}" "${backup}/nginx-agentpost"
 install -o root -g root -m 644 "${manifest}" "${backup}/RELEASE_MANIFEST.txt"
 install -o root -g root -m 644 "${sums}" "${backup}/SHA256SUMS.release"
@@ -138,12 +145,15 @@ tar -tzf "${backup}/attachments.tar.gz" > "${backup}/attachments.list"
 sudo -u postgres psql -d agentpost -Atc "select 'agents='||count(*) from agents; select 'messages='||count(*) from messages; select 'deliveries='||count(*) from deliveries; select 'attachments='||count(*) from attachments; select 'humans='||count(*) from human_users;" > "${backup}/row-counts.txt"
 [[ -s "${backup}/agentpost.dump" && -s "${backup}/agentpost.dump.list" ]]
 [[ -s "${backup}/attachments.tar.gz" && -s "${backup}/attachments.list" ]]
-sha256sum "${backup}/agentpost.dump" "${backup}/attachments.tar.gz" "${backup}/agentpost.env" "${backup}/agentpost.service" "${backup}/nginx-agentpost" "${backup}/${prior_wheel_name}" > "${backup}/SHA256SUMS.backup"
+backup_files=("${backup}/agentpost.dump" "${backup}/attachments.tar.gz" "${backup}/agentpost.env" "${backup}/agentpost.service" "${backup}/agentpost-mcp.unit-state" "${backup}/nginx-agentpost" "${backup}/${prior_wheel_name}")
+[[ -f "${backup}/agentpost-mcp.service" ]] && backup_files+=("${backup}/agentpost-mcp.service")
+sha256sum "${backup_files[@]}" > "${backup}/SHA256SUMS.backup"
 
 cat > "${rollback}" <<ROLLBACK
 #!/usr/bin/env bash
 set -Eeuo pipefail
 systemctl stop agentpost
+systemctl stop agentpost-mcp 2>/dev/null || true
 if [[ "\$(sudo -u postgres psql -d agentpost -Atc 'select version_num from alembic_version')" != '${prior_schema}' ]]; then
   database_url="\$(python3 - '/opt/agentpost/shared/agentpost.env' <<'PY'
 import sys
@@ -164,12 +174,20 @@ PY
 fi
 install -o root -g root -m 600 '${backup}/agentpost.env' '/opt/agentpost/shared/agentpost.env'
 install -o root -g root -m 644 '${backup}/agentpost.service' '/etc/systemd/system/agentpost.service'
+if [[ "$(cat '${backup}/agentpost-mcp.unit-state')" == 'present' ]]; then
+  install -o root -g root -m 644 '${backup}/agentpost-mcp.service' '/etc/systemd/system/agentpost-mcp.service'
+else
+  rm -f '/etc/systemd/system/agentpost-mcp.service'
+fi
 install -o root -g root -m 644 '${backup}/nginx-agentpost' '/etc/nginx/sites-available/agentpost'
 ln -sfn '${current_release}' '/opt/agentpost/current.next'
 mv -Tf '/opt/agentpost/current.next' '/opt/agentpost/current'
 systemctl daemon-reload
 nginx -t
 systemctl restart agentpost
+if [[ "$(cat '${backup}/agentpost-mcp.unit-state')" == 'present' ]]; then
+  systemctl restart agentpost-mcp
+fi
 systemctl reload nginx
 health_response=''
 for attempt in {1..30}; do
@@ -193,9 +211,10 @@ if [[ ! -e "${release}" ]]; then
 fi
 if [[ ! -e "${venv}" ]]; then
   python3 -m venv "${venv}"
-  "${venv}/bin/pip" install --disable-pip-version-check "${wheel_artifact}"
+  "${venv}/bin/pip" install --disable-pip-version-check "${wheel_artifact}[mcp]"
 fi
 "${venv}/bin/pip" check
+"${venv}/bin/python" -c "import mcp"
 "${venv}/bin/python" -c "import agentpost, agentpost_sdk, agentpost_mcp; assert {agentpost.__version__, agentpost_sdk.__version__, agentpost_mcp.__version__} == {'${version}'}"
 (cd "${release}" && "${venv}/bin/python" -m alembic -c alembic.ini heads | grep -Fx "${target_schema} (head)")
 install -d -o root -g root -m 755 /opt/agentpost/public/downloads
@@ -245,6 +264,7 @@ step prepare_configuration
 mutated=1
 AGENTPOST_DEPLOY_VERSION="${version}" AGENTPOST_DEPLOY_WHEEL="${wheel_name}" AGENTPOST_DEPLOY_SHA="${wheel_sha}" python3 - "${env_file}" <<'PY'
 import os
+import secrets
 import sys
 from pathlib import Path
 
@@ -260,8 +280,28 @@ updates = {
     "AGENTPOST_OPENCLAW_SETUP_PLATFORMS": "mac,linux,windows",
     "AGENTPOST_HERMES_SETUP_PLATFORMS": "mac,linux,windows",
     "AGENTPOST_MANUS_SETUP_PLATFORMS": "mac,linux,windows",
+    "AGENTPOST_REMOTE_MCP_OAUTH_ENABLED": "true",
+    "AGENTPOST_FEISHU_AILY_REMOTE_MCP_ENABLED": "true",
+    "AGENTPOST_REMOTE_MCP_RESOURCE_URL": "https://agentpost.me/mcp",
+    "AGENTPOST_SERVER": "https://agentpost.me",
+    "AGENTPOST_OAUTH_ISSUER": "https://agentpost.me",
+    "AGENTPOST_MCP_RESOURCE_URL": "https://agentpost.me/mcp",
+    "AGENTPOST_MCP_HOST": "127.0.0.1",
+    "AGENTPOST_MCP_PORT": "8001",
+    "AGENTPOST_MCP_ALLOWED_HOSTS": "agentpost.me",
+    "AGENTPOST_MCP_ALLOWED_ORIGINS": "https://agentpost.me",
 }
 lines = path.read_text().splitlines()
+oauth_pepper_key = "AGENTPOST_OAUTH_TOKEN_PEPPER"
+oauth_pepper_values = [
+    line.split("=", 1)[1].strip().strip("\"'")
+    for line in lines
+    if line.split("=", 1)[0] == oauth_pepper_key
+]
+if len(oauth_pepper_values) > 1:
+    raise SystemExit("duplicate OAuth token pepper")
+if not oauth_pepper_values or oauth_pepper_values[0] == "development-only-oauth-token-pepper":
+    updates[oauth_pepper_key] = secrets.token_urlsafe(48)
 seen = {key: 0 for key in updates}
 result = []
 for line in lines:
@@ -281,6 +321,50 @@ temporary.write_text("\n".join(result) + "\n")
 os.chmod(temporary, 0o600)
 os.replace(temporary, path)
 PY
+
+sudo -u agentpost "${venv}/bin/python" - "${env_file}" <<'PY'
+import sys
+from pathlib import Path
+
+from agentpost.config import Settings
+
+values = {}
+for line in Path(sys.argv[1]).read_text().splitlines():
+    if not line or line.lstrip().startswith("#") or "=" not in line:
+        continue
+    key, value = line.split("=", 1)
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+        value = value[1:-1]
+    if key.startswith("AGENTPOST_"):
+        values[key.removeprefix("AGENTPOST_").lower()] = value
+Settings(**values)
+PY
+
+cat > "${mcp_unit_file}.tmp" <<EOF
+[Unit]
+Description=AgentPost Remote MCP
+After=network-online.target agentpost.service
+Requires=agentpost.service
+
+[Service]
+Type=simple
+User=agentpost
+Group=agentpost
+WorkingDirectory=/opt/agentpost/current
+EnvironmentFile=/opt/agentpost/shared/agentpost.env
+ExecStart=${venv}/bin/agentpost-mcp-http
+Restart=on-failure
+RestartSec=3
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
+EOF
+chown root:root "${mcp_unit_file}.tmp"
+chmod 644 "${mcp_unit_file}.tmp"
+mv -f "${mcp_unit_file}.tmp" "${mcp_unit_file}"
 
 AGENTPOST_DEPLOY_PRIOR="${prior_release_id}" AGENTPOST_DEPLOY_TARGET="${release_id}" python3 - "${unit_file}" <<'PY'
 import os
@@ -315,6 +399,26 @@ location = f'''    location = /downloads/{wheel} {{
     }}
 '''
 marker = "    location /downloads/ { return 404; }"
+remote_mcp = '''    location = /mcp {
+        proxy_pass http://127.0.0.1:8001;
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        proxy_request_buffering off;
+        proxy_read_timeout 300s;
+    }
+
+    location ^~ /mcp/ {
+        proxy_pass http://127.0.0.1:8001;
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        proxy_request_buffering off;
+        proxy_read_timeout 300s;
+    }
+'''
+if remote_mcp not in text:
+    if text.count(marker) != 1:
+        raise SystemExit("unexpected downloads catch-all")
+    text = text.replace(marker, f"{remote_mcp}\n{marker}")
 if location not in text:
     if text.count(marker) != 1:
         raise SystemExit("unexpected downloads catch-all")
@@ -328,6 +432,7 @@ PY
 step switch
 cutover_started_at="$(date --iso-8601=seconds)"
 # Schema 0039 cannot accept writes from the old server. Quiesce before migration.
+systemctl stop agentpost-mcp 2>/dev/null || true
 systemctl stop agentpost
 [[ "$(systemctl show -p MainPID --value agentpost)" == "0" ]]
 # Refresh the recoverable snapshot after the last old writer has stopped.
@@ -335,7 +440,9 @@ sudo -u postgres pg_dump -Fc -d agentpost > "${backup}/agentpost.dump"
 pg_restore --list "${backup}/agentpost.dump" > "${backup}/agentpost.dump.list"
 tar -C /var/lib/agentpost -czf "${backup}/attachments.tar.gz" attachments
 tar -tzf "${backup}/attachments.tar.gz" > "${backup}/attachments.list"
-sha256sum "${backup}/agentpost.dump" "${backup}/attachments.tar.gz" "${backup}/agentpost.env" "${backup}/agentpost.service" "${backup}/nginx-agentpost" "${backup}/${prior_wheel_name}" "${rollback}" > "${backup}/SHA256SUMS.backup"
+backup_files=("${backup}/agentpost.dump" "${backup}/attachments.tar.gz" "${backup}/agentpost.env" "${backup}/agentpost.service" "${backup}/agentpost-mcp.unit-state" "${backup}/nginx-agentpost" "${backup}/${prior_wheel_name}" "${rollback}")
+[[ -f "${backup}/agentpost-mcp.service" ]] && backup_files+=("${backup}/agentpost-mcp.service")
+sha256sum "${backup_files[@]}" > "${backup}/SHA256SUMS.backup"
 (cd "${backup}" && sha256sum -c SHA256SUMS.backup)
 (cd "${release}" && sudo -u agentpost env AGENTPOST_DATABASE_URL="${database_url}" "${venv}/bin/python" -m alembic -c alembic.ini upgrade head)
 ln -sfn "${release}" /opt/agentpost/current.next
@@ -343,6 +450,7 @@ mv -Tf /opt/agentpost/current.next /opt/agentpost/current
 systemctl daemon-reload
 nginx -t
 systemctl restart agentpost
+systemctl enable --now agentpost-mcp
 systemctl reload nginx
 
 step verify_local
@@ -361,6 +469,8 @@ done
 [[ "$(readlink -f /opt/agentpost/current)" == "${release}" ]]
 [[ "$(systemctl is-active nginx)" == "active" ]]
 [[ "$(systemctl is-active postgresql)" == "active" ]]
+[[ "$(systemctl is-active agentpost-mcp)" == "active" ]]
+[[ "$(systemctl show -p MainPID --value agentpost-mcp)" != "0" ]]
 [[ "$(sudo -u postgres psql -d agentpost -Atc 'select version_num from alembic_version')" == "${target_schema}" ]]
 sudo -u postgres psql -d agentpost -Atc "select 'agents='||count(*) from agents; select 'messages='||count(*) from messages; select 'deliveries='||count(*) from deliveries; select 'attachments='||count(*) from attachments; select 'humans='||count(*) from human_users;" > "${backup}/row-counts.after.txt"
 python3 - "${backup}/row-counts.txt" "${backup}/row-counts.after.txt" <<'PY'

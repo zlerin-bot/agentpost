@@ -348,7 +348,7 @@ def test_agent_facing_connection_contract_is_public_pinned_and_host_specific(
         assert f"target_host={host}" in instructions.text
         assert f"target_name={name}" in instructions.text
         assert "protocol_contract_url=" in instructions.text
-        assert "protocol_contract_version=0.1" in instructions.text
+        assert "protocol_contract_version=0.4" in instructions.text
         assert "contract=AGENTPOST_AGENT_INTEGRATION" in instructions.text
         assert "A2A is mapping_design_only" in instructions.text
         assert f"setup {host}" in instructions.text
@@ -415,6 +415,7 @@ def test_manus_connection_contract_keeps_remote_fallback_fail_closed(
     assert instructions.headers["X-AgentPost-Connection-Code"] == "AP-MANUS-V1"
     assert "target_host=manus" in instructions.text
     assert "connection_mode=remote_mcp_oauth" in instructions.text
+    assert "protocol_contract_version=0.4" in instructions.text
     assert (
         "mcp_url=https://agentpost.example/mcp/connect/manus/"
         "new-40000000-0000-0000-0000-000000000001" in instructions.text

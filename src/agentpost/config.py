@@ -457,12 +457,7 @@ class Settings(BaseSettings):
                 self.remote_mcp_resource_url.startswith("https://")
             ):
                 raise ValueError("AGENTPOST_REMOTE_MCP_RESOURCE_URL must use HTTPS in production")
-        if self.feishu_aily_remote_mcp_enabled:
-            if not self.wake_dispatch_enabled:
-                raise ValueError(
-                    "AGENTPOST_WAKE_DISPATCH_ENABLED must be true when Feishu aily is enabled "
-                    "in production"
-                )
+        if self.feishu_aily_remote_mcp_enabled and self.wake_dispatch_enabled:
             if self.human_mfa_encryption_key.get_secret_value() in unsafe:
                 raise ValueError(
                     "AGENTPOST_HUMAN_MFA_ENCRYPTION_KEY must be replaced when Feishu aily "

@@ -198,7 +198,7 @@ def test_doubao_work_connection_mode_requires_its_gate_and_remote_mcp_oauth() ->
     assert local.enabled_host_connection_modes["doubao_work"] == "local_bootstrap"
 
 
-def test_feishu_aily_requires_remote_oauth_and_production_wake_dispatch() -> None:
+def test_feishu_aily_remote_oauth_is_independent_from_optional_wake_dispatch() -> None:
     settings = Settings(
         remote_mcp_oauth_enabled=True,
         feishu_aily_remote_mcp_enabled=True,
@@ -221,8 +221,9 @@ def test_feishu_aily_requires_remote_oauth_and_production_wake_dispatch() -> Non
         "remote_mcp_oauth_enabled": True,
         "feishu_aily_remote_mcp_enabled": True,
     }
-    with pytest.raises(ValidationError, match="WAKE_DISPATCH_ENABLED"):
-        Settings(**production)
+    remote_only = Settings(**production)
+    assert remote_only.enabled_host_connection_modes["feishu_aily"] == "remote_mcp_oauth"
+    assert remote_only.wake_dispatch_enabled is False
     with pytest.raises(ValidationError, match="HUMAN_MFA_ENCRYPTION_KEY"):
         Settings(**production, wake_dispatch_enabled=True)
     with pytest.raises(ValidationError, match="WAKE_ALLOWED_HOSTS"):

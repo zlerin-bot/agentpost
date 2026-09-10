@@ -352,6 +352,17 @@ def send_webhook(endpoint: str, token: str, payload: dict[str, str]) -> None:
         raise WakeDeliveryError("WAKE_REDIRECT_REJECTED")
     if not 200 <= response.status_code < 300:
         raise WakeDeliveryError(f"WAKE_HTTP_{response.status_code}")
+    try:
+        result = response.json()
+    except ValueError as exc:
+        raise WakeDeliveryError("WAKE_INVALID_RESPONSE") from exc
+    if not isinstance(result, dict):
+        raise WakeDeliveryError("WAKE_INVALID_RESPONSE")
+    top_level_code = result.get("status_code", result.get("code"))
+    nested = result.get("data")
+    nested_code = nested.get("code") if isinstance(nested, dict) else None
+    if top_level_code not in {0, "0"} or nested_code not in {None, 0, "0"}:
+        raise WakeDeliveryError("WAKE_BUSINESS_REJECTED")
 
 
 def _payload(delivery: AgentWakeDelivery, channel: AgentWakeChannel) -> dict[str, str]:
