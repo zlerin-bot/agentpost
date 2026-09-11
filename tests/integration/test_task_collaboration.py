@@ -1896,3 +1896,128 @@ def test_cancel_queue_and_result_snapshot_preserve_legacy_contract(
             ).status_code
             == 204
         )
+
+
+def test_briefing_is_bounded_incremental_authorized_and_read_only(settings, database):
+    with TestClient(create_app(settings=_runtime(settings), database=database)) as client:
+        owner = _register(client, "brief-owner")
+        agent = _create_owned_agent(client, human_id=str(owner["user"]["id"]), handle="brief-owner")
+        auth = {"Authorization": f"Bearer {agent['api_key']}"}
+        task = client.post(
+            "/api/v1/agent/tasks",
+            headers={**auth, "Idempotency-Key": "brief-task"},
+            json={"title": "briefing", "goal": "source-backed resume", "expected_output": "report"},
+        ).json()
+        task_id = task["task_id"]
+        url = f"/api/v1/agent/tasks/{task_id}/briefing"
+        activity_ids = []
+        for i in range(5):
+            item = client.post(
+                f"/api/v1/agent/tasks/{task_id}/messages",
+                headers={**auth, "Idempotency-Key": f"brief-msg-{i}"},
+                json={"body": f"{i}:" + "x" * 2000},
+            ).json()
+            activity_ids.append(item["activity_id"])
+        with database.session_factory() as session:
+            before = [
+                (r.id, r.status, r.lease_token_digest) for r in session.scalars(select(AgentRun))
+            ]
+        response = client.get(url, headers=auth, params={"limit": 2})
+        assert response.status_code == 200, response.text
+        data = response.json()
+        assert data["goal"] == "source-backed resume"
+        assert data["viewer"]["agent_id"] == agent["agent"]["id"]
+        assert data["my_work"][0]["next_action"] == "claim_before_execution"
+        assert data["changes"]["earlier_history_omitted"] is True
+        assert [x["activity_id"] for x in data["changes"]["items"]] == activity_ids[-2:]
+        assert all(x["truncated"] and len(x["excerpt"]) == 600 for x in data["changes"]["items"])
+        assert "lease_token" not in response.text
+        end = client.get(
+            url, headers=auth, params={"cursor": data["changes"]["next_cursor"]}
+        ).json()
+        assert end["changes"]["items"] == []
+        page = client.get(url, headers=auth, params={"cursor": activity_ids[0], "limit": 2}).json()
+        assert [x["activity_id"] for x in page["changes"]["items"]] == activity_ids[1:3]
+        assert page["changes"]["has_more"] is True
+        work_end = client.get(
+            url, headers=auth, params={"assignment_cursor": data["next_assignment_cursor"]}
+        ).json()
+        assert work_end["my_work"] == []
+        assert client.get(url, headers=auth, params={"limit": 101}).status_code == 422
+        invalid = "00000000-0000-0000-0000-000000000001"
+        assert client.get(url, headers=auth, params={"cursor": invalid}).status_code == 404
+        assert (
+            client.get(url, headers=auth, params={"assignment_cursor": invalid}).status_code == 404
+        )
+        with database.session_factory() as session:
+            after = [
+                (r.id, r.status, r.lease_token_digest) for r in session.scalars(select(AgentRun))
+            ]
+            assert before == after
+            participant = session.scalar(
+                select(TaskAgentParticipant).where(TaskAgentParticipant.task_id == UUID(task_id))
+            )
+            participant.active = False
+            session.commit()
+        assert client.get(url, headers=auth).status_code == 404
+
+
+def test_briefing_work_pages_exclude_other_agents_and_finished_work(settings, database):
+    with TestClient(create_app(settings=_runtime(settings), database=database)) as client:
+        owner = _register(client, "brief-pages")
+        own = _create_owned_agent(client, human_id=owner["user"]["id"], handle="brief-pages")
+        other = _create_owned_agent(client, human_id=owner["user"]["id"], handle="brief-other")
+        auth = {"Authorization": f"Bearer {own['api_key']}"}
+        task = client.post(
+            "/api/v1/agent/tasks",
+            headers={**auth, "Idempotency-Key": "brief-pages"},
+            json={"title": "pages", "goal": "scope", "expected_output": "proof"},
+        ).json()
+        expected = {task["assignments"][0]["assignment_id"]}
+        with database.session_factory() as session:
+            for agent_id, status in [(own["agent"]["id"], "queued")] * 3 + [
+                (own["agent"]["id"], "completed"),
+                (other["agent"]["id"], "queued"),
+            ]:
+                assignment = TaskAssignment(
+                    task_id=UUID(task["task_id"]),
+                    responsible_human_user_id=UUID(owner["user"]["id"]),
+                    created_by_human_user_id=UUID(owner["user"]["id"]),
+                    assignee_agent_id=UUID(agent_id),
+                    assignment_kind="human_directed",
+                    instruction="test",
+                    expected_output="proof",
+                    status=status,
+                )
+                session.add(assignment)
+                session.flush()
+                session.add(
+                    AgentRun(assignment_id=assignment.id, agent_id=UUID(agent_id), status=status)
+                )
+                if agent_id == own["agent"]["id"] and status == "queued":
+                    expected.add(str(assignment.id))
+            session.commit()
+        cursor = ""
+        seen = []
+        for _ in range(4):
+            page = client.get(
+                f"/api/v1/agent/tasks/{task['task_id']}/briefing",
+                headers=auth,
+                params={"limit": 2, **({"assignment_cursor": cursor} if cursor else {})},
+            ).json()
+            seen.extend(x["assignment_id"] for x in page["my_work"])
+            cursor = page["next_assignment_cursor"]
+            if not page["work_has_more"]:
+                break
+        assert set(seen) == expected
+        assert len(seen) == len(expected)
+        with database.session_factory() as session:
+            membership = session.scalar(
+                select(TaskMembership).where(TaskMembership.task_id == UUID(task["task_id"]))
+            )
+            membership.status = "declined"
+            session.commit()
+        assert (
+            client.get(f"/api/v1/agent/tasks/{task['task_id']}/briefing", headers=auth).status_code
+            == 404
+        )

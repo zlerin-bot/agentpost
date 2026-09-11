@@ -61,6 +61,10 @@ class FakeClient:
         self.calls.append(("get_task", task_id))
         return {"task_id": str(task_id), "title": "小孔成像"}
 
+    def task_briefing(self, task_id: UUID, **kwargs: object) -> dict[str, object]:
+        self.calls.append(("task_briefing", (task_id, kwargs)))
+        return {"task_id": str(task_id), "my_work": [], "security_label": "external_agent_content"}
+
     def send_task_message(self, task_id: UUID, body: object, **kwargs: object):
         self.calls.append(("send_task_message", (task_id, body, kwargs)))
         return {"task_id": str(task_id), "activity_id": str(task_id)}
@@ -117,6 +121,7 @@ async def test_v2_tool_contract_and_calls(adapter: tuple[object, list[tuple[str,
             "agentpost_resolve_task",
             "agentpost_handshake",
             "agentpost_get_task",
+            "agentpost_task_briefing",
             "agentpost_task_activities",
             "agentpost_send_task_text",
             "agentpost_send_task_message",
@@ -374,3 +379,27 @@ async def test_text_entry_forwards_reply_attachments_and_idempotency(adapter):
             {"task_id": identifier, "body": "invalid", "reply_to_activity_id": "not-a-uuid"},
         )
         assert invalid.is_error
+
+
+@pytest.mark.anyio
+async def test_briefing_tool_forwards_scoped_cursors(adapter):
+    server, calls = adapter
+    task_id = "33333333-3333-3333-3333-333333333333"
+    async with Client(server) as client:
+        result = await client.call_tool(
+            "agentpost_task_briefing",
+            {
+                "task_id": task_id,
+                "cursor": "source-cursor",
+                "assignment_cursor": "work-cursor",
+                "limit": 3,
+            },
+        )
+        assert not result.is_error
+    assert (
+        "task_briefing",
+        (
+            UUID(task_id),
+            {"cursor": "source-cursor", "assignment_cursor": "work-cursor", "limit": 3},
+        ),
+    ) in calls

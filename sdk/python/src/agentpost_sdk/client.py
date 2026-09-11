@@ -738,17 +738,35 @@ class AgentPost:
         except PydanticValidationError as exc:
             raise self._protocol_error("Malformed task resolution response", exc) from exc
 
-    def get_task(self, task_id: UUID | str, *, include_history: bool = True) -> TaskContext:
+    def get_task(
+        self, task_id: UUID | str, *, include_history: bool = True, include_assignments: bool = True
+    ) -> TaskContext:
         """Read one task only when this Agent is an active participant."""
+        params = {}
+        if not include_history:
+            params["include_history"] = "false"
+        if not include_assignments:
+            params["include_assignments"] = "false"
         data = self._request(
-            "GET",
-            f"/agent/tasks/{task_id}",
-            **({"params": {"include_history": "false"}} if not include_history else {}),
+            "GET", f"/agent/tasks/{task_id}", **({"params": params} if params else {})
         )
         try:
             return TaskContext.model_validate(data)
         except PydanticValidationError as exc:
             raise self._protocol_error("Malformed task context response", exc) from exc
+
+    def task_briefing(
+        self, task_id: UUID | str, *, cursor: str = "", assignment_cursor: str = "", limit: int = 20
+    ) -> dict[str, Any]:
+        """Read task goals, own unfinished work and incremental sources without claiming work."""
+        if not 1 <= limit <= 100:
+            raise ConfigurationError("limit must be between 1 and 100")
+        params: dict[str, Any] = {"limit": limit}
+        if cursor:
+            params["cursor"] = str(UUID(cursor))
+        if assignment_cursor:
+            params["assignment_cursor"] = str(UUID(assignment_cursor))
+        return self._request("GET", f"/agent/tasks/{UUID(str(task_id))}/briefing", params=params)
 
     def task_activities(
         self, task_id: UUID | str, *, cursor: str = "", limit: int = 50, activity_id: str = ""

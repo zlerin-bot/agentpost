@@ -2,6 +2,11 @@
 
 ## 当前接续摘要
 
+- 2026-09-11 **协作接续切片 local_verified，未部署**：新增 `/api/v1/agent/tasks/{task_id}/briefing`，按当前 Agent 的活跃任务资格返回目标、预期输出、角色、自己的未完成工作及有来源的活动摘要；首次只读最近记录，后续活动游标增量，工作独立分页，每轮重新开始工作分页。来源文本带截断标记，必须读取完整要求并 claim 后才执行；不修改已读、ACK、租约或任务状态。Python SDK/标准 MCP 新增 `task_briefing`，补齐 `get_task(include_assignments=false)`，机器合同和握手补充接续入口，保留旧握手 next_steps。
+- 同一切片将 Human“需要我处理”收敛为本人可回答的问题和负责人验收，显示事项、具体问题与直接操作；普通队列不再冒充 Human 待办。复用既有回答后旧租约失效与 successor Run 入队规则。Chrome 合成数据实测回答后提示消失并重新入队，1470px/390px 均无横向溢出，键盘定位正常，控制台 error/warn=0；移动端 flex 换行造成的新卡溢出已当场修正复核。
+- 证据：完整非 PostgreSQL `531 passed、2 skipped、7 deselected`（随后补充的工作隔离测试另测）；最终受影响 Task/SDK/MCP 回归 **80 passed**、Orbit **44 passed**；Ruff check/format、JS syntax、diff check 通过。PostgreSQL、真实无人值守跨 Human/跨宿主执行、Human 验收未运行。本轮未部署、未发生产通知、未恢复定时任务、未修改宿主连接。
+- 本地演示 `http://127.0.0.1:8781/orbit?module=projects&view=board&task=b61803ed-4307-48a8-9aba-b5f56310bbbc`；合成账号 `resume-reviewer@example.com`，密码 `correct horse battery staple`，启动脚本 `/private/tmp/ap_resume_demo.py`，仅本机测试使用。详细实现及下一步真实双 Human/双 Agent 验收方案见 `docs/COLLABORATION_RESUMPTION_20260911.md`。任务结论确认、Human 接管/重派、自动对话预算及所有宿主无人值守闭环仍为后续切片，不能称为全部完成。
+
 - 2026-09-11 当前生产 **0.1.67 / 6b40ebb / 0042_feishu_human_notifications / deployed_https_verified**：按 Human 决定暂停飞书 Aily 直连路线。“连接新的 Agent”仍保留“飞书 aily 智能体”卡片用于说明产品边界，但卡片禁用并明确显示“暂未开放”，不会生成接入码；前端同时核对固定宿主能力与服务端配置，避免旧配置把入口重新放开。生产 `AGENTPOST_FEISHU_AILY_REMOTE_MCP_ENABLED=false`，公开配置返回 `host_setup_platforms.feishu_aily=[]`、`host_connection_modes.feishu_aily=unavailable`，postflight 将这两项作为强制门禁。通用 Remote MCP/OAuth 适配基础和 Human 飞书通知保留，未继续提供 Aily 长期 Token 或含凭证 URL 等绕过方案。
 - 0.1.67 同时包含 0.1.66 的 Agent 身份连续性修复，以及 Agent 状态与连接设置界面修复：通用异常不再显示红色“需要处理”，详情页“危险操作”改为“连接设置”，CSS `hidden` 冲突已修复。单包 SHA-256 `51b7eeda694ea2b382e9178f479b0ed02ec4dbf34d8d6f117ba6d14133826887`；stage、deploy、postflight 均为 ok，切换 51 秒，备份 `/opt/agentpost/backups/20260911-091840-6b40ebb-pre-067`。公网 health/ready 返回 0.1.67，公开 wheel SHA-256 `5884f2dc94f0239d239ba4b53168933d7bb5010fcfadd8d8345cc3fad4e050e1`，精确下载 200、未知下载 404。后检 agents=78、messages=449、deliveries=301、attachments=45、humans=16；AgentPost PID=542761、MCP PID=542817，Nginx PID=362620、PostgreSQL PID=365086 保持原进程。
 - 0.1.67 生产页面刷新后实看：Agent 列表显示“暂不可接任务”，详情页显示“连接设置”；新建连接窗口的“飞书 aily 智能体”卡片为禁用态“暂未开放”。本地完整非 PostgreSQL 回归 `530 passed、2 skipped、7 deselected`，Python 聚焦 67 项和 JavaScript/TypeScript 51 项通过，Ruff、JS syntax、shell syntax、diff check 通过。真实跨设备和 Human 验收仍待确认，因此不是 `production_accepted`。
@@ -108,7 +113,7 @@
 - 本地待发布回复关联切片：Task 消息支持 `reply_to_activity_id`、`referenced_activity_ids`，服务端验证同任务并生成 `discussion_root_activity_id`；无回复参数的旧连接与既有幂等哈希保持兼容，不推断历史关联。Python SDK/MCP/OpenClaw/机器合同同步新增可选参数。Human 可在任务记录直接回复，使用 Human 会话、CSRF、幂等键与真实 Human 身份，写入共享 TaskActivity，不代替 Run/Human 验收；该入口不产生旧 Inbox 投递或唤醒工单，Agent 通过 Task API 读取。页面默认按讨论折叠、可切换时间视图，支持原文定位；附加引用目前由 Agent API 提供，网站回复入口只选择一条直接回复对象。462 项非 PostgreSQL 测试通过、1 沙箱 skip、5 PostgreSQL deselected；35 项导航测试通过，Ruff/format/JS syntax 通过。隔离 Chrome 实测两级 Human 回复、讨论/时间切换、原文定位、390px 无横向溢出与控制台错误。未部署、未修改历史生产消息。
 - 本地待发布 UI 小切片：任务记录接收范围默认折叠为“共享给 N 人”，按 Human ID 去重；展开后查看 Human/AI 与简短状态，兼容投递及未知状态在摘要提示。只调整展示，不改变投递、已读或 Run 状态。前端导航测试 34 项、JS 语法及 diff check 通过；隔离浏览器因本地 Chrome 沙箱启动失败，桌面/390px 交互验证待确认；未部署。
 - 交接阶段：`0.1.67-deployed-https-verified-feishu-aily-paused`
-- 当前本地候选：无；0.1.67 已部署。
+- 当前本地候选：协作接续切片（2026-09-11），未部署；生产仍为 0.1.67。
 - 当前生产：`6b40ebb / 0.1.67 / 0042_feishu_human_notifications / deployed_https_verified`（2026-09-11 完成后检）；保留历史版本即时回退点。
 - 生产接受状态：不是 `production_accepted`
 - 本切片：修复旧 Thread 列表/详情混入无 Delivery 的 Task 源消息导致 500；保留当前 Agent 的实际投递视图，并要求 TaskMembership 与 Agent 参与资格均有效。共享完整上下文继续使用 Task API，不恢复无任务私信。

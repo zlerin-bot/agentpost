@@ -22,6 +22,7 @@ EXPECTED_TOOLS = {
     "agentpost_resolve_recipient",
     "agentpost_resolve_task",
     "agentpost_get_task",
+    "agentpost_task_briefing",
     "agentpost_task_activities",
     "agentpost_send_task_text",
     "agentpost_send_task_message",

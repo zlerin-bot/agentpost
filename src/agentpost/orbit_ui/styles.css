@@ -6822,3 +6822,10 @@ footer {
   .prototype-browser, .prototype-browser-list { height: auto; max-height: none; overflow: visible; }
   #back-to-top:not([hidden]) { display: block; position: fixed; right: 16px; bottom: calc(86px + env(safe-area-inset-bottom)); z-index: 40; min-width: 44px; min-height: 44px; background: white; border: 1px solid #ccc; border-radius: 22px; box-shadow: 0 2px 12px #0002; }
 }
+
+/* Actionable Human requests use full-width cards on both desktop and mobile. */
+.task-attention { flex-direction: column; flex-wrap: nowrap; align-items: stretch; }
+.task-attention > strong { flex-basis: auto; }
+.task-attention-item { min-width: 0; width: 100%; box-sizing: border-box; padding: 12px; background: #fff; border: 1px solid #dbc68a; border-radius: 10px; overflow-wrap: anywhere; }
+.task-attention-item p { margin: 8px 0 12px; white-space: pre-wrap; }
+.task-attention-item button { max-width: 100%; white-space: normal; }

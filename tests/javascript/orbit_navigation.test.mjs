@@ -753,3 +753,23 @@ test("personal task filters isolate archives and recover deleted tasks", () => {
   assert.match(html, /<div class="prototype-detail-actions">\s*<span id="project-detail-status"[\s\S]*?<button id="project-invite"[\s\S]*?<details class="task-personal-menu"/);
   assert.match(html, /task-personal-help[\s\S]*project-archive[\s\S]*task-open-deleted/);
 });
+
+test("Human actions exclude queued work and disappear after a response", () => {
+  const source = script.slice(script.indexOf("function taskHumanActions("), script.indexOf("function renderTaskAttention("));
+  const actions = new Function("visibleTaskAssignments", "plainTaskExcerpt", "checkpointHumanPrompt",
+    `${source}; return taskHumanActions;`)((p) => p.assignments, (s) => s, (c) => c.question);
+  const project = { owner_human_user_id: "owner", status: "active", assignments: [
+    { assignment_id: "queued", run_status: "queued", responsible_human_user_id: "member" },
+    { assignment_id: "question", run_status: "waiting_human", responsible_human_user_id: "member",
+      instruction: "核对来源", run_checkpoint: { question: "请确认使用哪份材料？" } },
+  ] };
+  assert.equal(actions(project, "stranger").length, 0);
+  assert.equal(actions(project, "owner").length, 1);
+  assert.equal(actions(project, "member")[0].reason, "请确认使用哪份材料？");
+  assert.equal(actions(project, "member")[0].target, "task-work-question");
+  project.assignments[1].run_status = "queued";
+  assert.equal(actions(project, "owner").length, 0);
+  project.status = "awaiting_acceptance";
+  assert.equal(actions(project, "owner")[0].target, "task-review-controls");
+  assert.equal(actions(project, "member").length, 0);
+});

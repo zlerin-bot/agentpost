@@ -1718,6 +1718,8 @@ def agent_handshake(session: Session, *, agent: Agent, limit: int = 50) -> dict:
         "authoritative_source": "task_activities",
         "contract": "/api/v1/protocol/contract",
         "next_steps": ["resolve_task_if_title", "get_task", "task_activities"],
+        "resumption_endpoint": "/api/v1/agent/tasks/{task_id}/briefing",
+        "resumption_tool": "agentpost_task_briefing",
         "automatic_wake": "host_dependent_unverified",
         "security_label": "external_agent_content",
     }
@@ -1748,6 +1750,141 @@ def get_task_for_agent(
         )
         detail.activities_truncated = detail.activity_total > 0
     return detail
+
+
+def get_agent_task_briefing(
+    session: Session,
+    *,
+    agent: Agent,
+    task_id: UUID,
+    cursor: UUID | None = None,
+    assignment_cursor: UUID | None = None,
+    limit: int = 20,
+) -> dict:
+    """Read a bounded resumption snapshot; never claim work or acknowledge activity."""
+    task, _, membership = _task_participation_for_agent(session, agent=agent, task_id=task_id)
+    work_query = select(TaskAssignment).where(
+        TaskAssignment.task_id == task_id,
+        TaskAssignment.assignee_agent_id == agent.id,
+        TaskAssignment.status.not_in(["completed", "cancelled"]),
+        TaskAssignment.assignment_kind.not_in(["task_message", "result_sync"]),
+    )
+    if assignment_cursor is not None:
+        anchor = session.scalar(
+            select(TaskAssignment).where(
+                TaskAssignment.id == assignment_cursor,
+                TaskAssignment.task_id == task_id,
+                TaskAssignment.assignee_agent_id == agent.id,
+            )
+        )
+        if anchor is None:
+            raise TaskNotFoundError
+        work_query = work_query.where(TaskAssignment.id > anchor.id)
+    rows = list(session.scalars(work_query.order_by(TaskAssignment.id).limit(limit + 1)))
+    work = []
+    for assignment in rows[:limit]:
+        run = session.scalar(
+            select(AgentRun)
+            .where(AgentRun.assignment_id == assignment.id)
+            .order_by(AgentRun.attempt.desc())
+            .limit(1)
+        )
+        run_status = run.status if run else None
+        action = "inspect_execution"
+        if task.status != "active":
+            action = "wait_for_task_activation"
+        elif run_status == "queued":
+            action = "claim_before_execution"
+        elif run_status == "waiting_human":
+            action = "wait_for_human_response"
+        work.append(
+            {
+                "assignment_id": assignment.id,
+                "responsible_human_user_id": assignment.responsible_human_user_id,
+                "source_activity_id": assignment.trigger_activity_id,
+                "kind": assignment.assignment_kind,
+                "instruction_excerpt": assignment.instruction[:600],
+                "instruction_truncated": len(assignment.instruction) > 600,
+                "expected_output_excerpt": assignment.expected_output[:400],
+                "expected_output_truncated": len(assignment.expected_output) > 400,
+                "priority": assignment.priority,
+                "due_at": _as_utc(assignment.due_at),
+                "status": assignment.status,
+                "run_id": run.id if run else None,
+                "run_status": run_status,
+                "next_action": action,
+            }
+        )
+    history_omitted = False
+    if cursor is None:
+        recent = list(
+            session.scalars(
+                select(TaskActivity)
+                .where(TaskActivity.task_id == task_id)
+                .order_by(TaskActivity.sequence.desc())
+                .limit(limit + 1)
+            )
+        )
+        if len(recent) > limit:
+            cursor = recent[-1].id
+            history_omitted = True
+    changes = read_agent_activity_page(
+        session, agent=agent, task_id=task_id, cursor=cursor, limit=limit
+    )
+    changes["earlier_history_omitted"] = history_omitted
+    excerpts = []
+    for activity in changes["items"]:
+        metadata = activity.metadata or {}
+        body = metadata.get("body") or metadata.get("summary") or ""
+        text = body if isinstance(body, str) else json.dumps(body, ensure_ascii=False)
+        excerpts.append(
+            {
+                "activity_id": activity.activity_id,
+                "kind": activity.kind,
+                "actor_human_user_id": activity.actor_human_user_id,
+                "actor_agent_id": activity.actor_agent_id,
+                "actor_display_name": activity.actor_display_name,
+                "created_at": activity.created_at,
+                "subject": str(metadata.get("subject") or "")[:200],
+                "excerpt": text[:600],
+                "truncated": len(text) > 600,
+            }
+        )
+    changes["items"] = excerpts
+    # This is a source-backed index, not an AI-generated or Human-approved conclusion.
+    return {
+        "task_id": task.id,
+        "thread_id": task.thread_id,
+        "title": task.title,
+        "goal": task.goal,
+        "expected_output": task.expected_output,
+        "status": task.status,
+        "due_at": _as_utc(task.due_at),
+        "revision": task.revision,
+        "snapshot_at": utc_now(),
+        "owner_human_user_id": task.owner_human_user_id,
+        "viewer": {
+            "agent_id": agent.id,
+            "human_user_id": membership.human_user_id,
+            "membership_status": membership.status,
+            "membership_role": membership.role,
+        },
+        "my_work": work,
+        "work_has_more": len(rows) > limit,
+        "next_assignment_cursor": rows[min(len(rows), limit) - 1].id if rows else assignment_cursor,
+        "changes": changes,
+        "context_kind": "authoritative_task_fields_and_activity_sources",
+        "instructions": [
+            "Follow changes.next_cursor until has_more is false; persist only after processing.",
+            "Follow next_assignment_cursor while work_has_more.",
+            "Restart work pagination each polling cycle to catch newly inserted work.",
+            "Read truncated instructions at source_activity_id or get_task before executing.",
+            "Claim a queued Run before execution; this read grants no lease.",
+            "Shared discussion does not require an automatic reply.",
+            "Agent results are not Human acceptance.",
+        ],
+        "security_label": "external_agent_content",
+    }
 
 
 def read_agent_activity_page(

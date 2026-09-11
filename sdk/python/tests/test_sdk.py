@@ -981,3 +981,30 @@ def test_task_run_result_rejects_new_and_legacy_checkpoint_together() -> None:
                 checkpoint={"new": True},
                 output={"legacy": True},
             )
+
+
+def test_briefing_validates_and_preserves_independent_cursors():
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(
+            200, json={"task_id": TASK_ID, "my_work": [], "changes": {"items": []}}
+        )
+
+    with AgentPost(
+        "http://example.test", "agt_secret", transport=httpx.MockTransport(handler)
+    ) as client:
+        result = client.task_briefing(
+            TASK_ID, cursor=THREAD_ID, assignment_cursor=AGENT_ID, limit=7
+        )
+        assert result["task_id"] == TASK_ID
+        assert requests[0].url.path.endswith(f"/tasks/{TASK_ID}/briefing")
+        assert dict(requests[0].url.params) == {
+            "cursor": THREAD_ID,
+            "assignment_cursor": AGENT_ID,
+            "limit": "7",
+        }
+        with pytest.raises(ConfigurationError):
+            client.task_briefing(TASK_ID, limit=101)
+        assert len(requests) == 1

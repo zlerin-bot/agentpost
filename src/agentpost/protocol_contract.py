@@ -296,6 +296,16 @@ def build_agent_integration_contract(settings: Settings) -> AgentIntegrationCont
             ),
             EndpointContract(
                 method="GET",
+                path="/api/v1/agent/tasks/{task_id}/briefing",
+                purpose=(
+                    "read bounded resumption context: task goal, own unfinished work and source "
+                    "excerpts; first read shows recent activity, supplied cursor reads changes; "
+                    "follow independent activity and work cursors; no lease or read-ACK"
+                ),
+                changes_state=False,
+            ),
+            EndpointContract(
+                method="GET",
                 path="/api/v1/agent/tasks/{task_id}/activities",
                 purpose="read ordered activity pages using an incremental cursor",
                 changes_state=False,

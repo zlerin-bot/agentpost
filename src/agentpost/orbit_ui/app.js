@@ -1250,29 +1250,49 @@ function taskSubmissionBlockers(project) {
   return (project.assignments || []).filter((item) => !["completed", "cancelled"].includes(item.status));
 }
 
+function taskHumanActions(project, userId) {
+  const owner = String(project.owner_human_user_id) === String(userId);
+  const actions = visibleTaskAssignments(project)
+    .filter((item) => item.run_status === "waiting_human"
+      && (owner || String(item.responsible_human_user_id) === String(userId)))
+    .map((item) => ({
+      label: "回答并继续",
+      title: item.assignment_kind === "participant_start"
+        ? `${item.responsible_human_display_name || "参与 AI"} · 参与准备需要你回答`
+        : plainTaskExcerpt(item.instruction, 100) || "AI 等待你的回答",
+      reason: plainTaskExcerpt(checkpointHumanPrompt(item.run_checkpoint), 240),
+      target: `task-work-${item.assignment_id}`,
+    }));
+  if (owner && project.status === "awaiting_acceptance") actions.push({
+    label: "查看并验收", title: "任务成果等待你确认",
+    reason: "查看提交的成果，选择接受或要求修改。", target: "task-review-controls",
+  });
+  return actions;
+}
+
 function renderTaskAttention(project, ownerAccess) {
   const attention = document.querySelector("#task-attention");
   attention.replaceChildren();
   const userId = String(state.dashboard?.user?.id || "");
-  const questions = visibleTaskAssignments(project).filter((item) => item.run_status === "waiting_human"
-    && [project.owner_human_user_id, item.responsible_human_user_id].map(String).includes(userId));
-  const actions = [];
-  questions.forEach((item) => actions.push([`${item.responsible_human_display_name} 的工作需要你回答`, `task-work-${item.assignment_id}`]));
-  if (ownerAccess && project.status === "awaiting_acceptance") actions.push(["任务结果等待你验收", "task-review-controls"]);
-  if (ownerAccess && project.status === "active" && taskSubmissionBlockers(project).length) {
-    actions.push([`提交前待处理：${taskSubmissionBlockers(project).length} 项`, "task-submission-blockers"]);
-  }
+  const actions = taskHumanActions(project, userId);
   attention.hidden = !actions.length;
   const title = document.createElement("strong");
-  title.textContent = "需要我处理";
+  title.textContent = `需要我处理 · ${actions.length} 项`;
   attention.append(title);
-  actions.forEach(([label, target]) => {
+  actions.forEach((action) => {
+    const card = document.createElement("div");
+    card.className = "task-attention-item";
+    const heading = document.createElement("strong");
+    heading.textContent = action.title;
+    const reason = document.createElement("p");
+    reason.textContent = action.reason;
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "text-button";
-    button.textContent = label;
-    button.addEventListener("click", () => showTaskSection(target));
-    attention.append(button);
+    button.className = "quiet-button";
+    button.textContent = action.label;
+    button.addEventListener("click", () => showTaskSection(action.target));
+    card.append(heading, reason, button);
+    attention.append(card);
   });
   const blockers = document.querySelector("#task-submission-blockers");
   blockers.replaceChildren();

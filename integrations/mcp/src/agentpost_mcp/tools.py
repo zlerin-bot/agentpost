@@ -141,15 +141,39 @@ def register_tools(mcp: Any, create_client: ClientFactory) -> None:
         annotations=READ_ONLY,
         structured_output=False,
     )
-    def get_task(task_id: UUID, include_history: bool = True) -> CallToolResult:
+    def get_task(
+        task_id: UUID, include_history: bool = True, include_assignments: bool = True
+    ) -> CallToolResult:
         try:
             with create_client() as client:
                 result = client.get_task(
-                    task_id, **({"include_history": False} if not include_history else {})
+                    task_id,
+                    **({"include_history": False} if not include_history else {}),
+                    **({"include_assignments": False} if not include_assignments else {}),
                 )
             return success(result, external=True)
         except Exception as exc:
             return failure(exc, operation="get_task")
+
+    @mcp.tool(name="agentpost_task_briefing", annotations=READ_ONLY, structured_output=False)
+    def task_briefing(
+        task_id: UUID, cursor: str = "", assignment_cursor: str = "", limit: int = 20
+    ) -> CallToolResult:
+        """Resume a task: read goal, own unfinished work and paginated source activities.
+
+        Follow both cursors until exhausted. This does not claim, read-ACK or wake an Agent.
+        Read source records for full instructions; claim a queued Run before execution.
+        """
+        try:
+            with create_client() as client:
+                return success(
+                    client.task_briefing(
+                        task_id, cursor=cursor, assignment_cursor=assignment_cursor, limit=limit
+                    ),
+                    external=True,
+                )
+        except Exception as exc:
+            return failure(exc, operation="task_briefing")
 
     @mcp.tool(name="agentpost_task_activities", annotations=READ_ONLY, structured_output=False)
     def task_activities(

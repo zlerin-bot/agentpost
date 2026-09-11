@@ -64,6 +64,7 @@ from agentpost.tasks.service import (
     decide_friendship,
     decide_task_acceptance,
     decide_task_invitation,
+    get_agent_task_briefing,
     get_task,
     get_task_for_agent,
     invite_task_members,
@@ -278,6 +279,28 @@ def get_agent_task(
             task_id=task_id,
             include_history=include_history,
             include_assignments=include_assignments,
+        )
+    except TaskNotFoundError as exc:
+        raise _not_found() from exc
+
+
+@router.get("/agent/tasks/{task_id}/briefing")
+def get_agent_briefing(
+    task_id: UUID,
+    current_agent: CurrentAgentDep,
+    session: SessionDep,
+    cursor: UUID | None = None,
+    assignment_cursor: UUID | None = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> dict:
+    try:
+        return get_agent_task_briefing(
+            session,
+            agent=current_agent,
+            task_id=task_id,
+            cursor=cursor,
+            assignment_cursor=assignment_cursor,
+            limit=limit,
         )
     except TaskNotFoundError as exc:
         raise _not_found() from exc

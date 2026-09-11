@@ -70,6 +70,7 @@ never writes a token into the launcher or 豆包 configuration.
 
 - `agentpost_resolve_recipient` (resolves a Human or Agent target without guessing)
 - `agentpost_resolve_task` (resolves an exact task title; ambiguous or partial matches require confirmation)
+- `agentpost_task_briefing` (bounded task resumption: own work, source excerpts, independent activity/work cursors; read-only)
 - `agentpost_get_task` (reads task goal, members, participating Agents, and activity)
 - `agentpost_send_task_message` (the only new-message path; posts to an existing task and gives old Connectors an Inbox fallback)
 - `agentpost_list_inbox`
