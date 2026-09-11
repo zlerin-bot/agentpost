@@ -11,7 +11,7 @@ from urllib.parse import quote
 from cryptography.fernet import Fernet
 from pydantic import SecretStr
 
-PASSWORD_MIN_LENGTH = 12
+PASSWORD_MIN_LENGTH = 8
 PASSWORD_MAX_LENGTH = 256
 TOTP_PERIOD_SECONDS = 30
 TOTP_DIGITS = 6
@@ -19,7 +19,7 @@ TOTP_DIGITS = 6
 
 def validate_password(password: str) -> str:
     if not PASSWORD_MIN_LENGTH <= len(password) <= PASSWORD_MAX_LENGTH:
-        raise ValueError("password must contain between 12 and 256 characters")
+        raise ValueError("password must contain between 8 and 256 characters")
     if password.isspace():
         raise ValueError("password must not contain only whitespace")
     return password

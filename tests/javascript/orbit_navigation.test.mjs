@@ -783,3 +783,12 @@ test("preview type uses filename fallback for generic MD and ZIP uploads", () =>
   assert.equal(classify.taskFileTypeLabel("application/octet-stream", "notes.md.exe"), "其他");
   assert.equal(classify.taskFileTypeLabel("application/pdf", "notes.md"), "PDF");
 });
+
+test("login accepts existing short credentials while new passwords require eight characters", () => {
+  const login = html.match(/<input id="login-password"[^>]*>/)[0];
+  assert.doesNotMatch(login, /minlength=/);
+  assert.match(login, /maxlength="256"/);
+  for (const id of ["register-password", "recovery-password"]) {
+    assert.match(html.match(new RegExp(`<input id="${id}"[^>]*>`))[0], /minlength="8"/);
+  }
+});

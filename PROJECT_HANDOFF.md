@@ -2,6 +2,8 @@
 
 ## 当前接续摘要
 
+- 2026-09-11 **密码规则修正 local_verified，未部署**：登录表单移除最低长度限制，仅验证已有密码；注册/找回密码前后端统一最低 8 位、最高 256 位，保留原哈希验证、限流和 MFA。修复之前本地后端允许 `123456` 但 HTML minlength=12 阻止提交的遗漏。两个本地演示（8781/8782）账号现统一 `demo@example.com`，密码 `123456`；仅这些合成账号使用六位密码。已通过浏览器实际登录 8782；Python 9 项与 Orbit 46 项通过，Ruff/format/diff check 通过。两服务已保留原数据库重载，新启动命令为 `PYTHONPATH=src:sdk/python/src:integrations/mcp/src .venv/bin/python /private/tmp/ap_existing_preview.py 8781`（或 8782）；不要重新运行旧 seed 脚本重建账号。生产密码规则待部署后生效。
+
 - 2026-09-11 **附件预览修复 local_verified，未部署**：前后端统一使用受限扩展名兜底识别，修复 `application/octet-stream` / `text/plain` 上传的 `.md` 被归为“其他”且缺少“查看内容”。文件目录筛选、讨论附件卡与预览弹窗均一致，既有附件无需修改数据库或重新上传。保留已识别的 PDF/HTML/JSON 等类型，不将 `.md.exe` 当 Markdown。
 - 新增 ZIP“查看目录”，只读取归档元数据，显示文件名、未压缩大小和加密标记，最多展示 200 项；不解压、不执行、不读取包内正文。目录名安全转义并沿用 sandbox CSP、Human 鉴权与只读状态边界；损坏 ZIP 给出可理解提示。RAR/7z 和包内文件正文预览未实现。
 - 本轮完整非 PostgreSQL 535 passed、2 skipped、7 deselected；聚焦 Python 25 passed、前端 45 passed，Ruff/format、JS syntax、diff check 通过。Chrome 合成上传（ZIP 与 MD 均用通用 MIME）实际验证文件目录及讨论区的入口、Markdown 标题列表、ZIP 目录、Escape 关闭；390px 弹窗无横向溢出，控制台无 error/warn。隔离演示 `http://127.0.0.1:8782/orbit?module=projects&view=board&task=788a3450-0502-42f2-883c-94613498af43`；合成账号同 8781，脚本 `/private/tmp/ap_attachment_demo.py`。生产未变更。

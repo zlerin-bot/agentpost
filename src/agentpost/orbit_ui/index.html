@@ -77,7 +77,7 @@
             <label for="login-email">邮箱</label>
             <input id="login-email" type="email" autocomplete="email" required placeholder="you@example.com">
             <label for="login-password">密码</label>
-            <input id="login-password" type="password" autocomplete="current-password" required minlength="12">
+            <input id="login-password" type="password" autocomplete="current-password" required maxlength="256">
             <label for="login-mfa">双重验证验证码（已开启时填写）</label>
             <input id="login-mfa" type="text" autocomplete="one-time-code" spellcheck="false" aria-describedby="login-mfa-help" placeholder="6 位验证码或一次性恢复码">
             <p id="login-mfa-help" class="field-help">通常填写认证器 App 中的 6 位验证码；无法使用认证器时，可填写一枚尚未使用的恢复码。</p>
@@ -840,8 +840,8 @@
         <p id="register-username-help" class="field-help">用于让他人准确找到你，例如 020。须为 3–32 位小写字母、数字或单个连字符，注册后全平台唯一。</p>
         <label for="register-name">显示名称</label>
         <input id="register-name" type="text" autocomplete="name" required maxlength="200">
-        <label for="register-password">密码（至少 12 个字符）</label>
-        <input id="register-password" type="password" autocomplete="new-password" required minlength="12" maxlength="256">
+        <label for="register-password">密码（至少 8 个字符）</label>
+        <input id="register-password" type="password" autocomplete="new-password" required minlength="8" maxlength="256">
         <p id="register-result" class="form-status" role="status"></p>
         <div class="dialog-actions"><button id="register-cancel" type="button" class="quiet-button">返回</button><button type="submit" class="approval-submit">完成注册</button></div>
       </form>
@@ -858,8 +858,8 @@
         <button id="recovery-send-code" type="button" class="quiet-button">发送恢复验证码</button>
         <label for="recovery-code">邮箱验证码</label>
         <input id="recovery-code" type="text" inputmode="numeric" autocomplete="one-time-code" required maxlength="8">
-        <label for="recovery-password">新密码</label>
-        <input id="recovery-password" type="password" autocomplete="new-password" required minlength="12" maxlength="256">
+        <label for="recovery-password">新密码（至少 8 个字符）</label>
+        <input id="recovery-password" type="password" autocomplete="new-password" required minlength="8" maxlength="256">
         <label for="recovery-mfa">双重验证验证码或恢复码（已开启时必填）</label>
         <input id="recovery-mfa" type="text" autocomplete="one-time-code" spellcheck="false">
         <p id="recovery-result" class="form-status" role="status"></p>
