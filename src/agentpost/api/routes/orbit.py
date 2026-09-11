@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import html
+import io
 import json
 from collections.abc import Iterator
 from typing import Annotated, BinaryIO
@@ -13,6 +14,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from agentpost.accounts.usernames import HumanUsernameAlreadyRegisteredError
 from agentpost.api.dependencies import SessionDep, SettingsDep
 from agentpost.attachments.models import Attachment
+from agentpost.attachments.preview import preview_content_type, zip_directory
 from agentpost.control.auth import CurrentHumanDep, HumanAccessKeyDep
 from agentpost.control.human_security import (
     HUMAN_CSRF_HEADER,
@@ -189,13 +191,13 @@ def _text_attachment_preview(attachment: Attachment, source: BinaryIO) -> bytes:
         content = source.read().decode("utf-8", errors="replace")
     finally:
         source.close()
-    if attachment.content_type.partition(";")[0].strip().lower() == "application/json":
+    if preview_content_type(attachment.content_type, attachment.filename) == "application/json":
         try:
             content = json.dumps(json.loads(content), ensure_ascii=False, indent=2)
         except json.JSONDecodeError:
             pass
     filename = html.escape(attachment.filename)
-    content_type = attachment.content_type.partition(";")[0].strip().lower()
+    content_type = preview_content_type(attachment.content_type, attachment.filename)
     is_markdown = content_type in {"application/markdown", "text/markdown", "text/x-markdown"}
     safe_content = _safe_markdown_fragment(content) if is_markdown else html.escape(content)
     content_markup = (
@@ -203,7 +205,13 @@ def _text_attachment_preview(attachment: Attachment, source: BinaryIO) -> bytes:
         if is_markdown
         else f"<pre>{safe_content}</pre>"
     )
-    preview_label = "Markdown 安全阅读预览" if is_markdown else "只读文字预览"
+    preview_label = (
+        "压缩包目录预览"
+        if content_type == "application/zip"
+        else "Markdown 安全阅读预览"
+        if is_markdown
+        else "只读文字预览"
+    )
     return f"""<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -772,8 +780,8 @@ def orbit_attachment_preview(
         current_human,
         attachment_id,
     )
-    content_type = attachment.content_type.partition(";")[0].strip().lower()
-    supported_types = {"application/pdf", "text/html", *_TEXT_PREVIEW_TYPES}
+    content_type = preview_content_type(attachment.content_type, attachment.filename)
+    supported_types = {"application/pdf", "text/html", "application/zip", *_TEXT_PREVIEW_TYPES}
     if content_type not in supported_types:
         source.close()
         raise HTTPException(
@@ -783,7 +791,9 @@ def orbit_attachment_preview(
                 "message": "This attachment type does not support an inline preview",
             },
         )
-    if content_type in _TEXT_PREVIEW_TYPES:
+    if content_type == "application/zip":
+        source = io.BytesIO(zip_directory(source).encode("utf-8"))
+    if content_type in _TEXT_PREVIEW_TYPES or content_type == "application/zip":
         preview = _text_attachment_preview(attachment, source)
         return Response(
             content=preview,

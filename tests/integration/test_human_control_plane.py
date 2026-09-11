@@ -1576,8 +1576,20 @@ def test_human_attachment_open_and_html_preview_are_authorized_and_read_only(
         markdown_upload = client.post(
             "/api/v1/attachments",
             headers={"Authorization": f"Bearer {alice['api_key']}"},
-            files={"file": ("notes.md", markdown_bytes, "text/markdown")},
+            files={"file": ("notes.md", markdown_bytes, "application/octet-stream")},
         )
+        import io
+        from zipfile import ZipFile
+
+        zipped = io.BytesIO()
+        with ZipFile(zipped, "w") as archive:
+            archive.writestr("../<script>alert.md", "private member content")
+        zip_upload = client.post(
+            "/api/v1/attachments",
+            headers={"Authorization": f"Bearer {alice['api_key']}"},
+            files={"file": ("bundle.zip", zipped.getvalue(), "application/octet-stream")},
+        )
+        assert zip_upload.status_code == 201
         json_upload = client.post(
             "/api/v1/attachments",
             headers={"Authorization": f"Bearer {alice['api_key']}"},
@@ -1605,6 +1617,7 @@ def test_human_attachment_open_and_html_preview_are_authorized_and_read_only(
                     pdf_upload.json()["id"],
                     html_upload.json()["id"],
                     markdown_upload.json()["id"],
+                    zip_upload.json()["id"],
                     json_upload.json()["id"],
                 ],
             },
@@ -1641,6 +1654,21 @@ def test_human_attachment_open_and_html_preview_are_authorized_and_read_only(
         json_preview = client.get(
             f"/api/v1/orbit/attachments/{json_upload.json()['id']}/preview",
             headers=owner_headers,
+        )
+        zipped_preview = client.get(
+            f"/api/v1/orbit/attachments/{zip_upload.json()['id']}/preview", headers=owner_headers
+        )
+        assert zipped_preview.status_code == 200
+        assert "压缩包目录预览" in zipped_preview.text
+        assert "&lt;script&gt;alert.md" in zipped_preview.text
+        assert "private member content" not in zipped_preview.text
+        assert "sandbox" in zipped_preview.headers["content-security-policy"]
+        assert (
+            client.get(
+                f"/api/v1/orbit/attachments/{zip_upload.json()['id']}/preview",
+                headers={"Authorization": f"Bearer {auditor['access_key']}"},
+            ).status_code
+            == 404
         )
         auditor_preview = client.get(
             f"/api/v1/orbit/attachments/{html_upload.json()['id']}/preview",

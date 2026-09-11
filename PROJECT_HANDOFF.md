@@ -2,6 +2,10 @@
 
 ## 当前接续摘要
 
+- 2026-09-11 **附件预览修复 local_verified，未部署**：前后端统一使用受限扩展名兜底识别，修复 `application/octet-stream` / `text/plain` 上传的 `.md` 被归为“其他”且缺少“查看内容”。文件目录筛选、讨论附件卡与预览弹窗均一致，既有附件无需修改数据库或重新上传。保留已识别的 PDF/HTML/JSON 等类型，不将 `.md.exe` 当 Markdown。
+- 新增 ZIP“查看目录”，只读取归档元数据，显示文件名、未压缩大小和加密标记，最多展示 200 项；不解压、不执行、不读取包内正文。目录名安全转义并沿用 sandbox CSP、Human 鉴权与只读状态边界；损坏 ZIP 给出可理解提示。RAR/7z 和包内文件正文预览未实现。
+- 本轮完整非 PostgreSQL 535 passed、2 skipped、7 deselected；聚焦 Python 25 passed、前端 45 passed，Ruff/format、JS syntax、diff check 通过。Chrome 合成上传（ZIP 与 MD 均用通用 MIME）实际验证文件目录及讨论区的入口、Markdown 标题列表、ZIP 目录、Escape 关闭；390px 弹窗无横向溢出，控制台无 error/warn。隔离演示 `http://127.0.0.1:8782/orbit?module=projects&view=board&task=788a3450-0502-42f2-883c-94613498af43`；合成账号同 8781，脚本 `/private/tmp/ap_attachment_demo.py`。生产未变更。
+
 - 2026-09-11 **协作接续切片 local_verified，未部署**：新增 `/api/v1/agent/tasks/{task_id}/briefing`，按当前 Agent 的活跃任务资格返回目标、预期输出、角色、自己的未完成工作及有来源的活动摘要；首次只读最近记录，后续活动游标增量，工作独立分页，每轮重新开始工作分页。来源文本带截断标记，必须读取完整要求并 claim 后才执行；不修改已读、ACK、租约或任务状态。Python SDK/标准 MCP 新增 `task_briefing`，补齐 `get_task(include_assignments=false)`，机器合同和握手补充接续入口，保留旧握手 next_steps。
 - 同一切片将 Human“需要我处理”收敛为本人可回答的问题和负责人验收，显示事项、具体问题与直接操作；普通队列不再冒充 Human 待办。复用既有回答后旧租约失效与 successor Run 入队规则。Chrome 合成数据实测回答后提示消失并重新入队，1470px/390px 均无横向溢出，键盘定位正常，控制台 error/warn=0；移动端 flex 换行造成的新卡溢出已当场修正复核。
 - 证据：完整非 PostgreSQL `531 passed、2 skipped、7 deselected`（随后补充的工作隔离测试另测）；最终受影响 Task/SDK/MCP 回归 **80 passed**、Orbit **44 passed**；Ruff check/format、JS syntax、diff check 通过。PostgreSQL、真实无人值守跨 Human/跨宿主执行、Human 验收未运行。本轮未部署、未发生产通知、未恢复定时任务、未修改宿主连接。

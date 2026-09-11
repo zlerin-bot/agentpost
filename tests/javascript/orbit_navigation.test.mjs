@@ -773,3 +773,13 @@ test("Human actions exclude queued work and disappear after a response", () => {
   assert.equal(actions(project, "owner")[0].target, "task-review-controls");
   assert.equal(actions(project, "member").length, 0);
 });
+
+test("preview type uses filename fallback for generic MD and ZIP uploads", () => {
+  const source = script.slice(script.indexOf("function attachmentPreviewType("), script.indexOf("async function openTaskFileSource("));
+  const classify = new Function("safeText", `${source}; return { attachmentPreviewType, taskFileTypeLabel };`)((v, fallback) => v || fallback);
+  assert.equal(classify.taskFileTypeLabel("application/octet-stream", "中文.MD"), "Markdown");
+  assert.equal(classify.attachmentPreviewType("text/plain", "notes.md"), "text/markdown");
+  assert.equal(classify.taskFileTypeLabel("application/octet-stream", "bundle.zip"), "ZIP 压缩包");
+  assert.equal(classify.taskFileTypeLabel("application/octet-stream", "notes.md.exe"), "其他");
+  assert.equal(classify.taskFileTypeLabel("application/pdf", "notes.md"), "PDF");
+});

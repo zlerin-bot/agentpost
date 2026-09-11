@@ -1323,12 +1323,25 @@ function renderTaskAttention(project, ownerAccess) {
   });
 }
 
-function taskFileTypeLabel(contentType) {
-  const type = safeText(contentType, "").split(";", 1)[0].trim().toLowerCase();
+function attachmentPreviewType(contentType, filename = "") {
+  const declared = safeText(contentType, "").split(";", 1)[0].trim().toLowerCase();
+  if (declared === "application/x-zip-compressed") return "application/zip";
+  const known = ["text/markdown", "text/x-markdown", "application/markdown", "text/html",
+    "application/json", "application/pdf", "application/zip"];
+  if (known.includes(declared)) return declared;
+  const suffix = String(filename).toLowerCase().match(/\.[^.\/]+$/)?.[0];
+  return ({ ".md": "text/markdown", ".markdown": "text/markdown", ".txt": "text/plain",
+    ".json": "application/json", ".html": "text/html", ".htm": "text/html",
+    ".zip": "application/zip" })[suffix] || declared;
+}
+
+function taskFileTypeLabel(contentType, filename = "") {
+  const type = attachmentPreviewType(contentType, filename);
   if (["text/markdown", "text/x-markdown", "application/markdown"].includes(type)) return "Markdown";
   if (type === "application/json") return "JSON";
   if (type === "text/html") return "HTML";
   if (type === "application/pdf") return "PDF";
+  if (type === "application/zip") return "ZIP 压缩包";
   if (type.startsWith("text/")) return "文本";
   return type ? "其他" : "未知类型";
 }
@@ -1359,7 +1372,7 @@ function renderTaskFiles(project) {
     String(file.uploader_human_user_id || file.uploader_display_name),
     file.uploader_display_name,
   ])).entries()].sort((a, b) => a[1].localeCompare(b[1], "zh-CN"));
-  const types = [...new Set(allFiles.map((file) => taskFileTypeLabel(file.content_type)))].sort();
+  const types = [...new Set(allFiles.map((file) => taskFileTypeLabel(file.content_type, file.filename)))].sort();
   elements.taskFileUploader.replaceChildren(new Option("全部上传人", ""));
   uploaders.forEach(([value, label]) => elements.taskFileUploader.append(new Option(label, value)));
   elements.taskFileUploader.value = previousUploader;
@@ -1374,7 +1387,7 @@ function renderTaskFiles(project) {
     const searchable = `${file.filename} ${file.source_subject || ""}`.toLocaleLowerCase("zh-CN");
     return (!query || searchable.includes(query))
       && (!state.taskFileUploader || uploaderKey === state.taskFileUploader)
-      && (!state.taskFileType || taskFileTypeLabel(file.content_type) === state.taskFileType)
+      && (!state.taskFileType || taskFileTypeLabel(file.content_type, file.filename) === state.taskFileType)
       && (!state.taskFileMine || String(file.uploader_human_user_id) === currentHumanId);
   });
   const filtersActive = Boolean(
@@ -1401,7 +1414,7 @@ function renderTaskFiles(project) {
     title.textContent = safeText(file.filename, "未命名附件");
     const type = document.createElement("span");
     type.className = "data-chip";
-    type.textContent = taskFileTypeLabel(file.content_type);
+    type.textContent = taskFileTypeLabel(file.content_type, file.filename);
     heading.append(title, type);
     const meta = document.createElement("p");
     meta.textContent = `${file.uploader_display_name} · 通过 ${file.uploader_agent_display_name} · ${dateText(file.uploaded_at)} · ${formatFileSize(file.size)}`;
@@ -1411,16 +1424,17 @@ function renderTaskFiles(project) {
     const actions = document.createElement("div");
     actions.className = "task-file-actions";
     const attachment = { ...file, id: file.attachment_id };
-    const normalizedType = safeText(file.content_type, "").split(";", 1)[0].trim().toLowerCase();
+    const normalizedType = attachmentPreviewType(file.content_type, file.filename);
     const previewable = new Set([
-      "application/json", "application/markdown", "application/pdf", "text/html",
+      "application/json", "application/markdown", "application/pdf", "text/html", "application/zip",
       "text/markdown", "text/plain", "text/x-markdown",
     ]).has(normalizedType);
     if (previewable) {
       const preview = document.createElement("button");
       preview.type = "button";
       preview.className = "text-button";
-      preview.textContent = normalizedType === "application/pdf" ? "打开预览" : "查看内容";
+      preview.textContent = normalizedType === "application/zip" ? "查看目录"
+        : normalizedType === "application/pdf" ? "打开预览" : "查看内容";
       preview.addEventListener("click", () => openAttachmentPreview(attachment));
       actions.append(preview);
     }
@@ -5516,10 +5530,10 @@ function appendThreadAttachments(message, body) {
     const name = document.createElement("strong");
     name.textContent = safeText(attachment.filename, "未命名附件");
     const info = document.createElement("span");
-    info.textContent = `${safeText(attachment.content_type, "未知类型")} · ${formatFileSize(attachment.size)}`;
+    info.textContent = `${taskFileTypeLabel(attachment.content_type, attachment.filename)} · ${formatFileSize(attachment.size)}`;
     const actions = document.createElement("div");
     actions.className = "thread-attachment-actions";
-    const normalizedType = safeText(attachment.content_type, "").split(";", 1)[0].trim().toLowerCase();
+    const normalizedType = attachmentPreviewType(attachment.content_type, attachment.filename);
     const attachmentId = encodeURIComponent(String(attachment.id));
     const downloadUrl = `/api/v1/orbit/attachments/${attachmentId}`;
     const previewUrl = `${downloadUrl}/preview`;
@@ -5540,11 +5554,12 @@ function appendThreadAttachments(message, body) {
       open.textContent = "打开 PDF";
       open.classList.add("is-primary");
       actions.append(open);
-    } else if (normalizedType === "text/html" || readableTypes.has(normalizedType)) {
+    } else if (normalizedType === "text/html" || normalizedType === "application/zip" || readableTypes.has(normalizedType)) {
       const preview = document.createElement("button");
       preview.type = "button";
       preview.className = "thread-attachment-action is-primary";
-      preview.textContent = normalizedType === "text/html" ? "预览网页" : "查看内容";
+      preview.textContent = normalizedType === "application/zip" ? "查看目录"
+        : normalizedType === "text/html" ? "预览网页" : "查看内容";
       preview.addEventListener("click", () => openAttachmentPreview(attachment));
       actions.append(preview);
     }
@@ -5606,7 +5621,7 @@ function openAttachmentPreview(attachment) {
   const attachmentId = encodeURIComponent(String(attachment.id));
   const downloadUrl = `/api/v1/orbit/attachments/${attachmentId}`;
   elements.attachmentPreviewTitle.textContent = safeText(attachment.filename, "预览附件");
-  elements.attachmentPreviewMeta.textContent = `${safeText(attachment.content_type, "未知类型")} · ${formatFileSize(attachment.size)}`;
+  elements.attachmentPreviewMeta.textContent = `${taskFileTypeLabel(attachment.content_type, attachment.filename)} · ${formatFileSize(attachment.size)}`;
   elements.attachmentPreviewDownload.href = downloadUrl;
   elements.attachmentPreviewDownload.download = safeText(attachment.filename, "attachment");
   elements.attachmentPreviewFrame.src = `${downloadUrl}/preview`;
