@@ -2,6 +2,10 @@
 
 ## 当前接续摘要
 
+- 2026-09-11 当前生产 **0.1.67 / 6b40ebb / 0042_feishu_human_notifications / deployed_https_verified**：按 Human 决定暂停飞书 Aily 直连路线。“连接新的 Agent”仍保留“飞书 aily 智能体”卡片用于说明产品边界，但卡片禁用并明确显示“暂未开放”，不会生成接入码；前端同时核对固定宿主能力与服务端配置，避免旧配置把入口重新放开。生产 `AGENTPOST_FEISHU_AILY_REMOTE_MCP_ENABLED=false`，公开配置返回 `host_setup_platforms.feishu_aily=[]`、`host_connection_modes.feishu_aily=unavailable`，postflight 将这两项作为强制门禁。通用 Remote MCP/OAuth 适配基础和 Human 飞书通知保留，未继续提供 Aily 长期 Token 或含凭证 URL 等绕过方案。
+- 0.1.67 同时包含 0.1.66 的 Agent 身份连续性修复，以及 Agent 状态与连接设置界面修复：通用异常不再显示红色“需要处理”，详情页“危险操作”改为“连接设置”，CSS `hidden` 冲突已修复。单包 SHA-256 `51b7eeda694ea2b382e9178f479b0ed02ec4dbf34d8d6f117ba6d14133826887`；stage、deploy、postflight 均为 ok，切换 51 秒，备份 `/opt/agentpost/backups/20260911-091840-6b40ebb-pre-067`。公网 health/ready 返回 0.1.67，公开 wheel SHA-256 `5884f2dc94f0239d239ba4b53168933d7bb5010fcfadd8d8345cc3fad4e050e1`，精确下载 200、未知下载 404。后检 agents=78、messages=449、deliveries=301、attachments=45、humans=16；AgentPost PID=542761、MCP PID=542817，Nginx PID=362620、PostgreSQL PID=365086 保持原进程。
+- 0.1.67 生产页面刷新后实看：Agent 列表显示“暂不可接任务”，详情页显示“连接设置”；新建连接窗口的“飞书 aily 智能体”卡片为禁用态“暂未开放”。本地完整非 PostgreSQL 回归 `530 passed、2 skipped、7 deselected`，Python 聚焦 67 项和 JavaScript/TypeScript 51 项通过，Ruff、JS syntax、shell syntax、diff check 通过。真实跨设备和 Human 验收仍待确认，因此不是 `production_accepted`。
+- 已向“测试任务”发送 0.1.67 上线说明及针对性复测清单，activity `4320a0f1-573e-4ec1-835d-75eeb206de96`；消息已写入 Task，未创建额外 Run。发送成功不等于成员已读、ACK、复测完成或 Human 验收。
 - 2026-09-11 **Agent 状态表达与连接设置界面 local_verified，未部署**：中栏 Agent 列表及详情页不再把通用 `needs_attention` 显示成红色“需要处理”，改为金色状态“暂不可接任务”；只有服务端明确返回 `connection_error` 时才显示红色“连接异常”。状态徽标补充实际原因提示，不再呈现成待点击的处理入口。详情页“危险操作”改为“连接设置”，并把重连/断开与软删除拆成“连接设置”“Agent 管理”两块；同时修复 CSS 覆盖原生 `hidden` 规则导致所有者操作与“只读”说明同时出现的问题。桌面隔离预览已实看；43 项 Orbit JavaScript、23 项 Human control plane、JS syntax 和 diff check 通过，390px 真实视觉复核、发布包重建、生产部署及 Human 验收待确认。
 - 同日用飞书“**Mars的智能伙伴**”执行真实 AgentPost Remote MCP 接入：Aily 沙箱可访问 `agentpost.me`，目标 MCP 返回标准 `401` 与 `WWW-Authenticate resource_metadata`，受保护资源元数据和 OAuth authorization-server 元数据均返回 `200`，公开了动态注册、authorization code、device code、PKCE S256 和 `agentpost.messaging`。但 `aily-mcp install-remote` 在保存前探测收到首次 `401` 后没有继续 OAuth discovery，以 `221404 / test mcp server failed / mcp.hub.upsert_custom_server` 退出；AgentPost 未安装、没有工具、没有读取“测试任务”。这已排除网络、URL 和 AgentPost OAuth 元数据缺失，当前阻点是 Aily Remote MCP 安装器的 OAuth 客户端兼容能力。禁止用长期 Bearer/API Key 或含凭证 URL 绕过；后续须取得 Aily 可配置的跨应用 OAuth 参数或由 Aily 修复标准 discovery 后再继续，当前状态为 `blocked_by_aily_oauth_client`，不得称为已接入。
 - 2026-09-11 **0.1.66 Agent 身份连续性候选 local_verified，未部署**：修复同一宿主升级或恢复时因 profile 漂移、旧凭证失效而误建 `codex2`、`codex3` 等重复 Agent。Skill bootstrap 在安装或联网前必须从当前 Codex、WorkBuddy、OpenClaw、Hermes 注册中恢复精确 `AGENTPOST_PROFILE`，无法恢复即以 `current_profile_unavailable` 停止，绝不进入新配对。Python SDK 将不可变 `agent_id` 与凭证一起保存在系统钥匙串；旧凭证首次健康心跳自动补齐，凭证失效后只允许定向重连原 Agent，旧凭证缺少身份时保留原记录并要求从原 Agent 卡片恢复。Human 配对页检测到已有 Agent 时默认选择原 Agent，并把“这是另一个新的 AI”作为明确选项；只有账号尚无 Agent 时才自动进入首次创建。
@@ -103,9 +107,9 @@
 - 0.1.51 发布候选：整合任务页标题/接收方降噪与显式回复串；server/SDK/MCP/OpenClaw/插件/锁文件版本已同步。schema 保持 `0036_cancel_auto_ack_runs`。已获部署授权，按单上传包 Workbench 流程执行，生产切换与后检结果待记录。
 - 本地待发布回复关联切片：Task 消息支持 `reply_to_activity_id`、`referenced_activity_ids`，服务端验证同任务并生成 `discussion_root_activity_id`；无回复参数的旧连接与既有幂等哈希保持兼容，不推断历史关联。Python SDK/MCP/OpenClaw/机器合同同步新增可选参数。Human 可在任务记录直接回复，使用 Human 会话、CSRF、幂等键与真实 Human 身份，写入共享 TaskActivity，不代替 Run/Human 验收；该入口不产生旧 Inbox 投递或唤醒工单，Agent 通过 Task API 读取。页面默认按讨论折叠、可切换时间视图，支持原文定位；附加引用目前由 Agent API 提供，网站回复入口只选择一条直接回复对象。462 项非 PostgreSQL 测试通过、1 沙箱 skip、5 PostgreSQL deselected；35 项导航测试通过，Ruff/format/JS syntax 通过。隔离 Chrome 实测两级 Human 回复、讨论/时间切换、原文定位、390px 无横向溢出与控制台错误。未部署、未修改历史生产消息。
 - 本地待发布 UI 小切片：任务记录接收范围默认折叠为“共享给 N 人”，按 Human ID 去重；展开后查看 Human/AI 与简短状态，兼容投递及未知状态在摘要提示。只调整展示，不改变投递、已读或 Run 状态。前端导航测试 34 项、JS 语法及 diff check 通过；隔离浏览器因本地 Chrome 沙箱启动失败，桌面/390px 交互验证待确认；未部署。
-- 交接阶段：`0.1.66-local-verified-identity-continuity`
-- 当前本地候选：`0.1.66 / 0042_feishu_human_notifications`；身份连续性修复尚未部署。
-- 当前生产：`06b5066 / 0.1.65 / 0042_feishu_human_notifications / deployed_https_verified`（2026-09-11 完成后检）；保留历史版本即时回退点。
+- 交接阶段：`0.1.67-deployed-https-verified-feishu-aily-paused`
+- 当前本地候选：无；0.1.67 已部署。
+- 当前生产：`6b40ebb / 0.1.67 / 0042_feishu_human_notifications / deployed_https_verified`（2026-09-11 完成后检）；保留历史版本即时回退点。
 - 生产接受状态：不是 `production_accepted`
 - 本切片：修复旧 Thread 列表/详情混入无 Delivery 的 Task 源消息导致 500；保留当前 Agent 的实际投递视图，并要求 TaskMembership 与 Agent 参与资格均有效。共享完整上下文继续使用 Task API，不恢复无任务私信。
 - OpenAPI 版本使用实际包版本；意外异常返回安全 JSON 和 request_id，不输出异常正文或凭据。心跳显式返回 version_status、原因、推荐与最低版本，未上报保持 unknown；Python SDK 兼容旧响应缺少这些字段。
