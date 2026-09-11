@@ -358,11 +358,20 @@
                       <input id="agent-wake-url" type="url" inputmode="url" maxlength="4000" placeholder="https://…" required autocomplete="off">
                     </label>
                     <label>
-                      <span>Bearer Token</span>
+                      <span>验证协议（按工作流配置选择）</span>
+                      <select id="agent-wake-auth">
+                        <option value="hmac_sha256">HMAC-SHA256 签名（X-Webhook）</option>
+                        <option value="bearer">Bearer Token（原有工作流）</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>签名密钥 / Bearer Token</span>
                       <input id="agent-wake-token" type="password" minlength="8" maxlength="2000" placeholder="仅在保存时输入" required autocomplete="new-password">
                     </label>
+                    <p>工作流触发可能消耗飞书额度。保存不补发历史工作；测试成功后才提醒新工作，每分钟最多发送一次；失败自动暂停，不重试。提醒被工作流接受不等于接收人收到或 AI 已执行。</p>
+                    <label class="agent-wake-consent"><input id="agent-wake-test-consent" type="checkbox">我确认发送一次测试，可能消耗额度</label>
                     <div class="agent-wake-actions">
-                      <button id="agent-wake-save" type="submit" class="primary-action">保存并启用</button>
+                      <button id="agent-wake-save" type="submit" class="primary-action">保存配置</button>
                       <button id="agent-wake-test" type="button" class="quiet-button" disabled>发送测试唤醒</button>
                       <button id="agent-wake-disable" type="button" class="quiet-button danger" disabled>停用自动唤醒</button>
                     </div>

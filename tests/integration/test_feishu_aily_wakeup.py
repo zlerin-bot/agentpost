@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import timedelta
 from uuid import uuid4
 
 import pytest
@@ -8,7 +9,7 @@ from sqlalchemy import select
 from agentpost.config import Settings
 from agentpost.control.models import AgentOwnership, HumanUser
 from agentpost.db import Database
-from agentpost.identity.models import Agent
+from agentpost.identity.models import Agent, utc_now
 from agentpost.onboarding.models import AgentConnectorBinding, ConnectorInstance
 from agentpost.tasks.models import AgentRun, Task, TaskAssignment
 from agentpost.tasks.service import _queue_collaboration_assignment
@@ -260,6 +261,7 @@ def test_channel_test_and_dispatch_expose_only_ids_and_mark_listener_ready(
     assert endpoint == "https://aily.example.com/hooks/agentpost"
     assert token == "aily-secret-token"
     assert payload == {
+        "_auth_scheme": "bearer",
         "schema": "agentpost.feishu_aily.wake.v1",
         "event_id": str(delivery.id),
         "task_id": str(task.id),
@@ -299,6 +301,28 @@ def test_human_feishu_notification_is_independent_from_agent_execution(
             sender=sender,
         )
         assert sent[-1][2]["action"] == "verify_feishu_notification_channel"
+        assert session.scalar(select(AgentWakeDelivery)) is None  # no historical flood on save
+        enqueue_run_wake(
+            session,
+            agent_id=agent.id,
+            task_id=task.id,
+            assignment_id=assignment.id,
+            run_id=run.id,
+        )
+        session.commit()
+        assert dispatch_pending_wakes(session, settings, sender=sender) == 0
+        with pytest.raises(WakeDeliveryError, match="WAKE_RATE_LIMITED"):
+            verify_wake_channel(
+                session,
+                settings,
+                user=session.get(HumanUser, user.id),
+                agent_id=agent.id,
+                sender=sender,
+            )
+        channel.last_dispatch_at = utc_now() - timedelta(seconds=61)
+        queued = session.scalar(select(AgentWakeDelivery))
+        queued.available_at = utc_now() - timedelta(seconds=1)
+        session.commit()
         assert dispatch_pending_wakes(session, settings, sender=sender) == 1
         refreshed_connector = session.get(ConnectorInstance, connector.id)
         assert refreshed_connector is not None
@@ -309,6 +333,7 @@ def test_human_feishu_notification_is_independent_from_agent_execution(
         delivery_id = delivery.id
 
     assert sent[-1][2] == {
+        "_auth_scheme": "bearer",
         "schema": "agentpost.feishu.notification.v1",
         "event_id": str(delivery_id),
         "task_id": str(task.id),
@@ -417,3 +442,52 @@ def test_failed_delivery_retries_then_stops_and_disable_cancels_pending(
         assert refreshed_connector is not None
         assert refreshed_connector.task_listener_status == "stopped"
         assert refreshed_connector.wake_capability == "manual"
+
+
+def test_notification_timeout_is_not_retried_and_test_ids_are_unique(database, settings):
+    user, agent, _ = _seed_codex_agent(database)
+    task, assignment, run = _seed_queued_run(database, user=user, agent=agent)
+    sent = []
+    with database.session_factory() as session:
+        configure_feishu_notification_channel(
+            session,
+            settings,
+            user=session.get(HumanUser, user.id),
+            agent_id=agent.id,
+            payload=FeishuAilyWakeChannelCreate(
+                webhook_url="https://aily.example.com/hook",
+                bearer_token="signing-secret",
+                auth_scheme="hmac_sha256",
+            ),
+        )
+        channel = session.scalar(select(AgentWakeChannel))
+        for _ in range(2):
+            channel.last_dispatch_at = utc_now() - timedelta(seconds=61)
+            session.commit()
+            verify_wake_channel(
+                session,
+                settings,
+                user=session.get(HumanUser, user.id),
+                agent_id=agent.id,
+                sender=lambda _u, _t, data: sent.append(data),
+            )
+        assert sent[0]["event_id"] != sent[1]["event_id"]
+        assert sent[0]["_auth_scheme"] == "hmac_sha256"
+        enqueue_run_wake(
+            session, agent_id=agent.id, task_id=task.id, assignment_id=assignment.id, run_id=run.id
+        )
+        channel.last_dispatch_at = utc_now() - timedelta(seconds=61)
+        session.commit()
+
+        def fail(_u, _t, data):
+            sent.append(data)
+            raise WakeDeliveryError("WAKE_TRANSPORT_ERROR")
+
+        assert dispatch_pending_wakes(session, settings, sender=fail) == 0
+        delivery = session.scalar(select(AgentWakeDelivery))
+        assert delivery.status == "failed"
+        assert delivery.attempts == 1
+        assert channel.status == "error"
+        assert dispatch_pending_wakes(session, settings, sender=fail) == 0
+        assert len(sent) == 3
+        assert session.get(AgentRun, run.id).status == "queued"

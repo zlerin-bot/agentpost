@@ -272,6 +272,8 @@ const elements = {
   agentDetailPanels: Array.from(document.querySelectorAll("[data-agent-panel]")),
   agentDetailSummary: document.querySelector("#agent-detail-summary"),
   agentCurrentConnection: document.querySelector("#agent-current-connection"),
+  agentWakeAuth: document.querySelector("#agent-wake-auth"),
+  agentWakeTestConsent: document.querySelector("#agent-wake-test-consent"),
   agentWakeChannel: document.querySelector("#agent-wake-channel"),
   agentWakeTag: document.querySelector("#agent-wake-tag"),
   agentWakeTitle: document.querySelector("#agent-wake-title"),
@@ -3710,7 +3712,7 @@ function renderCurrentAgentConnection(agent) {
     ["设备", agent.current_connector_device || "设备未提供"],
     ["初始连接时间", dateText(agent.current_connector_activated_at)],
     ["最近连接时间", dateText(agent.current_connector_last_heartbeat_at)],
-    ["健康证据", statusLabel(agent.current_connector_health || "unknown")],
+    ["最近心跳的健康上报（不代表当前在线）", statusLabel(agent.current_connector_health || "unknown")],
     ["平台收到的任务监听", statusLabel(agent.current_task_listener_status || "unknown")],
     ["平台最近收到监听上报", dateText(agent.current_task_listener_last_heartbeat_at)],
     ["唤醒方式", ({ automatic: "AgentPost 可自动唤醒", manual: "需先手动启动监听", unsupported: "当前宿主不支持" })[agent.current_wake_capability] || "未上报"],
@@ -3725,6 +3727,16 @@ function renderCurrentAgentConnection(agent) {
   elements.agentCurrentConnection.append(facts, technical);
 }
 
+function wakeErrorCopy(code) {
+  return ({
+    WAKE_RATE_LIMITED: "一分钟内已有发送，请稍后再试；本次没有触发工作流",
+    WAKE_BUSINESS_REJECTED: "工作流未接受请求，提醒已暂停，请核对协议、密钥及飞书执行记录",
+    WAKE_RESULT_UNKNOWN: "发送被中断，结果不明；提醒已暂停，请核对飞书执行记录后再测试恢复",
+    WAKE_TRANSPORT_ERROR: "网络结果不明，可能已触发；请先核对飞书记录，勿连续测试",
+    WAKE_INVALID_RESPONSE: "返回内容无法识别，请核对飞书记录；不会自动重试",
+  })[code] || safeText(code, "请检查工作流地址和密钥");
+}
+
 function renderAgentWakeChannel(agent, channel = null) {
   const supported = agent.role === "owner";
   elements.agentWakeChannel.hidden = !supported;
@@ -3732,9 +3744,9 @@ function renderAgentWakeChannel(agent, channel = null) {
   const isAily = agent.current_connector_type === "feishu_aily";
   const configured = Boolean(channel);
   const labels = {
-    configured: "等待测试",
+    configured: "等待测试后启用",
     active: isAily ? "自动唤醒已启用" : "飞书提醒已启用",
-    error: "需要处理",
+    error: "提醒已暂停",
   };
   const status = channel?.status || "awaiting_agent";
   elements.agentWakeStatus.className = `data-chip ${status === "active" ? "ready" : status === "error" ? "needs_attention" : "awaiting_agent"}`;
@@ -3742,21 +3754,23 @@ function renderAgentWakeChannel(agent, channel = null) {
   elements.agentWakeTag.textContent = isAily ? "飞书 aily · 自动接任务" : "Human 通知 · 飞书 Webhook";
   elements.agentWakeTitle.textContent = isAily ? "任务唤醒" : "飞书消息提醒";
   elements.agentWakeCopy.textContent = configured
-    ? `已保存 ${safeText(channel.endpoint_host)} 的加密配置。待发送：${Number(channel.pending_deliveries || 0)}；最近成功：${dateText(channel.last_success_at)}。重新保存时需要同时输入完整地址和 Token。`
+    ? `已保存 ${safeText(channel.endpoint_host)} 的加密配置。待发送：${Number(channel.pending_deliveries || 0)}；最近成功：${dateText(channel.last_success_at)}。验证协议：${channel.auth_scheme === "hmac_sha256" ? "HMAC-SHA256" : "Bearer Token"}。重新保存时需要同时输入完整地址和密钥。`
     : isAily
       ? "在飞书 aily 中建立接收 AgentPost 唤醒事件的工作流，再把工作流提供的 HTTPS 地址和 Bearer Token 填到这里。"
-      : "在飞书自动化中建立 Webhook 触发器和“发送飞书消息”动作，再保存 HTTPS 地址与 Token。这里仅提醒你有新工作，不代表这个 Agent 已启动或开始执行。";
+      : "在飞书自动化中建立 Webhook 触发器和“发送飞书消息”动作，按工作流要求选择 HMAC 签名或 Bearer Token，再保存 HTTPS 地址与密钥。这里仅提醒你有新工作，不代表这个 Agent 已启动或开始执行。";
   elements.agentWakeTest.textContent = isAily ? "发送测试唤醒" : "发送测试提醒";
   elements.agentWakeDisable.textContent = isAily ? "停用自动唤醒" : "停用飞书提醒";
   elements.agentWakeSecurity.textContent = isAily
     ? "地址和 Token 加密保存，页面不会再次显示；唤醒事件只含任务、工单和 Run ID，任务正文仍由 aily 通过授权后的 AgentPost MCP 读取。"
     : "地址和 Token 加密保存，页面不会再次显示；提醒只含任务、工单、Run 和目标 Agent ID，不授予飞书读取任务正文或代替 Agent 执行的权限。";
+  elements.agentWakeAuth.value = channel?.auth_scheme || "hmac_sha256";
+  elements.agentWakeTestConsent.checked = false;
   elements.agentWakeTest.disabled = !configured;
   elements.agentWakeDisable.disabled = !configured;
   elements.agentWakeUrl.value = "";
   elements.agentWakeToken.value = "";
   elements.agentWakeResult.textContent = channel?.last_error_code
-    ? `最近失败：${safeText(channel.last_error_code)}`
+    ? `最近发送：${wakeErrorCopy(channel.last_error_code)}`
     : "";
   elements.agentWakeResult.className = channel?.last_error_code ? "form-status error" : "form-status";
 }
@@ -4120,7 +4134,9 @@ function connectorCard(connector, historical = false) {
   const connectionName = document.createElement("span");
   connectionName.textContent = safeText(connector.display_name, "本机连接");
   identity.append(name, connectionName);
-  heading.append(identity, chip(historical ? connector.status : connector.work_availability));
+  const connectionBadge = chip(historical ? connector.status : connector.work_availability);
+  if (!historical) connectionBadge.textContent = agentHumanStatus(connector).label;
+  heading.append(identity, connectionBadge);
 
   const facts = document.createElement("dl");
   [
@@ -4130,8 +4146,8 @@ function connectorCard(connector, historical = false) {
     ["升级建议", connectorVersionLabel(connector.version_status)],
     ["初始连接时间", dateText(connector.activated_at)],
     ["最近连接时间", dateText(connector.last_heartbeat_at)],
-    ["连接状态", statusLabel(connector.health_status)],
-    ["接任务状态", statusLabel(connector.work_availability)],
+    ["当前连接状态", statusLabel(connector.connection_state)],
+    ["接任务状态", agentHumanStatus(connector).label],
   ].forEach(([label, value]) => {
     const cell = document.createElement("div");
     const term = document.createElement("dt");
@@ -4157,6 +4173,7 @@ function connectorCard(connector, historical = false) {
     ["当前会话启动", dateText(connector.runtime_session_started_at)],
     ["版本上报时间", dateText(connector.runtime_version_reported_at)],
     ["实际加载能力", (connector.runtime_capabilities || []).join("、") || "未上报"],
+    ["最近心跳的健康上报（不代表当前在线）", statusLabel(connector.health_status)],
     ["任务监听原始状态", connector.task_listener_status || "未上报"],
     ["监听会话", connector.task_listener_session_id || "未上报"],
     ["最近监听心跳", dateText(connector.task_listener_last_heartbeat_at)],
@@ -4197,11 +4214,15 @@ function connectorCard(connector, historical = false) {
     const connected = connector.connection_state === "connected";
     current.textContent = connected
       ? "当前连接 · Agent 身份和历史记录会独立保留"
-      : "授权已完成，但本机配置和首次连接尚未完成；现在不能收发消息";
+      : connector.connection_state === "awaiting_agent"
+        ? "授权已完成，等待 Agent 首次上线；身份和历史保留"
+        : connector.connection_state === "offline"
+          ? "曾经连接，当前心跳已超时；请在原宿主恢复连接，无需新建 Agent"
+          : "当前连接异常或已断开，请查看连接详情；身份和历史保留";
     const revoke = document.createElement("button");
     revoke.type = "button";
     revoke.className = "quiet-button danger";
-    revoke.textContent = connected ? "撤销连接" : "取消未完成连接";
+    revoke.textContent = connector.connection_state === "awaiting_agent" ? "取消未完成连接" : "撤销连接";
     revoke.addEventListener("click", () => openRevokeDialog(connector));
     actions.append(current, revoke);
     card.append(actions);
@@ -6732,6 +6753,7 @@ elements.agentWakeForm.addEventListener("submit", async (event) => {
       body: JSON.stringify({
         webhook_url: elements.agentWakeUrl.value.trim(),
         bearer_token: elements.agentWakeToken.value,
+        auth_scheme: elements.agentWakeAuth.value,
       }),
     });
     renderAgentWakeChannel(agent, channel);
@@ -6749,6 +6771,11 @@ elements.agentWakeForm.addEventListener("submit", async (event) => {
 elements.agentWakeTest.addEventListener("click", async () => {
   const agent = state.selectedAgent;
   if (!agent || agent.role !== "owner") return;
+  if (!elements.agentWakeTestConsent.checked) {
+    elements.agentWakeResult.textContent = "请先勾选测试额度确认。每次点击只发一次；结果不明时请先查飞书执行记录。";
+    return;
+  }
+  elements.agentWakeTestConsent.checked = false;
   elements.agentWakeTest.disabled = true;
   const isAily = agent.current_connector_type === "feishu_aily";
   elements.agentWakeResult.textContent = isAily ? "正在发送测试唤醒…" : "正在发送测试提醒…";
@@ -6761,9 +6788,9 @@ elements.agentWakeTest.addEventListener("click", async () => {
     await loadAgentWakeChannel(agent);
     elements.agentWakeResult.textContent = result.delivered
       ? isAily
-        ? "测试成功。这个 aily 现在可以由 AgentPost 自动唤醒。"
-        : "测试已送达飞书工作流。请继续确认指定接收人确实收到消息；这不代表 Agent 已开始执行。"
-      : `测试失败：${safeText(result.error_code, "请检查工作流地址和 Token")}`;
+        ? "工作流已接受测试请求；仍需验证 Agent 实际启动、领取工作并回传结果。"
+        : "飞书工作流已接受测试请求。请核对接收人收到消息；这不代表 Agent 已开始执行。"
+      : `测试未完成：${wakeErrorCopy(result.error_code)}（请求编号：${safeText(result.request_id)}）`;
     elements.agentWakeResult.className = result.delivered ? "form-status success" : "form-status error";
   } catch (error) {
     elements.agentWakeResult.textContent = error.message;

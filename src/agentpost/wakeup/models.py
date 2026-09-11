@@ -48,6 +48,10 @@ class AgentWakeChannel(Base):
     channel_type: Mapped[str] = mapped_column(String(40), nullable=False)
     encrypted_endpoint: Mapped[str] = mapped_column(Text, nullable=False)
     encrypted_bearer_token: Mapped[str] = mapped_column(Text, nullable=False)
+    auth_scheme: Mapped[str] = mapped_column(String(20), nullable=False, default="bearer")
+    last_dispatch_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="configured")
     last_tested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

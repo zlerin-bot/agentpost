@@ -176,7 +176,7 @@ def verify_agent_wake_channel(
     _ = csrf
     response.headers["Cache-Control"] = "no-store"
     try:
-        test_wake_channel(session, settings, user=current_human, agent_id=agent_id)
+        event_id = test_wake_channel(session, settings, user=current_human, agent_id=agent_id)
     except (WakeChannelNotFoundError, WakeChannelAccessDeniedError) as exc:
         raise _not_found() from exc
     except WakeDeliveryError as exc:
@@ -186,9 +186,15 @@ def verify_agent_wake_channel(
             current_human,
             action="control.feishu_channel_tested",
             agent_id=agent_id,
-            outcome="failed",
+            outcome="failure",
         )
-        return WakeChannelTestResult(status="error", delivered=False, error_code=exc.code)
+        return WakeChannelTestResult(
+            status="error",
+            delivered=False,
+            error_code=exc.code,
+            request_id=request.state.request_id,
+            event_id=exc.event_id,
+        )
     _audit(
         request,
         session,
@@ -197,7 +203,13 @@ def verify_agent_wake_channel(
         agent_id=agent_id,
         outcome="success",
     )
-    return WakeChannelTestResult(status="active", delivered=True)
+    return WakeChannelTestResult(
+        status="active",
+        delivered=True,
+        accepted=True,
+        request_id=request.state.request_id,
+        event_id=event_id,
+    )
 
 
 @router.delete(

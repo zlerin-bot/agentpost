@@ -279,7 +279,7 @@ def test_orbit_site_is_branded_and_does_not_persist_credentials(
     assert "不是多个可删除的 Agent" in script.text
     assert "等待 Agent 完成本机连接" in script.text
     assert 'connector.connection_state === "connected"' in script.text
-    assert "现在不能收发消息" in script.text
+    assert "曾经连接，当前心跳已超时" in script.text
     assert "connector-history-grid" in stylesheet.text
     assert "只需选择一次" in orbit.text
     assert "last_heartbeat_at" in script.text
@@ -636,7 +636,20 @@ def test_feishu_aily_owner_can_store_wake_channel_without_secret_echo(
 def test_owned_codex_can_store_feishu_notification_without_becoming_aily(
     settings: Settings,
     database: Database,
+    monkeypatch,
 ) -> None:
+    import httpx
+
+    from agentpost.wakeup import service as wake_service
+
+    sent = []
+    monkeypatch.setattr(wake_service, "_assert_public_dns", lambda _host: None)
+
+    def malformed_response(*_args, **kwargs):
+        sent.append(kwargs)
+        return httpx.Response(200, json={"code": {"unexpected": "shape"}})
+
+    monkeypatch.setattr(wake_service.httpx, "post", malformed_response)
     with _control_client(settings, database) as client:
         human = _create_human(client, "notify-owner@example.com", "Notification Owner")
         agent = _create_agent(client, "notify-codex@agents.local", "Owner Codex")
@@ -659,6 +672,23 @@ def test_owned_codex_can_store_feishu_notification_without_becoming_aily(
             f"/api/v1/orbit/agents/{agent['agent']['id']}/wake-channel",
             headers=headers,
         )
+
+        result = client.post(
+            f"/api/v1/orbit/agents/{agent['agent']['id']}/wake-channel/test",
+            headers=headers,
+        )
+        assert result.status_code == 200
+        assert result.json()["error_code"] == "WAKE_BUSINESS_REJECTED"
+        assert result.json()["request_id"]
+        assert result.json()["event_id"]
+        assert result.json()["delivered"] is False
+        repeated = client.post(
+            f"/api/v1/orbit/agents/{agent['agent']['id']}/wake-channel/test",
+            headers=headers,
+        )
+        assert repeated.json()["error_code"] == "WAKE_RATE_LIMITED"
+        assert repeated.json()["request_id"]
+        assert len(sent) == 1
 
     assert configured.status_code == read_back.status_code == 200
     assert configured.json()["channel_type"] == "feishu_notification_webhook"

@@ -1,14 +1,19 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
 import ipaddress
+import json
+import secrets
 import socket
+import time
 from collections.abc import Callable
 from datetime import timedelta
 from urllib.parse import urlsplit
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import httpx
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session
 
 from agentpost.accounts.crypto import decrypt_application_secret, encrypt_application_secret
@@ -37,6 +42,7 @@ class WakeDeliveryError(RuntimeError):
     def __init__(self, code: str) -> None:
         super().__init__(code)
         self.code = code
+        self.event_id: str | None = None
 
 
 WakeSender = Callable[[str, str, dict[str, str]], None]
@@ -125,6 +131,7 @@ def _status(session: Session, channel: AgentWakeChannel, settings: Settings) -> 
         channel_type=channel.channel_type,  # type: ignore[arg-type]
         status=channel.status,  # type: ignore[arg-type]
         endpoint_host=endpoint_host,
+        auth_scheme=channel.auth_scheme,
         last_tested_at=channel.last_tested_at,
         last_success_at=channel.last_success_at,
         last_error_code=channel.last_error_code,
@@ -182,13 +189,24 @@ def _save_channel(
     channel.encrypted_bearer_token = encrypt_application_secret(
         token, settings.human_mfa_encryption_key
     )
+    channel.auth_scheme = payload.auth_scheme
     channel.status = "configured"
     channel.last_tested_at = None
     channel.last_success_at = None
     channel.last_error_code = None
     channel.updated_at = utc_now()
     session.flush()
-    _enqueue_existing_runs(session, channel=channel)
+    if channel_type == "feishu_aily_webhook":
+        _enqueue_existing_runs(session, channel=channel)
+    else:
+        session.execute(
+            update(AgentWakeDelivery)
+            .where(
+                AgentWakeDelivery.channel_id == channel.id,
+                AgentWakeDelivery.status == "pending",
+            )
+            .values(status="cancelled")
+        )
     return _status(session, channel, settings)
 
 
@@ -281,6 +299,8 @@ def enqueue_run_wake(
     )
     if channel is None:
         return
+    if channel.channel_type == "feishu_notification_webhook" and channel.status != "active":
+        return
     if (
         session.scalar(select(AgentWakeDelivery.id).where(AgentWakeDelivery.run_id == run_id))
         is not None
@@ -336,21 +356,61 @@ def _assert_public_dns(hostname: str) -> None:
 
 
 def send_webhook(endpoint: str, token: str, payload: dict[str, str]) -> None:
-    _, hostname = _endpoint_parts(endpoint)
+    _endpoint, hostname = _endpoint_parts(endpoint)
     _assert_public_dns(hostname)
+    data = dict(payload)
+    scheme = data.pop("_auth_scheme", "bearer")
+    headers = {"Content-Type": "application/json"}
+    if scheme == "hmac_sha256":
+        timestamp = str(int(time.time()))
+        nonce = secrets.token_hex(16)
+        event_type = (
+            "agentpost.test"
+            if data.get("action", "").startswith("verify_")
+            else "agentpost.task_assignment"
+        )
+        body = json.dumps(
+            {
+                "event_id": data["event_id"],
+                "event_type": event_type,
+                "event_time": timestamp,
+                "source": "agentpost",
+                "data": data,
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        signing = "\n".join(
+            (
+                timestamp,
+                nonce,
+                "POST",
+                urlsplit(endpoint).path or "/",
+                hashlib.sha256(body).hexdigest(),
+            )
+        )
+        signature = hmac.new(token.encode(), signing.encode(), hashlib.sha256).hexdigest()
+        headers.update(
+            {
+                "X-Webhook-Id": data["event_id"],
+                "X-Webhook-Timestamp": timestamp,
+                "X-Webhook-Nonce": nonce,
+                "X-Webhook-Signature": f"v1,sha256={signature}",
+                "X-Webhook-Event-Type": event_type,
+            }
+        )
+    else:
+        headers["Authorization"] = f"Bearer {token}"
+        body = json.dumps(data, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     try:
         response = httpx.post(
-            endpoint,
-            headers={"Authorization": f"Bearer {token}"},
-            json=payload,
-            timeout=10.0,
-            follow_redirects=False,
+            endpoint, headers=headers, content=body, timeout=10.0, follow_redirects=False
         )
     except httpx.HTTPError as exc:
         raise WakeDeliveryError("WAKE_TRANSPORT_ERROR") from exc
-    if response.is_redirect:
+    if 300 <= response.status_code < 400:
         raise WakeDeliveryError("WAKE_REDIRECT_REJECTED")
-    if not 200 <= response.status_code < 300:
+    if response.status_code < 200 or response.status_code >= 300:
         raise WakeDeliveryError(f"WAKE_HTTP_{response.status_code}")
     try:
         result = response.json()
@@ -358,16 +418,61 @@ def send_webhook(endpoint: str, token: str, payload: dict[str, str]) -> None:
         raise WakeDeliveryError("WAKE_INVALID_RESPONSE") from exc
     if not isinstance(result, dict):
         raise WakeDeliveryError("WAKE_INVALID_RESPONSE")
-    top_level_code = result.get("status_code", result.get("code"))
+    # Never treat HTTP 200, an arbitrary truthy value, or a malformed code as success.
     nested = result.get("data")
-    nested_code = nested.get("code") if isinstance(nested, dict) else None
-    if top_level_code not in {0, "0"} or nested_code not in {None, 0, "0"}:
+    for container in (result, nested):
+        if isinstance(container, dict):
+            for key in ("status_code", "code"):
+                if key in container and (
+                    type(container[key]) not in (int, str) or container[key] not in (0, "0")
+                ):
+                    raise WakeDeliveryError("WAKE_BUSINESS_REJECTED")
+    outcome = nested if isinstance(nested, dict) and "dispatched" in nested else result
+    if "dispatched" in outcome:
+        if outcome.get("errorCode"):
+            raise WakeDeliveryError("WAKE_BUSINESS_REJECTED")
+        if outcome["dispatched"] is True:
+            return
+        if outcome["dispatched"] is False and outcome.get("skipReason") == "already_processed":
+            return
         raise WakeDeliveryError("WAKE_BUSINESS_REJECTED")
+    top_code = result.get("status_code", result.get("code"))
+    nested_code = nested.get("code") if isinstance(nested, dict) else None
+    if (
+        type(top_code) not in (int, str)
+        or top_code not in (0, "0")
+        or (
+            nested_code is not None
+            and (type(nested_code) not in (int, str) or nested_code not in (0, "0"))
+        )
+    ):
+        raise WakeDeliveryError("WAKE_BUSINESS_REJECTED")
+
+
+def _reserve_notification_send(session: Session, channel: AgentWakeChannel) -> bool:
+    """One chargeable attempt per channel per minute, across workers and test clicks."""
+    if channel.channel_type != "feishu_notification_webhook":
+        return True
+    now = utc_now()
+    reserved = session.execute(
+        update(AgentWakeChannel)
+        .where(
+            AgentWakeChannel.id == channel.id,
+            or_(
+                AgentWakeChannel.last_dispatch_at.is_(None),
+                AgentWakeChannel.last_dispatch_at <= now - timedelta(seconds=60),
+            ),
+        )
+        .values(last_dispatch_at=now)
+        .execution_options(synchronize_session=False)
+    )
+    return reserved.rowcount == 1
 
 
 def _payload(delivery: AgentWakeDelivery, channel: AgentWakeChannel) -> dict[str, str]:
     if channel.channel_type == "feishu_notification_webhook":
         return {
+            "_auth_scheme": channel.auth_scheme,
             "schema": "agentpost.feishu.notification.v1",
             "event_id": str(delivery.id),
             "task_id": str(delivery.task_id),
@@ -377,6 +482,7 @@ def _payload(delivery: AgentWakeDelivery, channel: AgentWakeChannel) -> dict[str
             "action": "task_assignment_notification",
         }
     return {
+        "_auth_scheme": channel.auth_scheme,
         "schema": "agentpost.feishu_aily.wake.v1",
         "event_id": str(delivery.id),
         "task_id": str(delivery.task_id),
@@ -413,7 +519,7 @@ def test_wake_channel(
     user: HumanUser,
     agent_id: UUID,
     sender: WakeSender = send_webhook,
-) -> None:
+) -> str:
     _, connector = _owned_agent_connector(session, user=user, agent_id=agent_id)
     channel = session.scalar(
         select(AgentWakeChannel).where(
@@ -434,12 +540,18 @@ def test_wake_channel(
     token = decrypt_application_secret(
         channel.encrypted_bearer_token, settings.human_mfa_encryption_key
     )
-    test_id = UUID(int=0)
+    if not _reserve_notification_send(session, channel):
+        session.rollback()
+        raise WakeDeliveryError("WAKE_RATE_LIMITED")
+    # Persist before external I/O: a timeout must not allow another immediate charge.
+    session.commit()
+    test_id = uuid4()
     try:
         sender(
             endpoint,
             token,
             {
+                "_auth_scheme": channel.auth_scheme,
                 "schema": (
                     "agentpost.feishu_aily.wake.v1"
                     if channel.channel_type == "feishu_aily_webhook"
@@ -457,6 +569,7 @@ def test_wake_channel(
             },
         )
     except WakeDeliveryError as exc:
+        exc.event_id = str(test_id)
         channel.status = "error"
         channel.last_tested_at = utc_now()
         channel.last_error_code = exc.code
@@ -469,6 +582,7 @@ def test_wake_channel(
         raise
     _record_channel_success(channel, connector, tested=True)
     session.commit()
+    return str(test_id)
 
 
 def dispatch_pending_wakes(
@@ -479,6 +593,30 @@ def dispatch_pending_wakes(
     limit: int = 20,
 ) -> int:
     now = utc_now()
+    # An interrupted external call has an unknown outcome; never replay it blindly.
+    session.execute(
+        update(AgentWakeChannel)
+        .where(
+            AgentWakeChannel.channel_type == "feishu_notification_webhook",
+            AgentWakeChannel.status != "disabled",
+            AgentWakeChannel.id.in_(
+                select(AgentWakeDelivery.channel_id).where(
+                    AgentWakeDelivery.status == "sending",
+                    AgentWakeDelivery.last_attempt_at < now - timedelta(seconds=120),
+                )
+            ),
+        )
+        .values(status="error", last_error_code="WAKE_RESULT_UNKNOWN", updated_at=now)
+    )
+    session.execute(
+        update(AgentWakeDelivery)
+        .where(
+            AgentWakeDelivery.status == "sending",
+            AgentWakeDelivery.last_attempt_at < now - timedelta(seconds=120),
+        )
+        .values(status="failed", last_error_code="WAKE_RESULT_UNKNOWN", updated_at=now)
+    )
+    session.commit()
     rows = list(
         session.scalars(
             select(AgentWakeDelivery)
@@ -493,7 +631,12 @@ def dispatch_pending_wakes(
     )
     delivered = 0
     for delivery in rows:
+        session.refresh(delivery)
+        if delivery.status != "pending":
+            continue
         channel = session.get(AgentWakeChannel, delivery.channel_id)
+        if channel is not None:
+            session.refresh(channel)
         connector = (
             session.get(ConnectorInstance, channel.connector_instance_id)
             if channel is not None and channel.connector_instance_id is not None
@@ -502,6 +645,9 @@ def dispatch_pending_wakes(
         if (
             channel is None
             or channel.status == "disabled"
+            or (
+                channel.channel_type == "feishu_notification_webhook" and channel.status != "active"
+            )
             or (channel.channel_type == "feishu_aily_webhook" and connector is None)
         ):
             delivery.status = "cancelled"
@@ -510,9 +656,25 @@ def dispatch_pending_wakes(
         if run is None or run.status != "queued":
             delivery.status = "cancelled"
             continue
+        if not _reserve_notification_send(session, channel):
+            delivery.available_at = now + timedelta(seconds=60)
+            continue
+        claimed = session.execute(
+            update(AgentWakeDelivery)
+            .where(
+                AgentWakeDelivery.id == delivery.id,
+                AgentWakeDelivery.status == "pending",
+            )
+            .values(status="sending")
+            .execution_options(synchronize_session=False)
+        )
+        if claimed.rowcount != 1:
+            session.rollback()
+            continue
         delivery.status = "sending"
         delivery.attempts += 1
         delivery.last_attempt_at = now
+        session.commit()
         endpoint = decrypt_application_secret(
             channel.encrypted_endpoint, settings.human_mfa_encryption_key
         )
@@ -533,7 +695,10 @@ def dispatch_pending_wakes(
             sender(endpoint, token, _payload(delivery, channel))
         except WakeDeliveryError as exc:
             delivery.last_error_code = exc.code
-            if delivery.attempts >= settings.wake_dispatch_max_attempts:
+            if (
+                channel.channel_type == "feishu_notification_webhook"
+                or delivery.attempts >= settings.wake_dispatch_max_attempts
+            ):
                 delivery.status = "failed"
                 channel.status = "error"
                 channel.last_error_code = exc.code

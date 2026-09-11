@@ -20,6 +20,7 @@ def _load(name: str):
 def test_feishu_notification_migration_round_trip():
     wake = _load("0041_feishu_aily_wake_channels")
     notification = _load("0042_feishu_human_notifications")
+    protocol = _load("0043_webhook_protocol")
     engine = sa.create_engine("sqlite://")
     metadata = sa.MetaData()
     for name in (
@@ -39,6 +40,15 @@ def test_feishu_notification_migration_round_trip():
         notification.op = Operations(context)
         wake.upgrade()
         notification.upgrade()
+        protocol.op = Operations(context)
+        protocol.upgrade()
+        columns = {
+            item["name"] for item in sa.inspect(connection).get_columns("agent_wake_channels")
+        }
+        assert {"auth_scheme", "last_dispatch_at"} <= columns
+        protocol.downgrade()
+        protocol.upgrade()
+        protocol.downgrade()
         columns = {
             item["name"]: item for item in sa.inspect(connection).get_columns("agent_wake_channels")
         }

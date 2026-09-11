@@ -12,6 +12,7 @@ class WakeModel(BaseModel):
 
 class FeishuAilyWakeChannelCreate(WakeModel):
     webhook_url: SecretStr = Field(min_length=12, max_length=4000)
+    auth_scheme: Literal["bearer", "hmac_sha256"] = "bearer"
     bearer_token: SecretStr = Field(min_length=8, max_length=2000)
 
     @field_validator("webhook_url")
@@ -23,6 +24,7 @@ class FeishuAilyWakeChannelCreate(WakeModel):
 class WakeChannelStatus(WakeModel):
     channel_type: Literal["feishu_aily_webhook", "feishu_notification_webhook"]
     status: Literal["configured", "active", "error", "disabled"]
+    auth_scheme: Literal["bearer", "hmac_sha256"] = "bearer"
     endpoint_host: str
     last_tested_at: datetime | None
     last_success_at: datetime | None
@@ -33,4 +35,7 @@ class WakeChannelStatus(WakeModel):
 class WakeChannelTestResult(WakeModel):
     status: Literal["active", "error"]
     delivered: bool
+    accepted: bool = False
+    request_id: str | None = None
+    event_id: str | None = None
     error_code: str | None = None

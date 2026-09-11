@@ -848,10 +848,13 @@ def _connector_version_status(
     if current < minimum:
         return (
             "update_required",
-            "当前连接仍可接收兼容任务通知；升级后可以直接读取任务并参与完整协作。",
+            "此版本仅支持兼容接口；是否在线以连接状态为准，升级后可参与完整协作。",
         )
     if current < recommended:
-        return "update_available", "当前连接仍可使用，升级后可获得最新功能和修复。"
+        return (
+            "update_available",
+            "此版本仍兼容；是否在线和能否接任务，以连接和监听状态为准。建议升级。",
+        )
     return "current", "当前运行版本已经符合最新推荐版本。"
 
 

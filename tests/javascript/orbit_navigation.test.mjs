@@ -792,3 +792,15 @@ test("login accepts existing short credentials while new passwords require eight
     assert.match(html.match(new RegExp(`<input id="${id}"[^>]*>`))[0], /minlength="8"/);
   }
 });
+
+test("notification tests require explicit quota consent and explain uncertain outcomes", () => {
+  const source = script.slice(script.indexOf("function wakeErrorCopy("), script.indexOf("function renderAgentWakeChannel("));
+  const errorCopy = new Function("safeText", `${source}; return wakeErrorCopy;`)((value) => value);
+  assert.match(errorCopy("WAKE_RATE_LIMITED"), /本次没有触发/);
+  assert.match(errorCopy("WAKE_TRANSPORT_ERROR"), /可能已触发/);
+  assert.match(html, /id="agent-wake-auth"/);
+  assert.match(script, /if \(!elements.agentWakeTestConsent.checked\)/);
+  assert.match(script, /result.request_id/);
+  assert.doesNotMatch(script, /首次连接尚未完成；现在不能收发/);
+  assert.match(script, /曾经连接，当前心跳已超时/);
+});

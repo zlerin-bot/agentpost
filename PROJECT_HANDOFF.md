@@ -2,6 +2,10 @@
 
 ## 当前接续摘要
 
+- 2026-09-11 **020 Webhook/额度/连接状态反馈修复 local_verified，未部署**：本地接口级复现测试失败后 audit outcome=`failed` 违反数据库 `failure` 约束导致 500，已修正；错误响应补 request_id/event_id，畸形外部 code 不再抛出 TypeError。新增明确 HMAC-SHA256/X-Webhook 与 Bearer 协议选择，按实际 UTF-8 发送字节签名，测试改为唯一事件 ID，区分接受、业务拒绝及 already_processed；旧配置迁移保留 Bearer，未静默更改生产密钥或协议。
+- Human 飞书通知增加测试额度确认、跨测试/后台共享的数据库一分钟发送间隔；保存不补发历史工作，测试成功才启用新工作提醒，失败停止重试并暂停，中断发送标记结果不明而不重放。提醒仍不等于 Human 收到、Agent 启动或 Run 执行；本轮不包含日金额预算、通知合并或真实飞书计费查询。连接管理统一 Human 状态文案，区分从未上线与曾上线后超时；历史健康上报和版本兼容性不再冒充当前在线。
+- 验证：最终完整非 PostgreSQL **548 passed、2 skipped、7 deselected**，Orbit **47 passed**，Ruff check/format、JS syntax、diff check 通过；SQLite 0043 迁移往返通过。Chrome 1470px/390px 表单实看无横向溢出，合成配置保存、未勾选阻止测试及停用通过，console error/warn=0；没有调用真实飞书 Webhook。8781/8782 演示保留数据库和 demo@example.com / 123456，备份为各演示目录 orbit-demo.pre0043.db，已迁移并重启。生产仍 0.1.67/6b40ebb/schema0042；本地候选新 schema 0043_webhook_protocol，未来部署前须迁移。PostgreSQL 并发、生产异常日志核对、真实飞书通知和跨设备 Human 收件验收待确认。飞书 Aily 直连仍暂未开放，定时任务保持暂停。详情见 `docs/WEBHOOK_FEEDBACK_FIX_20260911.md`。
+
 - 2026-09-11 **密码规则修正 local_verified，未部署**：登录表单移除最低长度限制，仅验证已有密码；注册/找回密码前后端统一最低 8 位、最高 256 位，保留原哈希验证、限流和 MFA。修复之前本地后端允许 `123456` 但 HTML minlength=12 阻止提交的遗漏。两个本地演示（8781/8782）账号现统一 `demo@example.com`，密码 `123456`；仅这些合成账号使用六位密码。已通过浏览器实际登录 8782；Python 9 项与 Orbit 46 项通过，Ruff/format/diff check 通过。两服务已保留原数据库重载，新启动命令为 `PYTHONPATH=src:sdk/python/src:integrations/mcp/src .venv/bin/python /private/tmp/ap_existing_preview.py 8781`（或 8782）；不要重新运行旧 seed 脚本重建账号。生产密码规则待部署后生效。
 
 - 2026-09-11 **附件预览修复 local_verified，未部署**：前后端统一使用受限扩展名兜底识别，修复 `application/octet-stream` / `text/plain` 上传的 `.md` 被归为“其他”且缺少“查看内容”。文件目录筛选、讨论附件卡与预览弹窗均一致，既有附件无需修改数据库或重新上传。保留已识别的 PDF/HTML/JSON 等类型，不将 `.md.exe` 当 Markdown。
