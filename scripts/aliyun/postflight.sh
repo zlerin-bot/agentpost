@@ -73,8 +73,8 @@ published = payload.get("host_setup_platforms", {})
 incorrect = {host: published.get(host) for host in hosts if published.get(host) != expected}
 if incorrect:
     raise SystemExit(f"public host platform contract mismatch: {incorrect}")
-if payload.get("host_connection_modes", {}).get("feishu_aily") != "remote_mcp_oauth":
-    raise SystemExit("public Feishu aily Remote MCP mode is unavailable")
+if payload.get("host_connection_modes", {}).get("feishu_aily") != "unavailable":
+    raise SystemExit("public Feishu aily mode must stay unavailable")
 PY
 curl -fsS https://agentpost.me/api/v1/protocol/contract -o "${protocol_contract}"
 python3 - "${protocol_contract}" <<'PY'

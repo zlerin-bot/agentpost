@@ -542,8 +542,8 @@ test("new Agent guide offers seven host-specific paths in the product order", ()
   );
   assert.match(script, /Custom MCP 连接和 AgentPost 网页授权直接完成接入/);
   assert.match(script, /hermes: \{ name: "Hermes", code: "AP-HERMES-V1", defaultHandle: "hermes" \}/);
-  assert.match(script, /feishu_aily: \{ name: "飞书 aily 智能体", code: "AP-FEISHU-AILY-V1", defaultHandle: "aily" \}/);
-  assert.match(html, /<strong>飞书 aily 智能体<\/strong>\s*<span[^>]*>云端 MCP 与自动接任务<\/span>/);
+  assert.match(script, /feishu_aily:\s*\{[\s\S]*?name: "飞书 aily 智能体"[\s\S]*?connectionMode: "unavailable"/);
+  assert.match(html, /<strong>飞书 aily 智能体<\/strong>\s*<span[^>]*>暂未开放<\/span>/);
   assert.match(script, /当前 AgentPost 尚未发布 \$\{selected\.name\} 的安全接入服务/);
   assert.match(script, /使用 \$\{selected\.name\} 内置的 Custom MCP 连接/);
   assert.match(script, /不能改用长期密钥或假装已连接/);
@@ -615,6 +615,7 @@ test("Feishu webhooks separate Human notifications from Aily task wake", () => {
 });
 
 test("unavailable Agent types stop before copying an unusable connection prompt", () => {
+  assert.match(script, /PAIRING_HOSTS\[host\]\?\.connectionMode === "unavailable"/);
   assert.match(script, /host_connection_modes\?\.\[host\] === "unavailable"/);
   assert.match(script, /description\.textContent = unavailable \? "暂未开放"/);
   assert.match(script, /当前不能生成可执行的接入步骤/);

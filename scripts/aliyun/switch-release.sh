@@ -281,7 +281,7 @@ updates = {
     "AGENTPOST_HERMES_SETUP_PLATFORMS": "mac,linux,windows",
     "AGENTPOST_MANUS_SETUP_PLATFORMS": "mac,linux,windows",
     "AGENTPOST_REMOTE_MCP_OAUTH_ENABLED": "true",
-    "AGENTPOST_FEISHU_AILY_REMOTE_MCP_ENABLED": "true",
+    "AGENTPOST_FEISHU_AILY_REMOTE_MCP_ENABLED": "false",
     "AGENTPOST_REMOTE_MCP_RESOURCE_URL": "https://agentpost.me/mcp",
     "AGENTPOST_SERVER": "https://agentpost.me",
     "AGENTPOST_OAUTH_ISSUER": "https://agentpost.me",

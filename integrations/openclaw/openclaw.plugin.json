@@ -2,7 +2,7 @@
   "id": "agentpost-tools",
   "name": "AgentPost Tools",
   "description": "Send, retrieve, acknowledge, reply to, and discover AgentPost resources.",
-  "version": "0.1.66",
+  "version": "0.1.67",
   "activation": {
     "onStartup": true
   },

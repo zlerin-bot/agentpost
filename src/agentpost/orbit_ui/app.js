@@ -4228,7 +4228,8 @@ function showPairingGuide(targetAgent = state.pairingTargetAgent, preferredHost 
   state.selectedPairingHost = "";
   elements.pairingHostCards.forEach((button) => {
     const host = button.dataset.connectorType;
-    const unavailable = state.authConfig?.host_connection_modes?.[host] === "unavailable";
+    const unavailable = PAIRING_HOSTS[host]?.connectionMode === "unavailable"
+      || state.authConfig?.host_connection_modes?.[host] === "unavailable";
     button.classList.remove("selected");
     button.classList.toggle("unavailable", unavailable);
     button.disabled = unavailable;
@@ -4244,6 +4245,7 @@ function showPairingGuide(targetAgent = state.pairingTargetAgent, preferredHost 
   elements.pairingCopyResult.textContent = "";
   elements.pairingCopyResult.className = "form-status";
   if (PAIRING_HOSTS[preferredHost]
+    && PAIRING_HOSTS[preferredHost].connectionMode !== "unavailable"
     && state.authConfig?.host_connection_modes?.[preferredHost] !== "unavailable") {
     selectPairingHost(preferredHost);
   }
@@ -4257,7 +4259,12 @@ const PAIRING_HOSTS = Object.freeze({
   hermes: { name: "Hermes", code: "AP-HERMES-V1", defaultHandle: "hermes" },
   codex: { name: "Codex", code: "AP-CODEX-V1", defaultHandle: "codex" },
   manus: { name: "Manus", code: "AP-MANUS-V1", defaultHandle: "manus", connectionMode: "local_bootstrap" },
-  feishu_aily: { name: "飞书 aily 智能体", code: "AP-FEISHU-AILY-V1", defaultHandle: "aily" },
+  feishu_aily: {
+    name: "飞书 aily 智能体",
+    code: "AP-FEISHU-AILY-V1",
+    defaultHandle: "aily",
+    connectionMode: "unavailable",
+  },
 });
 
 function agentHandleProblem(value) {
@@ -4342,7 +4349,8 @@ function selectPairingHost(host) {
   if (!selected) {
     return;
   }
-  if (state.authConfig?.host_connection_modes?.[host] === "unavailable") {
+  if (selected.connectionMode === "unavailable"
+    || state.authConfig?.host_connection_modes?.[host] === "unavailable") {
     elements.pairingCopyResult.textContent = `${selected.name} 暂未开放，当前不能生成可执行的接入步骤。`;
     elements.pairingCopyResult.className = "form-status error";
     return;
