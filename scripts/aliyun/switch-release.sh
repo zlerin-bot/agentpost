@@ -174,7 +174,7 @@ PY
 fi
 install -o root -g root -m 600 '${backup}/agentpost.env' '/opt/agentpost/shared/agentpost.env'
 install -o root -g root -m 644 '${backup}/agentpost.service' '/etc/systemd/system/agentpost.service'
-if [[ "$(cat '${backup}/agentpost-mcp.unit-state')" == 'present' ]]; then
+if [[ "\$(cat '${backup}/agentpost-mcp.unit-state')" == 'present' ]]; then
   install -o root -g root -m 644 '${backup}/agentpost-mcp.service' '/etc/systemd/system/agentpost-mcp.service'
 else
   rm -f '/etc/systemd/system/agentpost-mcp.service'
@@ -185,7 +185,7 @@ mv -Tf '/opt/agentpost/current.next' '/opt/agentpost/current'
 systemctl daemon-reload
 nginx -t
 systemctl restart agentpost
-if [[ "$(cat '${backup}/agentpost-mcp.unit-state')" == 'present' ]]; then
+if [[ "\$(cat '${backup}/agentpost-mcp.unit-state')" == 'present' ]]; then
   systemctl restart agentpost-mcp
 fi
 systemctl reload nginx

@@ -111,3 +111,33 @@ def test_schema_cutover_and_rollback_stop_writers_before_migrating() -> None:
     prepare = ALIYUN_SCRIPTS[0].read_text()
     assert '"${snapshot}/scripts/aliyun/switch-release.sh"' in prepare
     assert '"${snapshot}/scripts/aliyun/postflight.sh"' in prepare
+
+
+def test_rollback_generation_defers_mcp_state_read_until_execution(tmp_path: Path) -> None:
+    script = ALIYUN_SCRIPTS[1].read_text()
+    template = script.split('cat > "${rollback}" <<ROLLBACK', 1)[1].split("\nROLLBACK", 1)[0]
+    env = dict(os.environ)
+    env.update(
+        {
+            key: str(tmp_path / key)
+            for key in (
+                "backup",
+                "prior_schema",
+                "release",
+                "venv",
+                "current_release",
+                "prior_version",
+            )
+        }
+    )
+    generated = subprocess.run(
+        ["bash", "-c", "set -eu\ncat <<ROLLBACK" + template + "\nROLLBACK\n"],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert not generated.stderr
+    expected = "$(cat '" + env["backup"] + "/agentpost-mcp.unit-state')"
+    assert generated.stdout.count(expected) == 2
+    subprocess.run(["bash", "-n"], input=generated.stdout, text=True, check=True)
