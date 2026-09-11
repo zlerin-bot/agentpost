@@ -2,6 +2,9 @@
 
 ## 当前接续摘要
 
+- 2026-09-11 **0.1.66 Agent 身份连续性候选 local_verified，未部署**：修复同一宿主升级或恢复时因 profile 漂移、旧凭证失效而误建 `codex2`、`codex3` 等重复 Agent。Skill bootstrap 在安装或联网前必须从当前 Codex、WorkBuddy、OpenClaw、Hermes 注册中恢复精确 `AGENTPOST_PROFILE`，无法恢复即以 `current_profile_unavailable` 停止，绝不进入新配对。Python SDK 将不可变 `agent_id` 与凭证一起保存在系统钥匙串；旧凭证首次健康心跳自动补齐，凭证失效后只允许定向重连原 Agent，旧凭证缺少身份时保留原记录并要求从原 Agent 卡片恢复。Human 配对页检测到已有 Agent 时默认选择原 Agent，并把“这是另一个新的 AI”作为明确选项；只有账号尚无 Agent 时才自动进入首次创建。
+- 0.1.66 证据：完整非 PostgreSQL 回归 `530 passed、2 skipped、7 deselected`；Python 聚焦 90 项、JavaScript/TypeScript 51 项通过；Ruff check/format、JS syntax、TypeScript build、两份 Skill bootstrap 一致性及 diff check 通过。最终 wheel SHA-256 `4fc0405fbc9caefed4f69e5a0002c22aa39d86900c0c68ba75999abac2ab7509`，wheel 内 bootstrap 与源码 SHA-256 均为 `270c775864b902da0b70b97d37423db4f23493b227889315db63b3dc58868d37`；Codex、WorkBuddy、豆包工作、OpenClaw、Hermes、Manus 六宿主隔离安装并导入 0.1.66 通过。PostgreSQL 专项、真实各宿主失效凭证恢复、生产部署和跨设备 Human 验收待确认。
+- 2026-09-11 当前生产 **0.1.65 / 06b5066 / 0042_feishu_human_notifications / deployed_https_verified**：单包 stage、切换和 postflight 已通过；公网 health/ready 返回 0.1.65，公开配置发布 wheel SHA-256 `448a92a0d0bab8f098c1a89b43eb979700f3964957abd4739b37f821ede865e4`，Remote MCP 未授权请求返回 401 并声明 OAuth resource metadata。发布时发现配置预检以 `agentpost` 用户读取 root-only 环境文件而失败，自动回退保持 0.1.64 在线；修正发布脚本并重新校验 stage 清单后切换成功。该线上脚本修正和首轮 Codex profile 复用修复见提交 `9404e0d`。测试任务更新 activity `501686ab-2049-43aa-bd31-315a44a8af49` 由原 `mars agent`（Agent ID `91d935c3-1410-4c85-8b56-0b42f4df2da1`）发送；误触发的 codex3 配对已取消且未获批准。真实飞书 aily OAuth/读写闭环、跨设备和 Human 验收仍待确认，因此不是 `production_accepted`。
 - 2026-09-10 当前生产 **0.1.64 / a2f04ef / 0042_feishu_human_notifications / deployed_https_verified**：把“飞书 aily 自动执行”和“Human 的飞书消息提醒”拆成两类真实能力。飞书 aily Agent 仍配置自动唤醒；Human 可为自己拥有的 Codex、WorkBuddy、豆包工作等非 aily Agent 配置飞书 Webhook 提醒。提醒载荷只含 task/assignment/run/event/agent ID，明确不代表目标 Agent 已启动、已执行或正在监听；测试成功也不会伪造目标 Agent 的监听与自动唤醒状态。通知通道可不绑定 Connector，原 aily 通道约束保持不变。
 - 同一候选修复 020 指出的界面问题：`hidden` 的唤醒表单现在具有最高显示优先级，选择 Codex 不再出现 aily 表单或静默提交；未开放的宿主卡立即禁用并标注“暂未开放”。连接详情将服务端最近收到的监听上报与本地进程事实分开表达。任务文件筛选显示“匹配 N / 共 N”并支持一键清空全部筛选；Markdown 以转义后的安全标题、列表、表格与代码块直接阅读，原始 HTML、脚本和网络内容不会执行。
 - 0.1.64 本地证据：514 个非 PostgreSQL 测试通过、2 skipped、7 PostgreSQL deselected；43 项 Orbit JavaScript、8 项 TypeScript Connector、16 项 MCP、4 项 OpenClaw 测试通过；Ruff check/format、JS syntax、TypeScript build 和 diff check 通过。隔离 `http://127.0.0.1:8780` 已实看桌面与 390px：Codex 只显示飞书消息提醒、保存结果有明确反馈，文件匹配/清空和 Markdown 安全阅读通过，页面无横向溢出且控制台 error/warning=0。0.1.64 wheel SHA-256 为 `2c72770354cacedb8b9860dd69ba5a8c3857b9c7fb9f59c92babcc4fac750d3f`。
@@ -98,9 +101,9 @@
 - 0.1.51 发布候选：整合任务页标题/接收方降噪与显式回复串；server/SDK/MCP/OpenClaw/插件/锁文件版本已同步。schema 保持 `0036_cancel_auto_ack_runs`。已获部署授权，按单上传包 Workbench 流程执行，生产切换与后检结果待记录。
 - 本地待发布回复关联切片：Task 消息支持 `reply_to_activity_id`、`referenced_activity_ids`，服务端验证同任务并生成 `discussion_root_activity_id`；无回复参数的旧连接与既有幂等哈希保持兼容，不推断历史关联。Python SDK/MCP/OpenClaw/机器合同同步新增可选参数。Human 可在任务记录直接回复，使用 Human 会话、CSRF、幂等键与真实 Human 身份，写入共享 TaskActivity，不代替 Run/Human 验收；该入口不产生旧 Inbox 投递或唤醒工单，Agent 通过 Task API 读取。页面默认按讨论折叠、可切换时间视图，支持原文定位；附加引用目前由 Agent API 提供，网站回复入口只选择一条直接回复对象。462 项非 PostgreSQL 测试通过、1 沙箱 skip、5 PostgreSQL deselected；35 项导航测试通过，Ruff/format/JS syntax 通过。隔离 Chrome 实测两级 Human 回复、讨论/时间切换、原文定位、390px 无横向溢出与控制台错误。未部署、未修改历史生产消息。
 - 本地待发布 UI 小切片：任务记录接收范围默认折叠为“共享给 N 人”，按 Human ID 去重；展开后查看 Human/AI 与简短状态，兼容投递及未知状态在摘要提示。只调整展示，不改变投递、已读或 Run 状态。前端导航测试 34 项、JS 语法及 diff check 通过；隔离浏览器因本地 Chrome 沙箱启动失败，桌面/390px 交互验证待确认；未部署。
-- 交接阶段：`0.1.64-deployed-https-verified`
-- 本地发布提交与生产：`a2f04ef / 0.1.64 / 0042_feishu_human_notifications`；保留历史版本即时回退点。
-- 当前生产：`a2f04ef / 0.1.64 / 0042_feishu_human_notifications / deployed_https_verified`（2026-09-10 14:43 +08:00 完成后检）。
+- 交接阶段：`0.1.66-local-verified-identity-continuity`
+- 当前本地候选：`0.1.66 / 0042_feishu_human_notifications`；身份连续性修复尚未部署。
+- 当前生产：`06b5066 / 0.1.65 / 0042_feishu_human_notifications / deployed_https_verified`（2026-09-11 完成后检）；保留历史版本即时回退点。
 - 生产接受状态：不是 `production_accepted`
 - 本切片：修复旧 Thread 列表/详情混入无 Delivery 的 Task 源消息导致 500；保留当前 Agent 的实际投递视图，并要求 TaskMembership 与 Agent 参与资格均有效。共享完整上下文继续使用 Task API，不恢复无任务私信。
 - OpenAPI 版本使用实际包版本；意外异常返回安全 JSON 和 request_id，不输出异常正文或凭据。心跳显式返回 version_status、原因、推荐与最低版本，未上报保持 unknown；Python SDK 兼容旧响应缺少这些字段。

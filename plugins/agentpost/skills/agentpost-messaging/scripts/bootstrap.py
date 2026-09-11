@@ -178,14 +178,95 @@ def _codex_active_profile(*, home: Path | None = None) -> tuple[bool, str | None
     return agentpost_configured, None
 
 
-def active_profile(*, host_name: str) -> tuple[bool, str | None]:
+def _json_host_active_profile(path: Path, *, host_name: str) -> tuple[bool, str | None]:
+    try:
+        if path.stat().st_size > 2 * 1024 * 1024:
+            return True, None
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return False, None
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return True, None
+
+    configured = False
+    profiles: set[str] = set()
+
+    def visit(value: object) -> None:
+        nonlocal configured
+        if isinstance(value, dict):
+            environment = value.get("env")
+            if (
+                isinstance(environment, dict)
+                and "AGENTPOST_PROFILE" in environment
+                and environment.get("AGENTPOST_HOST", host_name) == host_name
+            ):
+                configured = True
+                profile = environment.get("AGENTPOST_PROFILE")
+                if isinstance(profile, str) and 0 < len(profile.strip()) <= 200:
+                    profiles.add(profile.strip())
+            for child in value.values():
+                visit(child)
+        elif isinstance(value, list):
+            for child in value:
+                visit(child)
+
+    visit(payload)
+    return configured, next(iter(profiles)) if len(profiles) == 1 else None
+
+
+def _hermes_active_profile(*, home: Path) -> tuple[bool, str | None]:
+    explicit_home = os.environ.get("HERMES_HOME", "").strip()
+    path = (Path(explicit_home).expanduser() if explicit_home else home / ".hermes") / "config.yaml"
+    try:
+        if path.stat().st_size > 2 * 1024 * 1024:
+            return True, None
+        text_value = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return False, None
+    except (OSError, UnicodeError):
+        return True, None
+    configured = "agentpost" in text_value.lower()
+    matches = {
+        match.group(2).strip()
+        for match in re.finditer(
+            r"AGENTPOST_PROFILE\s*[:=]\s*(['\"]?)([^\s'\"#,]+)\1",
+            text_value,
+        )
+        if 0 < len(match.group(2).strip()) <= 200
+    }
+    return configured, next(iter(matches)) if len(matches) == 1 else None
+
+
+def active_profile(*, host_name: str, home: Path | None = None) -> tuple[bool, str | None]:
     configured = os.environ.get("AGENTPOST_PROFILE", "").strip()
     if configured:
         if len(configured) > 200:
             raise BootstrapError("current_profile_unavailable")
         return True, configured
+    resolved_home = home or Path.home()
     if host_name == "codex":
-        return _codex_active_profile()
+        return _codex_active_profile(home=resolved_home)
+    if host_name == "workbuddy":
+        return _json_host_active_profile(
+            resolved_home / ".workbuddy" / "mcp.json",
+            host_name=host_name,
+        )
+    if host_name == "openclaw":
+        explicit_config = os.environ.get("OPENCLAW_CONFIG_PATH", "").strip()
+        explicit_state = os.environ.get("OPENCLAW_STATE_DIR", "").strip()
+        explicit_home = os.environ.get("OPENCLAW_HOME", "").strip()
+        if explicit_config:
+            path = Path(explicit_config).expanduser()
+        elif explicit_state:
+            path = Path(explicit_state).expanduser() / "openclaw.json"
+        else:
+            root = (
+                Path(explicit_home).expanduser() if explicit_home else resolved_home / ".openclaw"
+            )
+            path = root / "openclaw.json"
+        return _json_host_active_profile(path, host_name=host_name)
+    if host_name == "hermes":
+        return _hermes_active_profile(home=resolved_home)
     return False, None
 
 
@@ -336,6 +417,11 @@ def execute(
     if not argv or (argv[0] == "setup" and not setup_valid) or argv[0] not in {"send", "setup"}:
         raise BootstrapError("unsupported_resume_operation")
     host_name = requested_host(argv)
+    profile: str | None = None
+    if argv[0] == "send":
+        profile_configured, profile = active_profile(host_name=host_name)
+        if not profile_configured or profile is None:
+            raise BootstrapError("current_profile_unavailable")
     platform_name = current_platform()
     release = fetcher(host_name=host_name, platform_name=platform_name)
     connector = ensure_runtime(
@@ -350,11 +436,8 @@ def execute(
         connector_argv.extend(["--workspace", str((workspace or Path.cwd()).resolve())])
     command = [str(connector)]
     if connector_argv[0] == "send":
-        profile_configured, profile = active_profile(host_name=host_name)
-        if profile_configured and profile is None:
-            raise BootstrapError("current_profile_unavailable")
-        if profile is not None:
-            command.extend(["--profile", profile])
+        assert profile is not None
+        command.extend(["--profile", profile])
     command.extend(connector_argv)
     completed = runner(command, check=False)
     return completed.returncode

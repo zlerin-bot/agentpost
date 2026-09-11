@@ -29,6 +29,7 @@ class ConnectorCredential:
     connector_id: str
     agent_address: str
     api_key: str = field(repr=False)
+    agent_id: str | None = None
 
 
 class CredentialStore(Protocol):
@@ -124,6 +125,7 @@ class KeyringCredentialStore:
                 connector_id=str(payload["connector_id"]),
                 agent_address=str(payload["agent_address"]),
                 api_key=str(payload["api_key"]),
+                agent_id=(str(payload["agent_id"]) if payload.get("agent_id") else None),
             )
         except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
             raise ConfigurationError("Stored Connector credential is malformed") from exc
@@ -141,6 +143,7 @@ class KeyringCredentialStore:
                 "connector_id": credential.connector_id,
                 "agent_address": credential.agent_address,
                 "api_key": credential.api_key,
+                "agent_id": credential.agent_id,
             },
             sort_keys=True,
             separators=(",", ":"),
@@ -251,6 +254,7 @@ class ManagedConnector:
                 connector_id=rotation.connector_id,
                 agent_address=rotation.agent.address,
                 api_key=rotation.api_key.get_secret_value(),
+                agent_id=rotation.agent.id,
             )
         )
         return rotation
@@ -286,11 +290,39 @@ def connect_managed(
     store = credential_store or KeyringCredentialStore()
     stored = store.load(server=cleaned_server, profile=stable_profile)
     if stored is not None:
+        if (
+            requested_existing_agent_id is not None
+            and stored.agent_id is not None
+            and requested_existing_agent_id != stored.agent_id
+        ):
+            raise ConfigurationError(
+                "Connector profile belongs to a different Agent",
+                code="connector_profile_identity_mismatch",
+            )
         client = AgentPost(cleaned_server, stored.api_key, timeout=timeout, transport=transport)
         client._connector_id = stored.connector_id
+        client._agent_id = stored.agent_id
         client._agent_address = stored.agent_address
         try:
-            client.connector.heartbeat()
+            heartbeat = client.connector.heartbeat()
+            heartbeat_agent_id = str(heartbeat.agent.id)
+            if stored.agent_id is not None and stored.agent_id != heartbeat_agent_id:
+                raise ConfigurationError(
+                    "Stored Connector identity does not match the server",
+                    code="connector_profile_identity_mismatch",
+                )
+            client._agent_id = heartbeat_agent_id
+            if stored.agent_id is None:
+                store.save(
+                    ConnectorCredential(
+                        server=stored.server,
+                        profile=stored.profile,
+                        connector_id=stored.connector_id,
+                        agent_address=stored.agent_address,
+                        api_key=stored.api_key,
+                        agent_id=heartbeat_agent_id,
+                    )
+                )
             return ManagedConnector(
                 client=client,
                 profile=stable_profile,
@@ -298,7 +330,14 @@ def connect_managed(
             )
         except AuthenticationError:
             client.close()
-            store.delete(server=cleaned_server, profile=stable_profile)
+            recovery_agent_id = stored.agent_id or requested_existing_agent_id
+            if recovery_agent_id is None:
+                raise ConfigurationError(
+                    "Existing Connector identity cannot be recovered automatically; reconnect it "
+                    "from the existing Agent card",
+                    code="current_identity_unavailable",
+                ) from None
+            requested_existing_agent_id = recovery_agent_id
 
     client = AgentPost.connect(
         cleaned_server,
@@ -315,7 +354,7 @@ def connect_managed(
         sleeper=sleeper,
         transport=transport,
     )
-    if not client._connector_id or not client._agent_address:
+    if not client._connector_id or not client._agent_id or not client._agent_address:
         client.close()
         raise ConfigurationError("Pairing approval did not identify the Connector")
     store.save(
@@ -325,6 +364,7 @@ def connect_managed(
             connector_id=client._connector_id,
             agent_address=client._agent_address,
             api_key=client._api_key,
+            agent_id=client._agent_id,
         )
     )
     return ManagedConnector(client=client, profile=stable_profile, credential_store=store)

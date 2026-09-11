@@ -568,6 +568,10 @@ test("new Agent approval suggests a platform handle and explains each invalid sh
   assert.match(script, /是系统保留名称/);
   assert.match(approval, /id="pairing-handle-help"/);
   assert.doesNotMatch(approval, /pairing-mfa|双重验证验证码或恢复码/);
+  assert.match(script, /检测到你已有 Agent。若这是重新连接或升级，请选择原 Agent/);
+  assert.match(script, /这是另一个新的 AI（创建独立 Agent）/);
+  assert.match(script, /重新连接或升级时不要选择这一项/);
+  assert.match(script, /agent\.current_connector_type.*pairingConnectorType/s);
 });
 
 test("Agent detail keeps current connection, history, access and actions distinct", () => {

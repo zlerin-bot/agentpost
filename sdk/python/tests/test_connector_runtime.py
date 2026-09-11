@@ -284,13 +284,105 @@ def test_managed_connector_restores_key_rotates_and_persists_replacement() -> No
     )
     try:
         assert [request.url.path for request in requests] == ["/api/v1/connect/heartbeat"]
+        assert store.credential is not None
+        assert store.credential.agent_id == AGENT_ID
         rotation = managed.rotate_credential()
         assert "agt_rotated-key" not in repr(rotation)
         assert store.credential is not None
         assert store.credential.api_key == "agt_rotated-key"
+        assert store.credential.agent_id == AGENT_ID
         assert managed.client.inbox.unread().items == []
     finally:
         managed.close()
+
+
+def test_invalid_legacy_credential_fails_closed_without_starting_new_pairing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = MemoryCredentialStore(
+        ConnectorCredential(
+            server="https://agentpost.me",
+            profile="codex:legacy",
+            connector_id="con_old",
+            agent_address="pluto@agentpost.me",
+            api_key="agt_expired-key",
+        )
+    )
+    paired = False
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            401,
+            json={"error": {"code": "AUTHENTICATION_REQUIRED", "message": "expired"}},
+        )
+
+    def must_not_pair(*_args, **_kwargs):
+        nonlocal paired
+        paired = True
+        raise AssertionError("an unknown legacy identity must not create a new pairing")
+
+    monkeypatch.setattr(AgentPost, "connect", must_not_pair)
+    with pytest.raises(ConfigurationError) as unavailable:
+        AgentPost.connect_managed(
+            "https://agentpost.me",
+            connector_type="codex",
+            display_name="Codex runtime",
+            profile="codex:legacy",
+            credential_store=store,
+            open_browser=False,
+            transport=httpx.MockTransport(handler),
+        )
+
+    assert unavailable.value.code == "current_identity_unavailable"
+    assert paired is False
+    assert store.credential is not None
+
+
+def test_invalid_credential_repairs_only_the_stored_agent_identity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = MemoryCredentialStore(
+        ConnectorCredential(
+            server="https://agentpost.me",
+            profile="workbuddy:mars",
+            connector_id="con_old",
+            agent_address="pluto@agentpost.me",
+            api_key="agt_expired-key",
+            agent_id=AGENT_ID,
+        )
+    )
+    captured: dict[str, object] = {}
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            401,
+            json={"error": {"code": "AUTHENTICATION_REQUIRED", "message": "expired"}},
+        )
+
+    def reconnect(server: str, **kwargs):
+        captured["requested_existing_agent_id"] = kwargs["requested_existing_agent_id"]
+        client = AgentPost(server, "agt_repaired-key", transport=kwargs["transport"])
+        client._connector_id = "con_repaired"
+        client._agent_id = AGENT_ID
+        client._agent_address = "pluto@agentpost.me"
+        return client
+
+    monkeypatch.setattr(AgentPost, "connect", reconnect)
+    managed = AgentPost.connect_managed(
+        "https://agentpost.me",
+        connector_type="workbuddy",
+        display_name="WorkBuddy runtime",
+        profile="workbuddy:mars",
+        credential_store=store,
+        open_browser=False,
+        transport=httpx.MockTransport(handler),
+    )
+    managed.close()
+
+    assert captured["requested_existing_agent_id"] == AGENT_ID
+    assert store.credential is not None
+    assert store.credential.connector_id == "con_repaired"
+    assert store.credential.agent_id == AGENT_ID
 
 
 def test_worker_advances_cursor_only_after_explicit_read_handler_and_ack() -> None:

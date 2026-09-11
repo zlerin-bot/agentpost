@@ -189,6 +189,7 @@ class PairingSession:
         if isinstance(connector, dict):
             client._connector_id = str(connector.get("connector_id") or "") or None
         if isinstance(agent, dict):
+            client._agent_id = str(agent.get("id") or "") or None
             client._agent_address = str(agent.get("address") or "") or None
         return client
 

@@ -493,6 +493,7 @@ class AgentPost:
             raise ConfigurationError("api_key must not be empty")
         self._api_key = api_key
         self._connector_id: str | None = None
+        self._agent_id: str | None = None
         self._agent_address: str | None = None
         self._client = httpx.Client(
             base_url=f"{self.server}/api/v1",

@@ -78,7 +78,7 @@ def test_plugin_packages_the_same_implicit_skill_without_machine_specific_mcp_co
 
     assert manifest["name"] == "agentpost"
     plugin_version, separator, cachebuster = manifest["version"].partition("+")
-    assert plugin_version == "0.1.65"
+    assert plugin_version == "0.1.66"
     assert separator == "+"
     assert cachebuster.startswith("codex.")
     assert manifest["skills"] == "./skills/"
@@ -117,8 +117,8 @@ def test_production_example_connector_artifact_matches_release_version() -> None
         if line.startswith("AGENTPOST_CONNECTOR_") and "=" in line
     )
 
-    assert values["AGENTPOST_CONNECTOR_RELEASE_VERSION"] == "0.1.65"
-    assert values["AGENTPOST_CONNECTOR_WHEEL_URL"].endswith("/agentpost-0.1.65-py3-none-any.whl")
+    assert values["AGENTPOST_CONNECTOR_RELEASE_VERSION"] == "0.1.66"
+    assert values["AGENTPOST_CONNECTOR_WHEEL_URL"].endswith("/agentpost-0.1.66-py3-none-any.whl")
     assert len(values["AGENTPOST_CONNECTOR_WHEEL_SHA256"]) == 64
     int(values["AGENTPOST_CONNECTOR_WHEEL_SHA256"], 16)
     assert "AGENTPOST_FEISHU_AILY_REMOTE_MCP_ENABLED=false" in production_env
@@ -340,7 +340,7 @@ def test_bootstrap_installs_hash_pinned_release_once_and_resumes_original_send(
 ) -> None:
     bootstrap = _load_bootstrap()
     monkeypatch.setattr(bootstrap.Path, "home", classmethod(lambda cls: tmp_path))
-    monkeypatch.delenv("AGENTPOST_PROFILE", raising=False)
+    monkeypatch.setenv("AGENTPOST_PROFILE", "codex:current")
     runtime = tmp_path / "runtime"
     state = {"installed": False}
     calls: list[tuple[str, ...]] = []
@@ -384,7 +384,12 @@ def test_bootstrap_installs_hash_pinned_release_once_and_resumes_original_send(
     )
 
     assert exit_code == 0
-    assert calls[-1] == (str(runtime / "bin" / "agentpost-connect"), *operation)
+    assert calls[-1] == (
+        str(runtime / "bin" / "agentpost-connect"),
+        "--profile",
+        "codex:current",
+        *operation,
+    )
     assert sum("pip" in call for call in calls) == 1
 
 
@@ -453,6 +458,76 @@ def test_bootstrap_refuses_new_pairing_when_codex_mcp_profile_is_missing(
     with pytest.raises(bootstrap.BootstrapError, match="current_profile_unavailable"):
         bootstrap.execute(
             ["send", "--ensure-host", "codex", "--task", "测试任务", "--body", "更新"],
+            fetcher=lambda **_kwargs: _release(bootstrap),
+            runtime=runtime,
+            runner=runner,
+        )
+
+
+@pytest.mark.parametrize(
+    ("host", "relative_path", "content"),
+    [
+        (
+            "workbuddy",
+            ".workbuddy/mcp.json",
+            '{"mcpServers":{"agentpost":{"env":{"AGENTPOST_HOST":"workbuddy",'
+            '"AGENTPOST_PROFILE":"workbuddy:existing"}}}}',
+        ),
+        (
+            "openclaw",
+            ".openclaw/openclaw.json",
+            '{"mcpServers":{"agentpost":{"env":{"AGENTPOST_HOST":"openclaw",'
+            '"AGENTPOST_PROFILE":"openclaw:existing"}}}}',
+        ),
+        (
+            "hermes",
+            ".hermes/config.yaml",
+            "mcp_servers:\n  agentpost:\n    env:\n      AGENTPOST_HOST: hermes\n"
+            "      AGENTPOST_PROFILE: hermes:existing\n",
+        ),
+    ],
+)
+def test_bootstrap_recovers_active_profile_from_each_host_registration(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    host: str,
+    relative_path: str,
+    content: str,
+) -> None:
+    bootstrap = _load_bootstrap()
+    monkeypatch.delenv("AGENTPOST_PROFILE", raising=False)
+    path = tmp_path / relative_path
+    path.parent.mkdir(parents=True)
+    path.write_text(content, encoding="utf-8")
+
+    assert bootstrap.active_profile(host_name=host, home=tmp_path) == (
+        True,
+        f"{host}:existing",
+    )
+
+
+@pytest.mark.parametrize("host", ["codex", "workbuddy", "openclaw", "hermes"])
+def test_bootstrap_send_never_cold_pairs_without_an_active_profile(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    host: str,
+) -> None:
+    bootstrap = _load_bootstrap()
+    monkeypatch.setattr(bootstrap.Path, "home", classmethod(lambda cls: tmp_path))
+    monkeypatch.delenv("AGENTPOST_PROFILE", raising=False)
+    runtime = tmp_path / "runtime"
+    connector = runtime / "bin" / "agentpost-connect"
+    connector.parent.mkdir(parents=True)
+    connector.touch()
+
+    def runner(command, **_kwargs):
+        if "-I" in command:
+            return SimpleNamespace(returncode=0, stdout="0.1.1\n")
+        raise AssertionError("send must stop before the Connector can start pairing")
+
+    with pytest.raises(bootstrap.BootstrapError, match="current_profile_unavailable"):
+        bootstrap.execute(
+            ["send", "--ensure-host", host, "--task", "测试任务", "--body", "更新"],
             fetcher=lambda **_kwargs: _release(bootstrap),
             runtime=runtime,
             runner=runner,

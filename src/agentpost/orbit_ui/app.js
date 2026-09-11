@@ -28,6 +28,7 @@ const state = {
   pairingTargetAgent: null,
   pairingNewAgentIntent: "",
   pairingSuggestedHandle: "",
+  pairingConnectorType: "",
   connectors: [],
   threads: [],
   archivedThreads: [],
@@ -4394,6 +4395,7 @@ function closePairingDialog({ clear = true } = {}) {
     state.pairingIdempotencyKey = "";
     state.pairingTargetAgent = null;
     state.pairingNewAgentIntent = "";
+    state.pairingConnectorType = "";
     updatePairingTargetMode();
   }
   if (elements.pairingDialog.open) {
@@ -4401,7 +4403,7 @@ function closePairingDialog({ clear = true } = {}) {
   }
 }
 
-function populateExistingAgentOptions() {
+function populateExistingAgentOptions({ allowCreateNew = false } = {}) {
   elements.pairingExistingAgent.replaceChildren();
   const agents = Array.isArray(state.dashboard?.agents) ? state.dashboard.agents : [];
   const owned = agents.filter(
@@ -4415,6 +4417,12 @@ function populateExistingAgentOptions() {
       : safeText(agent.display_name, agent.address);
     elements.pairingExistingAgent.append(option);
   });
+  if (allowCreateNew && owned.length) {
+    const option = document.createElement("option");
+    option.value = "__create_new__";
+    option.textContent = "＋ 这是另一个新的 AI（创建独立 Agent）";
+    elements.pairingExistingAgent.append(option);
+  }
   if (!owned.length) {
     const option = document.createElement("option");
     option.value = "";
@@ -4444,6 +4452,7 @@ function updatePairingTargetMode() {
 
 function configurePairingTarget(pairing) {
   const owned = populateExistingAgentOptions();
+  state.pairingConnectorType = safeText(pairing.connector_type, "");
   state.pairingCreateNewAutomatically = false;
   elements.pairingTargetSummary.hidden = false;
   const requestedAgentId = safeText(pairing.requested_existing_agent_id, "");
@@ -4464,6 +4473,20 @@ function configurePairingTarget(pairing) {
     elements.pairingTargetMode.value = "existing";
     elements.pairingTargetSummary.textContent = "这段接入码指定的 Agent 不属于当前账号。请关闭后，从目标 Agent 卡片重新点击“连接”。";
     elements.pairingSubmit.disabled = true;
+  } else if (owned.length) {
+    populateExistingAgentOptions({ allowCreateNew: true });
+    const sameHost = owned.filter(
+      (agent) => safeText(agent.current_connector_type, "") === state.pairingConnectorType,
+    );
+    const suggested = sameHost[0] || owned[0];
+    state.pairingTargetResolution = "ambiguous";
+    elements.pairingTargetMode.value = "existing";
+    elements.pairingExistingAgent.value = suggested.id;
+    elements.pairingTargetSummary.textContent = `检测到你已有 Agent。若这是重新连接或升级，请选择原 Agent（当前建议：${safeText(suggested.handle, suggested.display_name)}）；只有确实是另一个独立 AI 时才选择“创建独立 Agent”。`;
+    elements.pairingHandle.value = safeText(suggested.handle, "");
+    state.pairingSuggestedHandle = elements.pairingHandle.value;
+    updatePairingHandleHelp();
+    elements.pairingSubmit.disabled = false;
   } else {
     state.pairingTargetResolution = "automatic-new";
     state.pairingCreateNewAutomatically = true;
@@ -6737,6 +6760,18 @@ elements.pairingExistingAgent.addEventListener("change", () => {
   }
   state.pairingCreateNewAutomatically = elements.pairingExistingAgent.value === "__create_new__";
   elements.pairingTargetMode.value = state.pairingCreateNewAutomatically ? "new" : "existing";
+  if (state.pairingCreateNewAutomatically) {
+    elements.pairingTargetSummary.textContent = "将创建另一个独立 Agent。它会拥有新的身份、任务参与记录和连接；重新连接或升级时不要选择这一项。";
+    setSuggestedPairingHandle(state.pairingConnectorType || "agent");
+  } else {
+    const selected = (state.dashboard?.agents || []).find(
+      (agent) => String(agent.id) === elements.pairingExistingAgent.value,
+    );
+    elements.pairingTargetSummary.textContent = `将重新连接 ${safeText(selected?.handle, selected?.display_name)}；原身份、权限、任务和历史保持不变。`;
+    elements.pairingHandle.value = safeText(selected?.handle, "");
+    state.pairingSuggestedHandle = elements.pairingHandle.value;
+    updatePairingHandleHelp();
+  }
 });
 elements.pairingLocalId.addEventListener("change", () => {
   elements.pairingLocalId.value = canonicalPairingLocalId(elements.pairingLocalId.value);
