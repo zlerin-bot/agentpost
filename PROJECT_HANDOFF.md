@@ -2,6 +2,9 @@
 
 ## 当前接续摘要
 
+- 2026-09-11 **0.1.68 / d88ca7c / 0043_webhook_protocol 已部署，deployed_https_verified**：17:03 北京时间完成受保护切换，deploy_status=ok；独立 postflight 两次通过，公网 health/ready、auth 推荐版本、wheel SHA、未知下载 404 和现有 Human 登录态打开测试任务通过。覆盖下述 Webhook/状态、密码、附件及协作接续切片，早先“未部署”记录为历史状态。真实飞书端到端、PostgreSQL 并发和跨设备 Human 验收仍待确认；Aily 暂未开放，定时任务保持暂停。
+- 已在 020 最新 Webhook 反馈 activity `0fbd99bf-17f2-43fb-bdaa-1d96c4571aa9` 下逐项回复；新 activity `c83e28ef-cbd1-40d8-b0a6-65752f4b7572`，身份复用 mars agent，未创建 Run。部署证据及本次发现的回退脚本生成修复见 `docs/DEPLOYMENT_0.1.68_20260911.md`。
+
 - 2026-09-11 **020 Webhook/额度/连接状态反馈修复 local_verified，未部署**：本地接口级复现测试失败后 audit outcome=`failed` 违反数据库 `failure` 约束导致 500，已修正；错误响应补 request_id/event_id，畸形外部 code 不再抛出 TypeError。新增明确 HMAC-SHA256/X-Webhook 与 Bearer 协议选择，按实际 UTF-8 发送字节签名，测试改为唯一事件 ID，区分接受、业务拒绝及 already_processed；旧配置迁移保留 Bearer，未静默更改生产密钥或协议。
 - Human 飞书通知增加测试额度确认、跨测试/后台共享的数据库一分钟发送间隔；保存不补发历史工作，测试成功才启用新工作提醒，失败停止重试并暂停，中断发送标记结果不明而不重放。提醒仍不等于 Human 收到、Agent 启动或 Run 执行；本轮不包含日金额预算、通知合并或真实飞书计费查询。连接管理统一 Human 状态文案，区分从未上线与曾上线后超时；历史健康上报和版本兼容性不再冒充当前在线。
 - 验证：最终完整非 PostgreSQL **548 passed、2 skipped、7 deselected**，Orbit **47 passed**，Ruff check/format、JS syntax、diff check 通过；SQLite 0043 迁移往返通过。Chrome 1470px/390px 表单实看无横向溢出，合成配置保存、未勾选阻止测试及停用通过，console error/warn=0；没有调用真实飞书 Webhook。8781/8782 演示保留数据库和 demo@example.com / 123456，备份为各演示目录 orbit-demo.pre0043.db，已迁移并重启。生产仍 0.1.67/6b40ebb/schema0042；本地候选新 schema 0043_webhook_protocol，未来部署前须迁移。PostgreSQL 并发、生产异常日志核对、真实飞书通知和跨设备 Human 收件验收待确认。飞书 Aily 直连仍暂未开放，定时任务保持暂停。详情见 `docs/WEBHOOK_FEEDBACK_FIX_20260911.md`。
