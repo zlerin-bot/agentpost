@@ -1168,6 +1168,7 @@ footer {
 .agent-detail[hidden],
 .agent-detail-panel[hidden],
 .agent-owner-actions[hidden],
+.availability-card[hidden],
 .agent-detail-heading-actions > [hidden] {
   display: none !important;
 }
@@ -1212,7 +1213,7 @@ footer {
 .agent-overview-metrics article:nth-child(2) strong { color: var(--green); }
 .agent-overview-metrics article:nth-child(3) strong { color: var(--gold); }
 .agent-overview-metrics article:nth-child(4) strong,
-.agent-overview-metrics article:nth-child(5) strong { color: var(--red); }
+.agent-overview-metrics article:nth-child(5) strong { color: var(--gold); }
 
 .agent-overview-groups {
   display: grid;
@@ -1451,7 +1452,7 @@ footer {
 .agent-connection-banner.ready { border-left-color: var(--green); }
 .agent-connection-banner.working { border-left-color: var(--cyan); }
 .agent-connection-banner.recovering { border-left-color: var(--gold); }
-.agent-connection-banner.needs_attention { border-left-color: var(--red); }
+.agent-connection-banner.needs_attention { border-left-color: var(--gold); }
 
 .agent-connection-banner p {
   margin: 8px 0 0;
@@ -1489,6 +1490,28 @@ footer {
 }
 
 .agent-owner-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.agent-owner-actions section {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px;
+}
+
+.agent-owner-actions p {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--font-caption);
+  line-height: 1.6;
+}
+
+.agent-owner-action-buttons {
   display: flex;
   flex-wrap: wrap;
   gap: 9px;
@@ -2069,6 +2092,12 @@ summary:focus-visible {
 .data-chip.needs_attention {
   border-color: rgba(255, 147, 141, 0.4);
   color: var(--red);
+}
+
+.agent-browser-item .data-chip.needs_attention,
+#agent-detail-status.needs_attention {
+  border-color: rgba(230, 189, 114, 0.42);
+  color: var(--gold);
 }
 
 .agent-card-top,
@@ -3947,6 +3976,10 @@ footer {
   }
 
   .agent-wake-form {
+    grid-template-columns: 1fr;
+  }
+
+  .agent-owner-actions {
     grid-template-columns: 1fr;
   }
 

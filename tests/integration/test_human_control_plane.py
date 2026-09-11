@@ -305,7 +305,9 @@ def test_orbit_site_is_branded_and_does_not_persist_credentials(
     assert "可接任务" in orbit.text
     assert "正在工作" in orbit.text
     assert "恢复中" in orbit.text
-    assert "需要处理" in orbit.text
+    assert "暂不可接任务" in orbit.text
+    assert "连接设置" in orbit.text
+    assert "危险操作" not in orbit.text
     assert "连接异常" in script.text
     assert "重新连接这个 Agent" in orbit.text
     assert "权限与关系" in orbit.text

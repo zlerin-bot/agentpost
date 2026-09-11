@@ -513,7 +513,9 @@ test("Relay shows four Human-facing work states and keeps technical evidence", (
   assert.match(html, /可接任务/);
   assert.match(html, /正在工作/);
   assert.match(html, /恢复中/);
-  assert.match(html, /需要处理/);
+  assert.match(html, /暂不可接任务/);
+  assert.match(script, /return \{ label: "暂不可接任务", className: "needs_attention" \}/);
+  assert.match(script, /return \{ label: "连接异常", className: "connection_error" \}/);
   assert.match(script, /work_availability/);
   assert.match(script, /current_task_listener_last_heartbeat_at/);
   assert.match(script, /connection_state/);
@@ -579,6 +581,10 @@ test("Agent detail keeps current connection, history, access and actions distinc
     assert.match(html, new RegExp(`data-agent-tab="${tab}"`));
   }
   assert.match(html, /重新连接这个 Agent/);
+  assert.match(html, /data-agent-tab="danger">连接设置/);
+  assert.doesNotMatch(html, />危险操作</);
+  assert.match(html, /重新连接会保留这个 Agent 的身份和历史/);
+  assert.match(html, /Agent 管理/);
   assert.match(html, /历史连接/);
   assert.match(html, /删除采用软删除/);
   assert.match(script, /connector\.is_current && connector\.status === "active"/);
@@ -605,6 +611,7 @@ test("Feishu webhooks separate Human notifications from Aily task wake", () => {
   assert.match(stylesheet, /\.agent-wake-form\s*\{[^}]*repeat\(2, minmax\(0, 1fr\)\)/s);
   assert.match(stylesheet, /@media \(max-width: 860px\)[\s\S]*\.agent-wake-form\s*\{\s*grid-template-columns: 1fr/);
   assert.match(stylesheet, /\.agent-wake-channel\[hidden\]\s*\{\s*display: none/);
+  assert.match(stylesheet, /\.availability-card\[hidden\]/);
 });
 
 test("unavailable Agent types stop before copying an unusable connection prompt", () => {

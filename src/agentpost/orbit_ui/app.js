@@ -3472,6 +3472,19 @@ function chip(value, type = "status") {
   return item;
 }
 
+function agentHumanStatus(agent) {
+  if (agent.work_availability === "needs_attention") {
+    if (agent.connection_state === "connection_error") {
+      return { label: "连接异常", className: "connection_error" };
+    }
+    return { label: "暂不可接任务", className: "needs_attention" };
+  }
+  return {
+    label: statusLabel(agent.work_availability),
+    className: safeText(agent.work_availability, "unknown"),
+  };
+}
+
 function renderAgents(agents) {
   renderAgentOverview(agents);
   renderAgentBrowser(agents);
@@ -3583,7 +3596,10 @@ function agentBrowserButton(agent) {
   display.textContent = `${safeText(agent.display_name)} · ${agent.current_connector_type ? agentTypeLabel({ agent_type: agent.current_connector_type }) : "类型未提供"}`;
   names.append(name, display);
   identity.append(avatar, names);
-  const status = chip(agent.work_availability);
+  const humanStatus = agentHumanStatus(agent);
+  const status = chip(humanStatus.className);
+  status.textContent = humanStatus.label;
+  status.title = agentAvailabilityCopy(agent);
   button.append(identity, status);
   button.addEventListener("click", () => selectAgent(String(agent.id)));
   return button;
@@ -3641,9 +3657,10 @@ function detailFact(label, value, copy = "") {
 function renderCurrentAgentConnection(agent) {
   elements.agentCurrentConnection.replaceChildren();
   const intro = document.createElement("div");
-  intro.className = `agent-connection-banner ${agent.work_availability}`;
+  const humanStatus = agentHumanStatus(agent);
+  intro.className = `agent-connection-banner ${humanStatus.className}`;
   const heading = document.createElement("strong");
-  heading.textContent = statusLabel(agent.work_availability);
+  heading.textContent = humanStatus.label;
   const copy = document.createElement("p");
   copy.textContent = agentAvailabilityCopy(agent);
   intro.append(heading, copy);
@@ -3787,8 +3804,10 @@ function renderAgentDetail(agent) {
     : `${safeText(agent.display_name)} · 尚未设置短名称`;
   elements.agentDetailAvatar.textContent = agentDisplayName(agent).slice(0, 1).toUpperCase();
   elements.agentDetailAvatar.style.setProperty("--agent-hue", String(agentHue(agent)));
-  elements.agentDetailStatus.className = `data-chip ${agent.work_availability}`;
-  elements.agentDetailStatus.textContent = statusLabel(agent.work_availability);
+  const humanStatus = agentHumanStatus(agent);
+  elements.agentDetailStatus.className = `data-chip ${humanStatus.className}`;
+  elements.agentDetailStatus.textContent = humanStatus.label;
+  elements.agentDetailStatus.title = agentAvailabilityCopy(agent);
   elements.agentDetailSummary.replaceChildren(
     detailFact("常用名称", agentDisplayName(agent)),
     detailFact("显示名称", agent.display_name),

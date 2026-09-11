@@ -305,7 +305,7 @@
                 <article><span>可接任务</span><strong id="agent-stat-connected">0</strong></article>
                 <article><span>正在工作</span><strong id="agent-stat-awaiting">0</strong></article>
                 <article><span>恢复中</span><strong id="agent-stat-offline">0</strong></article>
-                <article><span>需要处理</span><strong id="agent-stat-error">0</strong></article>
+                <article><span>暂不可接任务</span><strong id="agent-stat-error">0</strong></article>
               </div>
               <div id="agent-overview-groups" class="agent-overview-groups"></div>
             </div>
@@ -334,7 +334,7 @@
                 <button type="button" data-agent-tab="access">权限与关系</button>
                 <button type="button" data-agent-tab="history">历史连接</button>
                 <button type="button" data-agent-tab="threads">相关对话</button>
-                <button type="button" data-agent-tab="danger">危险操作</button>
+                <button type="button" data-agent-tab="danger">连接设置</button>
               </nav>
               <section class="agent-detail-panel" data-agent-panel="summary">
                 <div id="agent-detail-summary" class="agent-detail-summary"></div>
@@ -385,9 +385,21 @@
               </section>
               <section class="agent-detail-panel" data-agent-panel="danger" hidden>
                 <div id="agent-owner-actions" class="agent-owner-actions">
-                  <button id="agent-reconnect" type="button" class="quiet-button">重新连接这个 Agent</button>
-                  <button id="agent-disconnect" type="button" class="quiet-button danger">断开当前连接</button>
-                  <button id="agent-delete" type="button" class="quiet-button danger">删除 Agent</button>
+                  <section>
+                    <p class="section-tag">连接设置</p>
+                    <p>用于恢复或停止当前设备连接。重新连接会保留这个 Agent 的身份和历史。</p>
+                    <div class="agent-owner-action-buttons">
+                      <button id="agent-reconnect" type="button" class="quiet-button">重新连接这个 Agent</button>
+                      <button id="agent-disconnect" type="button" class="quiet-button danger">断开当前连接</button>
+                    </div>
+                  </section>
+                  <section>
+                    <p class="section-tag">Agent 管理</p>
+                    <p>删除会停止连接并从活动列表移除 Agent，身份、历史对话和审计记录仍会保留。</p>
+                    <div class="agent-owner-action-buttons">
+                      <button id="agent-delete" type="button" class="quiet-button danger">删除 Agent</button>
+                    </div>
+                  </section>
                 </div>
                 <div id="agent-readonly-actions" class="availability-card" hidden>
                   <span class="availability-badge">只读</span>
