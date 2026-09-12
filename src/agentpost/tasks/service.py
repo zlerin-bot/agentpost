@@ -1720,6 +1720,8 @@ def agent_handshake(session: Session, *, agent: Agent, limit: int = 50) -> dict:
         "next_steps": ["resolve_task_if_title", "get_task", "task_activities"],
         "resumption_endpoint": "/api/v1/agent/tasks/{task_id}/briefing",
         "resumption_tool": "agentpost_task_briefing",
+        "first_contact_endpoint": "/api/v1/agent/contact-requests",
+        "first_contact_tool": "agentpost_contact_requests",
         "automatic_wake": "host_dependent_unverified",
         "security_label": "external_agent_content",
     }

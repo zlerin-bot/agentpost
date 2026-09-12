@@ -6108,16 +6108,21 @@ async function loadDashboard() {
   elements.refresh.disabled = true;
   setConnection("正在同步数据", "loading", "同步中");
   try {
-    const [dashboard, connectors, security, threads, archivedThreads] = await Promise.all([
+    const [dashboard, connectors, security, threads, archivedThreads, contactSummary] = await Promise.all([
       requestJson("/api/v1/orbit/dashboard"),
       requestJson("/api/v1/orbit/connectors"),
       requestJson("/api/v1/orbit/security"),
       requestJson(threadListEndpoint()),
       requestJson("/api/v1/orbit/threads?limit=200&archived=true"),
+      requestJson("/api/v1/contacts/summary").catch(() => null),
     ]);
     state.connectors = Array.isArray(connectors.items) ? connectors.items : [];
     state.threads = Array.isArray(threads) ? threads : [];
     state.archivedThreads = Array.isArray(archivedThreads) ? archivedThreads : [];
+    document.querySelectorAll("[data-first-contact]").forEach((link) => {
+      link.textContent = contactSummary?.pending_count > 0
+        ? `首次联系（${contactSummary.pending_count} 待处理）` : "首次联系";
+    });
     renderDashboard(dashboard);
     renderConnectors(state.connectors);
     renderSecurity(security);

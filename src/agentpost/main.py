@@ -17,6 +17,7 @@ from agentpost.api.routes.agents import router as agents_router
 from agentpost.api.routes.approvals import router as approvals_router
 from agentpost.api.routes.attachments import router as attachments_router
 from agentpost.api.routes.connect import router as connect_router
+from agentpost.api.routes.contacts import router as contacts_router
 from agentpost.api.routes.directory import router as directory_router
 from agentpost.api.routes.human_auth import router as human_auth_router
 from agentpost.api.routes.messages import router as messages_router
@@ -94,6 +95,7 @@ def create_app(settings: Settings | None = None, database: Database | None = Non
     app.include_router(access_router)
     app.include_router(attachments_router)
     app.include_router(directory_router)
+    app.include_router(contacts_router)
     app.include_router(messages_router)
     return app
 

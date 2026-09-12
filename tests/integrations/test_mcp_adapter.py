@@ -41,6 +41,7 @@ EXPECTED_TOOLS = {
     "agentpost_get_task",
     "agentpost_handshake",
     "agentpost_task_briefing",
+    "agentpost_contact_requests",
     "agentpost_task_activities",
     "agentpost_send_task_text",
     "agentpost_send_task_message",
@@ -170,6 +171,7 @@ def test_exact_tools_have_strict_public_parameters_and_v2_annotations() -> None:
             "agentpost_get_task",
             "agentpost_handshake",
             "agentpost_task_briefing",
+            "agentpost_contact_requests",
             "agentpost_task_activities",
             "agentpost_list_pending_task_runs",
             "agentpost_search_directory",
@@ -529,3 +531,18 @@ def test_host_text_tool_has_explicit_types():
     assert properties["attachment_ids"]["type"] == "array"
     assert all(field.get("type") for field in properties.values())
     assert all("anyOf" not in field for field in properties.values())
+
+
+def test_first_contact_tool_uses_read_only_endpoint_and_untrusted_content():
+    mcp, requests = registered_tools(
+        lambda request: httpx.Response(
+            200,
+            json={"items": [{"body": "external introduction"}], "automatic_execution": False},
+            request=request,
+        )
+    )
+    result = mcp.registrations["agentpost_contact_requests"].function()
+    assert requests[0].method == "GET"
+    assert requests[0].url.path == "/root/api/v1/agent/contact-requests"
+    assert not result.is_error
+    assert "external introduction" in str(result)

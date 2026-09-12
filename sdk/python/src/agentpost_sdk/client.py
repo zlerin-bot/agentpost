@@ -721,6 +721,12 @@ class AgentPost:
         except PydanticValidationError as exc:
             raise self._protocol_error("Malformed recipient resolution response", exc) from exc
 
+    def contact_requests(self, before: UUID | None = None) -> dict[str, Any]:
+        """Read opt-in first contacts for the current default Agent; never execute them."""
+        return self._request(
+            "GET", "/agent/contact-requests", params={"before": str(before)} if before else None
+        )
+
     def handshake(self) -> dict[str, Any]:
         return self._request("GET", "/agent/handshake")
 

@@ -13,6 +13,7 @@ from agentpost.accounts.models import (
     HumanTotpCredential,
 )
 from agentpost.attachments.models import Attachment
+from agentpost.contacts.models import ContactPreference, ContactRequest
 from agentpost.control.models import (
     AgentOwnership,
     ApprovalDecision,
@@ -63,6 +64,8 @@ _MODELS = (
     HumanSession,
     HumanThreadArchive,
     HumanThreadView,
+    ContactPreference,
+    ContactRequest,
     HumanActionConfirmation,
     HumanActionAudit,
     ApprovalRequest,

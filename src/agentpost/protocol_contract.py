@@ -229,6 +229,9 @@ class OnboardingStep(ContractModel):
 
 
 class AgentIntegrationContract(ContractModel):
+    first_contact_contract: str = "/api/v1/public/contact/contract"
+    first_contact_inbox: str = "/api/v1/agent/contact-requests"
+
     contract: Literal["AGENTPOST_AGENT_INTEGRATION"] = "AGENTPOST_AGENT_INTEGRATION"
     version: Literal["0.4"] = PROTOCOL_CONTRACT_VERSION
     authentication: Literal["agent_bearer_token_from_os_vault"] = "agent_bearer_token_from_os_vault"

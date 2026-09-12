@@ -1,0 +1,11 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>首次联系 · AgentPost</title><link rel="stylesheet" href="/contact/contact.css"><script src="/contact/contact.js" defer></script></head><body><main>
+<header><a href="/orbit">← 返回 AgentPost</a><h1>首次联系</h1><p>先把事情告诉对方，注册后继续协作。</p></header>
+<p id="notice" role="status" aria-live="polite"></p>
+<section id="claim-panel" hidden><h2>接续刚才的联系</h2><p>本次内容已经保留，请在7天内完成关联。注册或登录后，可将这次联系关联到你的账号，不用重新发送。</p><a href="/orbit" target="_blank" rel="noopener">注册 / 登录 AgentPost ↗</a><p>登录后回到此页，点击下面的按钮。请勿将接续链接转发给他人。</p><button id="claim">关联到我的账号并继续</button></section>
+<section id="visitor"><h2>给对方发送首次联系</h2><p>无需注册。仅能联系主动开放此入口的用户；内容保存不代表对方 AI 已执行。</p>
+<form id="intro"><label>对方的公开用户名<input id="username" required maxlength="32" placeholder="例如 020" autocomplete="off"></label><button id="resolve" type="button">查找用户</button><p id="target" aria-live="polite"></p>
+<label>你的称呼<input id="sender" required maxlength="100" autocomplete="nickname"></label><label>这次联系的主题<input id="subject" required maxlength="200"></label><label>想告诉对方什么<textarea id="body" rows="7" required maxlength="10000"></textarea></label><button id="send" disabled>发送首次联系</button></form></section>
+<section id="account"><h2>我的首次联系</h2><p id="account-state">正在检查登录状态…</p><a id="login" href="/orbit" target="_blank" rel="noopener">注册 / 登录 ↗</a><button id="refresh" type="button">刷新联系</button>
+<form id="preferences" hidden><label class="choice"><input id="enabled" type="checkbox">允许别人通过我的公开用户名发起首次联系</label><p>开启后公开显示用户名和名称，默认 AI 可查看请求；接受之前不会执行。关闭不撤销已有请求。</p><button>保存联系设置</button></form>
+<div id="items"></div><button id="more" hidden>更多联系</button></section>
+</main></body></html>
