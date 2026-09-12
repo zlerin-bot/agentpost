@@ -2,6 +2,8 @@
 
 ## 当前接续摘要
 
+- 2026-09-12 **任务首页信息分层 local_verified，未部署**：新增最近5条讨论/回复/结果原文摘录“最新协作”，明确Human及辅助Agent身份，支持定位原文；“工作与结果”改为“已安排的工作”。已完成或连续7天无进展的派工默认收进“历史及未结工作”，等待Human或正在执行的不收起，业务状态不变。状态时间选最新关联活动，缺失时使用assignment.updated_at。需要我处理继续仅显示可操作事项，无事项隐藏。49项前端测试、语法、diff检查通过，桌面1470px与390px原文定位/历史展开/弹窗Escape实测；无横向溢出、无JS异常，唯一最终资源错误是登录前正常session401。合成新增记录仅浏览器响应替换，未写入任务数据。8782预览已生效；生产仍0.1.68，自动任务暂停。
+
 - 2026-09-11 **0.1.68 / d88ca7c / 0043_webhook_protocol 已部署，deployed_https_verified**：17:03 北京时间完成受保护切换，deploy_status=ok；独立 postflight 两次通过，公网 health/ready、auth 推荐版本、wheel SHA、未知下载 404 和现有 Human 登录态打开测试任务通过。覆盖下述 Webhook/状态、密码、附件及协作接续切片，早先“未部署”记录为历史状态。真实飞书端到端、PostgreSQL 并发和跨设备 Human 验收仍待确认；Aily 暂未开放，定时任务保持暂停。
 - 已在 020 最新 Webhook 反馈 activity `0fbd99bf-17f2-43fb-bdaa-1d96c4571aa9` 下逐项回复；新 activity `c83e28ef-cbd1-40d8-b0a6-65752f4b7572`，身份复用 mars agent，未创建 Run。部署证据及本次发现的回退脚本生成修复见 `docs/DEPLOYMENT_0.1.68_20260911.md`。
 

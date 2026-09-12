@@ -131,8 +131,8 @@ test("tasks and formal friends are separate API-backed collaboration modules", (
   assert.match(script, /activateRoute\("friends", "directory"/);
   assert.doesNotMatch(`${html}\n${script}`, /本地体验|本地演示|交互原型|不连接生产|演示项目/);
   assert.doesNotMatch(html, /id="project-create-friend"|首位协作好友/);
-  assert.match(html, /明确工作、阶段成果与验收状态/);
-  assert.match(html, /工作与结果/);
+  assert.match(html, /明确派工及其执行结果/);
+  assert.match(html, /已安排的工作/);
   assert.match(html, /交流正文集中在这里/);
   assert.match(html, /文件与交付/);
   assert.match(html, /选择参与的 AI（至少一个）/);
@@ -803,4 +803,33 @@ test("notification tests require explicit quota consent and explain uncertain ou
   assert.match(script, /result.request_id/);
   assert.doesNotMatch(script, /首次连接尚未完成；现在不能收发/);
   assert.match(script, /曾经连接，当前心跳已超时/);
+});
+
+
+test("latest collaboration includes replies without heartbeat noise and leaves source order intact", () => {
+  const source = script.slice(script.indexOf("function latestTaskCollaboration("), script.indexOf("function renderLatestTaskCollaboration("));
+  const latest = new Function(`${source}; return latestTaskCollaboration;`)();
+  const activities = [
+    { activity_id: "old", kind: "task_message", created_at: "2026-09-01" },
+    { activity_id: "beat", kind: "run_progress", created_at: "2026-09-12" },
+    { activity_id: "reply", kind: "task_message", created_at: "2026-09-11", metadata: { reply_to_activity_id: "old" } },
+    { activity_id: "result", kind: "assignment_result", created_at: "2026-09-10" },
+  ];
+  assert.deepEqual(latest({ activities }).map(x => x.activity_id), ["reply", "result", "old"]);
+  assert.equal(activities[0].activity_id, "old");
+});
+
+test("stale work collapses without hiding questions or active execution", () => {
+  const source = script.slice(script.indexOf("function assignmentStatusChangedAt("), script.indexOf("function latestTaskCollaboration("));
+  const historical = new Function(`${source}; return historicalTaskWork;`)();
+  const now = Date.parse("2026-09-11T12:00:00Z");
+  const old = { assignment_id: "a", created_at: "2026-09-01", status: "queued", run_status: "queued" };
+  assert.equal(historical({}, old, now), true);
+  assert.equal(historical({}, { ...old, run_status: "waiting_human" }, now), false);
+  assert.equal(historical({}, { ...old, run_status: "running" }, now), false);
+  assert.equal(historical({ activities: [
+    { kind: "run_progress", created_at: "2026-09-02", metadata: { assignment_id: "a" } },
+    { kind: "run_progress", created_at: "2026-09-11", metadata: { assignment_id: "a" } },
+  ] }, old, now), false);
+  assert.equal(historical({}, { ...old, updated_at: "2026-09-11" }, now), false);
 });

@@ -1009,11 +1009,70 @@ function assignmentStatusChangedAt(project, assignment) {
   const statusKinds = new Set([
     "run_leased", "run_progress", "run_waiting_human", "assignment_result", "human_run_response",
   ]);
-  const activity = (project.activities || []).find((item) => (
+  const activity = (project.activities || []).filter((item) => (
     statusKinds.has(item.kind)
       && String(item.metadata?.assignment_id || "") === String(assignment.assignment_id)
-  ));
-  return activity?.created_at || assignment.created_at;
+  )).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0];
+  return activity?.created_at || assignment.updated_at || assignment.created_at;
+}
+
+function historicalTaskWork(project, assignment, now = Date.now()) {
+  if (["waiting_human", "running", "starting", "leased"].includes(assignment.run_status)) return false;
+  if (["completed", "cancelled"].includes(assignment.status)) return true;
+  const changed = Date.parse(assignmentStatusChangedAt(project, assignment));
+  return Number.isFinite(changed) && now - changed >= 7 * 24 * 60 * 60 * 1000;
+}
+
+function latestTaskCollaboration(project) {
+  const kinds = new Set(["task_message", "assignment_result", "final_submitted", "accepted", "changes_requested"]);
+  return [...(project.activities || [])].filter((item) => kinds.has(item.kind))
+    .sort((a, b) => Number(b.task_sequence || 0) - Number(a.task_sequence || 0)
+      || String(b.created_at).localeCompare(String(a.created_at))).slice(0, 5);
+}
+
+function renderLatestTaskCollaboration(project) {
+  const section = document.querySelector("#task-latest");
+  section.replaceChildren();
+  const heading = document.createElement("h3");
+  heading.textContent = "最新协作";
+  const note = document.createElement("p");
+  note.className = "task-files-note";
+  note.textContent = "最近 5 条交流与结果，最新在前；以下为原文摘录，不代表已确认结论。";
+  section.append(heading, note);
+  const items = latestTaskCollaboration(project);
+  if (!items.length) {
+    const empty = document.createElement("p");
+    empty.textContent = "还没有交流或结果。";
+    section.append(empty);
+  }
+  items.forEach((activity) => {
+    const card = document.createElement("article");
+    card.className = `task-latest-item human-tone-${humanColorTone(activity.actor_human_user_id)}`;
+    const byline = document.createElement("div");
+    byline.className = "task-latest-byline";
+    const who = document.createElement("strong");
+    who.textContent = activity.actor_display_name || "任务成员";
+    const time = document.createElement("time");
+    time.textContent = dateText(activity.created_at);
+    byline.append(who, time);
+    const meta = activity.metadata || {};
+    const title = document.createElement("strong");
+    const kind = activity.kind === "task_message" ? (meta.reply_to_activity_id ? "回复" : "发起讨论") : ({ assignment_result: "AI 提交结果", final_submitted: "提交任务验收", accepted: "Human 已验收", changes_requested: "要求修改" })[activity.kind];
+    title.textContent = `${kind} · ${meta.subject || "任务更新"}`;
+    const text = document.createElement("p");
+    const body = meta.body ?? meta.result_summary ?? meta.summary ?? meta.note ?? "请查看原记录。";
+    text.textContent = plainTaskExcerpt(typeof body === "string" ? body : JSON.stringify(body), 220);
+    card.append(byline, title);
+    if (activity.actor_agent_display_name) {
+      const agent = document.createElement("small");
+      agent.className = "task-latest-agent";
+      agent.textContent = `通过 ${activity.actor_agent_display_name}`;
+      card.append(agent);
+    }
+    card.append(text);
+    appendTaskRecordLink(card, activity.activity_id, "查看原文及上下文", "all");
+    section.append(card);
+  });
 }
 
 function checkpointHumanPrompt(checkpoint) {
@@ -1624,6 +1683,16 @@ function renderProjectDetail() {
   }
 
   elements.projectCollaborationList.replaceChildren();
+  renderLatestTaskCollaboration(project);
+  const workHistory = document.createElement("details");
+  workHistory.className = "task-work-history";
+  const historyLabel = document.createElement("summary");
+  workHistory.append(historyLabel);
+  const historyNote = document.createElement("p");
+  historyNote.textContent = "已完成或连续 7 天无进展的工作收在这里；仅调整展示，未结工作的状态不变。";
+  workHistory.append(historyNote);
+  let historyCount = 0;
+  let currentCount = 0;
   const renderedWorkRequirements = new Set();
   visibleAssignments.sort((left, right) => Number(right.run_status === "waiting_human")
     - Number(left.run_status === "waiting_human")
@@ -1769,20 +1838,28 @@ function renderProjectDetail() {
       copy.append(responseForm);
     }
     row.append(avatar, copy);
-    if ((assignment.status === "completed" || repeatedRequirement) && assignment.run_status !== "waiting_human") {
+    if ((historicalTaskWork(project, assignment) || repeatedRequirement) && assignment.run_status !== "waiting_human") {
       const history = document.createElement("details");
       history.className = "task-earlier-work";
       const label = document.createElement("summary");
       label.textContent = `${targetHuman} · ${taskExecutionStatusLabel(assignment.run_status || assignment.status)} · ${plainTaskExcerpt(assignment.instruction, 80)} · ${dateText(assignment.created_at)}`;
       history.append(label, row);
-      elements.projectCollaborationList.append(history);
-    } else elements.projectCollaborationList.append(row);
+      workHistory.append(history);
+      historyCount += 1;
+    } else {
+      elements.projectCollaborationList.append(row);
+      currentCount += 1;
+    }
   });
-  if (!visibleAssignments.length) {
+  if (!currentCount) {
     const empty = document.createElement("p");
     empty.className = "prototype-inline-empty";
-    empty.textContent = "还没有明确工作或执行结果。讨论内容统一在下方“讨论”中查看。";
+    empty.textContent = "暂无近期进行中的明确工作。最新交流请看上方“最新协作”。";
     elements.projectCollaborationList.append(empty);
+  }
+  if (historyCount) {
+    historyLabel.textContent = `历史及未结工作 · ${historyCount} 项`;
+    elements.projectCollaborationList.append(workHistory);
   }
   const execution = document.createElement("details");
   execution.className = "task-execution-state";

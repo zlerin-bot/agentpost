@@ -528,19 +528,22 @@
                 <article><span>结果验收</span><strong id="project-state-axes">—</strong></article>
               </div>
               <p id="project-action-result" class="form-status" role="status"></p>
-              <section id="task-attention" class="task-attention" aria-label="需要我处理" hidden></section>
               <nav id="task-jump-nav" class="task-jump-nav" aria-label="当前任务内容">
+                <button type="button" data-task-target="task-latest">最新协作</button>
                 <button id="task-jump-latest" type="button">最新讨论</button>
-                <button type="button" data-task-target="task-progress">工作与结果</button>
+                <button type="button" data-task-target="task-progress">已安排的工作</button>
                 <button type="button" data-task-target="task-files">文件与交付</button>
                 <button type="button" data-task-target="task-records">讨论</button>
                 <button type="button" data-task-target="task-owner-controls">安排工作</button>
                 <button type="button" data-task-target="task-submission-controls">提交与验收</button>
                 <button type="button" data-task-target="task-settings">成员与 AI</button>
               </nav>
+              <section id="task-latest" class="prototype-card task-latest" tabindex="-1" aria-label="最新协作"></section>
+              <section id="task-attention" class="task-attention" aria-label="需要我处理" hidden></section>
+
               <div class="task-primary-grid">
                 <section id="task-progress" class="prototype-card project-collaboration-card" tabindex="-1">
-                  <div class="prototype-card-heading"><div><span>明确工作、阶段成果与验收状态</span><h3>工作与结果</h3></div></div>
+                  <div class="prototype-card-heading"><div><span>明确派工及其执行结果；群内交流请看最新协作</span><h3>已安排的工作</h3></div></div>
                   <div id="project-collaboration-list" class="project-collaboration-list"></div>
                 </section>
                 <section id="task-files" class="prototype-card task-files-card" tabindex="-1">

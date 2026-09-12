@@ -6852,3 +6852,18 @@ footer {
 .task-attention-item { min-width: 0; width: 100%; box-sizing: border-box; padding: 12px; background: #fff; border: 1px solid #dbc68a; border-radius: 10px; overflow-wrap: anywhere; }
 .task-attention-item p { margin: 8px 0 12px; white-space: pre-wrap; }
 .task-attention-item button { max-width: 100%; white-space: normal; }
+
+/* Recent collaboration is separate from assignment history. */
+.task-latest { margin-bottom: 18px; min-width: 0; }
+.task-latest h3 { margin: 0; }
+.task-latest-item { padding: 14px 16px; margin-top: 10px; border: 1px solid #b9cde6; border-left: 4px solid #397dba; border-radius: 12px; background: #f0f6ff; overflow-wrap: anywhere; min-width: 0; }
+.task-latest-item:nth-of-type(even) { background: #f0f8f3; border-color: #b6d3c1; border-left-color: #448665; }
+.task-latest-byline { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.task-latest-byline time { color: #59677a; font-size: 13px; }
+.task-latest-item p { margin: 8px 0; line-height: 1.6; white-space: pre-wrap; }
+.task-work-history { padding: 12px; border: 1px solid #bdc8d7; background: #f4f6f9; border-radius: 12px; }
+.task-work-history > summary { cursor: pointer; font-weight: 600; }
+.task-work-history > p { color: #586579; line-height: 1.5; }
+@media (max-width: 700px) { .task-latest-item { padding: 12px; } .task-work-history { padding: 8px; } }
+
+.task-latest-agent { display: block; margin-top: 5px; color: #59677a; }
