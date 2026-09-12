@@ -5598,7 +5598,7 @@ footer {
   overflow: hidden;
 }
 
-.task-activity-attachment summary {
+.task-activity-attachment > summary {
   display: grid;
   grid-template-columns: 30px minmax(0, 1fr);
   align-items: center;
@@ -5608,7 +5608,7 @@ footer {
   list-style: none;
 }
 
-.task-activity-attachment summary::-webkit-details-marker {
+.task-activity-attachment > summary::-webkit-details-marker {
   display: none;
 }
 
@@ -5624,27 +5624,27 @@ footer {
   font-weight: 800;
 }
 
-.task-activity-attachment summary > span:last-child {
+.task-activity-attachment > summary > span:last-child {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   min-width: 0;
   gap: 2px;
 }
 
-.task-activity-attachment summary strong,
-.task-activity-attachment summary small {
+.task-activity-attachment > summary strong,
+.task-activity-attachment > summary small {
   font-size: var(--font-meta);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.task-activity-attachment summary strong {
+.task-activity-attachment > summary strong {
   color: #202124;
   font-size: var(--font-item-title);
 }
 
-.task-activity-attachment summary small {
+.task-activity-attachment > summary small {
   color: #70757a;
   font-size: var(--font-meta);
 }

@@ -924,7 +924,11 @@ function createTaskActivityAttachment(activity, format, body) {
   const name = document.createElement("strong");
   name.textContent = "说了什么";
   const hint = document.createElement("small");
-  hint.textContent = `${format.toUpperCase()} 正文 · 展开阅读`;
+  const updateReadingHint = () => {
+    hint.textContent = details.open ? "收起正文" : "展开阅读";
+  };
+  details.addEventListener("toggle", updateReadingHint);
+  updateReadingHint();
   copy.append(name, hint);
   summary.append(icon, copy);
   const preview = document.createElement("pre");
@@ -932,10 +936,6 @@ function createTaskActivityAttachment(activity, format, body) {
   preview.textContent = format === "json" && typeof body !== "string"
     ? JSON.stringify(body, null, 2)
     : String(body ?? "");
-  const excerpt = document.createElement("p");
-  excerpt.className = "task-content-excerpt";
-  excerpt.textContent = format === "html" ? "HTML 原文，按安全文本查看。" : plainTaskExcerpt(body);
-  copy.append(excerpt);
   const original = document.createElement("details");
   original.className = "task-original-source";
   const originalLabel = document.createElement("summary");
