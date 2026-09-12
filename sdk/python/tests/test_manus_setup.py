@@ -58,7 +58,7 @@ def test_manus_local_folder_setup_creates_secret_free_verified_files(tmp_path: P
     manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
     assert result.mode == "local_folder"
     assert result.command.read_bytes() == adapter.read_bytes()
-    assert "# 星云驿 Manus 本地文件夹" in result.agents_path.read_text(encoding="utf-8")
+    assert "# AgentPost Manus 本地文件夹" in result.agents_path.read_text(encoding="utf-8")
     assert stat.S_IMODE(result.command.stat().st_mode) == 0o700
     assert stat.S_IMODE(result.agents_path.stat().st_mode) == 0o600
     assert stat.S_IMODE(result.manifest_path.stat().st_mode) == 0o600
@@ -70,6 +70,32 @@ def test_manus_local_folder_setup_creates_secret_free_verified_files(tmp_path: P
     assert "agt_" not in serialized
     assert "new task" not in result.first_task_prompt.lower()
     assert "manus_task_mount_stale" in result.first_task_prompt
+
+
+def test_rebranding_preserves_verified_legacy_manus_bundle(tmp_path: Path) -> None:
+    runtime = tmp_path / "runtime"
+    runtime.mkdir()
+    mcp, _ = _local_runtime(runtime)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    options = dict(
+        server="https://agentpost.me",
+        profile="manus:test-device",
+        expected_agent_address="tester@agentpost.me",
+        mcp_command=mcp,
+        workspace_path=workspace,
+    )
+    original = configure_manus_local_folder(**options)
+    legacy = original.agents_path.read_text().replace("AgentPost", "星云驿").encode()
+    original.agents_path.write_bytes(legacy)
+    manifest = json.loads(original.manifest_path.read_text())
+    manifest["agents_sha256"] = hashlib.sha256(legacy).hexdigest()
+    original.manifest_path.write_text(json.dumps(manifest))
+    upgraded = configure_manus_local_folder(**options)
+    assert upgraded.command == original.command
+    assert upgraded.manifest_path == original.manifest_path
+    assert "# AgentPost Manus" in upgraded.agents_path.read_text()
+    assert json.loads(upgraded.manifest_path.read_text())["profile"] == options["profile"]
 
 
 def test_manus_local_folder_setup_refuses_incomplete_or_unmanaged_bundle(tmp_path: Path) -> None:

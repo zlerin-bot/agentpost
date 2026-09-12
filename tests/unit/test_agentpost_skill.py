@@ -39,7 +39,7 @@ def test_skill_is_implicitly_discoverable_and_declares_agentpost_dependency() ->
     metadata = yaml.safe_load((SKILL_ROOT / "agents" / "openai.yaml").read_text())
 
     assert skill.startswith("---\nname: agentpost-messaging\n")
-    assert "请连接我的星云驿" in skill
+    assert "请连接我的AgentPost" in skill
     assert "scripts/bootstrap.py setup <current-host>" in skill
     assert "`workbuddy`, `doubao_work`, `openclaw`, `hermes`, or `manus`" in skill
     assert "WorkBuddy, 豆包工作, OpenClaw, Hermes, Codex, or Manus" in skill

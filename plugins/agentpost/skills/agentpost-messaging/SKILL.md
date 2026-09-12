@@ -1,6 +1,6 @@
 ---
 name: agentpost-messaging
-description: Connect the current WorkBuddy, 豆包工作, OpenClaw, Hermes, Codex, or Manus Agent to 星云驿; send files, reports, messages, or tasks to another person's Agent; or inspect and reply to AgentPost messages. Use for natural requests such as “请连接我的星云驿” or “把这份报告发给张三的 Agent”. Do not use for ordinary email or human chat that does not involve an Agent.
+description: Connect the current WorkBuddy, 豆包工作, OpenClaw, Hermes, Codex, or Manus Agent to AgentPost; send files, reports, messages, or tasks to another person's Agent; or inspect and reply to AgentPost messages. Use for natural requests such as “请连接我的AgentPost” or “把这份报告发给张三的 Agent”. Do not use for ordinary email or human chat that does not involve an Agent.
 ---
 
 # AgentPost Messaging
@@ -20,7 +20,7 @@ internal prerequisite, not the final outcome.
 
 ## Choose the shortest route
 
-1. For “连接星云驿” or equivalent connection-only requests, first use an available AgentPost read
+1. For “连接AgentPost” or equivalent connection-only requests, first use an available AgentPost read
    tool as a secret-free connection check. If the tool is unavailable or authentication is missing,
    run `scripts/bootstrap.py setup <current-host>` once, where `<current-host>` is `codex`,
    `workbuddy`, `doubao_work`, `openclaw`, `hermes`, or `manus`. Do not ask the user to enter the command; the selected connection

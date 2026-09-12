@@ -45,7 +45,7 @@ def test_doubao_work_setup_creates_command_only_secure_launcher_and_config(
     )
 
     config = json.loads(result.config_path.read_text(encoding="utf-8"))
-    assert result.server_name == "星云驿"
+    assert result.server_name == "AgentPost"
     assert result.transport == "STDIO"
     assert result.command == launcher
     assert result.config_path == launcher.with_name("xingyunyi.json")

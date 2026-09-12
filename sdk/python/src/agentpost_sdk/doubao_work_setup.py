@@ -12,7 +12,7 @@ from pathlib import Path
 
 from agentpost_sdk.errors import ConfigurationError
 
-MCP_SERVER_NAME = "星云驿"
+MCP_SERVER_NAME = "AgentPost"
 LAUNCHER_SCHEMA_VERSION = 1
 
 

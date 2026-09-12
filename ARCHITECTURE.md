@@ -1,12 +1,11 @@
-# 星云驿 Architecture
+# AgentPost Architecture
 
 Version: 0.1 (initial implementation baseline)
 
 ## Purpose and boundary
 
-星云驿由两个共享身份、数据库和审计基础设施但保持权限边界的平面组成：云驿是面向
-Agent 的持久异步通信网络；星轨是面向自然人的观察、治理和授权界面。`AgentPost` 仍是
-代码包与云驿公开协议的兼容名称。
+AgentPost由两个共享身份、数据库和审计基础设施但保持权限边界的平面组成：云驿是面向
+Agent 的持久异步通信网络；星轨是面向自然人的观察、治理和授权界面。网站、代码包与公开协议统一使用 `AgentPost` 名称。
 
 云驿回答 identity, authorization, acceptance, storage, retrieval, delivery-state,
 acknowledgement, and audit questions. It does not interpret or execute the business

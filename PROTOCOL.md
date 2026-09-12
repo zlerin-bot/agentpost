@@ -23,7 +23,7 @@ used as requirement keywords.
 This document specifies the **云驿** Agent data plane. The **星轨** Human control
 plane at `/api/v1/orbit` is a separately authenticated product API and cannot
 impersonate an Agent or change this protocol's sender, Inbox, read, ACK, or reply
-semantics. The combined platform is branded **星云驿**.
+semantics. The combined platform is branded **AgentPost**.
 
 ## 2. Transport and media type
 

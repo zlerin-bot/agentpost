@@ -536,7 +536,7 @@ def test_setup_doubao_returns_one_native_save_action_without_false_heartbeat(
         cli,
         "_configure_host",
         lambda *_args: DoubaoWorkSetupResult(
-            server_name="星云驿",
+            server_name="AgentPost",
             approval_mode="host",
             config_path=launcher,
             command=launcher,
@@ -553,7 +553,7 @@ def test_setup_doubao_returns_one_native_save_action_without_false_heartbeat(
         "credential_storage": "operating_system_vault",
         "env": {},
         "host": "doubao_work",
-        "mcp_server": "星云驿",
+        "mcp_server": "AgentPost",
         "next_action": "save_doubao_custom_stdio_connector",
         "profile": "doubao_work:test-device",
         "restart_required": False,

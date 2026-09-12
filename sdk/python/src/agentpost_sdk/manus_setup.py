@@ -12,14 +12,14 @@ from pathlib import Path
 
 from agentpost_sdk.errors import ConfigurationError
 
-MCP_SERVER_NAME = "星云驿"
+MCP_SERVER_NAME = "AgentPost"
 LAUNCHER_SCHEMA_VERSION = 1
 LOCAL_FOLDER_SCHEMA_VERSION = 1
-LOCAL_AGENTS_MARKER = "# 星云驿 Manus 本地文件夹"
+LOCAL_AGENTS_MARKER = "# AgentPost Manus 本地文件夹"
 
-LOCAL_AGENTS_CONTENT = """# 星云驿 Manus 本地文件夹
+LOCAL_AGENTS_CONTENT = """# AgentPost Manus 本地文件夹
 
-本文件夹用于让当前 Manus 本地任务在 Human 明确授权范围内使用星云驿。
+本文件夹用于让当前 Manus 本地任务在 Human 明确授权范围内使用AgentPost。
 
 - 开始任何操作前，先运行 `./xingyunyi status`。
   只有 `current=true`、连接为 `active / healthy`，且 Agent 地址与安装结果一致时才可继续。
@@ -223,7 +223,10 @@ def _validate_existing_local_bundle(
     if (
         not isinstance(manifest, dict)
         or manifest.get("schema_version") != LOCAL_FOLDER_SCHEMA_VERSION
-        or LOCAL_AGENTS_MARKER.encode() not in agents_bytes
+        or not any(
+            marker in agents_bytes
+            for marker in (LOCAL_AGENTS_MARKER.encode(), "# 星云驿 Manus 本地文件夹".encode())
+        )
         or manifest.get("agents_sha256") != _sha256_bytes(agents_bytes)
         or manifest.get("adapter_sha256") != _sha256_bytes(adapter_bytes)
     ):
@@ -294,7 +297,7 @@ def configure_manus_local_folder(
     _atomic_write(manifest_path, manifest_bytes, mode=0o600)
 
     first_task_prompt = (
-        "你正在使用已经安装好的星云驿 Manus 本地文件夹。先读取根目录 /AGENTS.md，"
+        "你正在使用已经安装好的AgentPost Manus 本地文件夹。先读取根目录 /AGENTS.md，"
         "再运行 ./xingyunyi status；只有 current=true、连接 active/healthy 且 Agent 地址为 "
         f"{cleaned_address} 时才继续。发送、回复、读取和 ACK 必须遵守当前任务中的 Human 授权。"
         "如果看不到文件或适配器，请停止并报告 manus_task_mount_stale，"

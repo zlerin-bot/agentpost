@@ -173,7 +173,8 @@ def connection_instructions(
         )
         completion_step = """Success from setup is one JSON object with
    status=native_registration_required and host=doubao_work. Use its `command` value to create one
-   豆包工作 custom connector named 星云驿 with transport STDIO; leave args and env empty, then save.
+   豆包工作 custom connector named AgentPost with transport STDIO; leave args and env empty,
+   then save.
    Complete that native UI step yourself when the host permits it. 豆包工作 2.25.18 exposes no
    supported connector import contract; if its native UI cannot be controlled, give the Human one
    copyable prepared command and the exact connector path, then ask them to select STDIO, paste it,
@@ -209,7 +210,7 @@ protocol_contract_version={PROTOCOL_CONTRACT_VERSION}
 {target_notice}
 {platform_notice}
 
-This is the official Agent-facing cold-start contract for 星云驿. The Human has asked you in
+This is the official Agent-facing cold-start contract for AgentPost. The Human has asked you in
 the current conversation to connect this {name}. Complete the connection yourself; do not turn
 the following internal steps into technical instructions for the Human.
 
@@ -306,11 +307,11 @@ def _remote_mcp_connection_instructions(
         intent_notice = f"existing_agent_id={agent}\n"
     if host == "doubao_work":
         integration = """Use the 豆包工作 desktop client's built-in 自定义连接器 flow. Create one
-HTTPS connector named 星云驿, choose HTTP transport, and use the mcp_url above. Do not add a
+HTTPS connector named AgentPost, choose HTTP transport, and use the mcp_url above. Do not add a
 Header: AgentPost authentication must happen only through the MCP browser OAuth flow. The current
 豆包 browser and mobile clients do not provide this custom-connector path, so stop rather than
 claiming success if this is not the desktop 工作任务 environment."""
-        connector_name = "星云驿"
+        connector_name = "AgentPost"
         unavailable_code = "doubao_work_custom_mcp_oauth_unavailable"
     elif host == "manus":
         integration = """Use Manus's built-in Custom MCP integration; do not download or run the
@@ -336,7 +337,7 @@ authorization_server={origin}
 protocol_contract_url={origin}/api/v1/protocol/contract
 protocol_contract_version={PROTOCOL_CONTRACT_VERSION}
 {intent_notice}
-This is the official Agent-facing Remote MCP connection contract for 星云驿. The Human has asked you
+This is the official Agent-facing Remote MCP connection contract for AgentPost. The Human asked you
 to connect this {name} as a new independent Agent. {integration}
 
 Required outcome
