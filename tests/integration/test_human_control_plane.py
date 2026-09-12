@@ -1620,6 +1620,19 @@ def test_human_attachment_open_and_html_preview_are_authorized_and_read_only(
             files={"file": ("bundle.zip", zipped.getvalue(), "application/octet-stream")},
         )
         assert zip_upload.status_code == 201
+        word_file = io.BytesIO()
+        with ZipFile(word_file, "w") as archive:
+            archive.writestr(
+                "word/document.xml",
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+                "<w:body><w:p><w:r><w:t>Word正文</w:t></w:r></w:p></w:body></w:document>",
+            )
+        word_upload = client.post(
+            "/api/v1/attachments",
+            headers={"Authorization": f"Bearer {alice['api_key']}"},
+            files={"file": ("报告.docx", word_file.getvalue(), "application/octet-stream")},
+        )
+        assert word_upload.status_code == 201
         json_upload = client.post(
             "/api/v1/attachments",
             headers={"Authorization": f"Bearer {alice['api_key']}"},
@@ -1648,6 +1661,7 @@ def test_human_attachment_open_and_html_preview_are_authorized_and_read_only(
                     html_upload.json()["id"],
                     markdown_upload.json()["id"],
                     zip_upload.json()["id"],
+                    word_upload.json()["id"],
                     json_upload.json()["id"],
                 ],
             },
@@ -1665,6 +1679,17 @@ def test_human_attachment_open_and_html_preview_are_authorized_and_read_only(
             )
 
         owner_headers = {"Authorization": f"Bearer {owner['access_key']}"}
+        word_url = f"/api/v1/orbit/attachments/{word_upload.json()['id']}/preview"
+        word_response = client.get(word_url, headers=owner_headers)
+        assert word_response.status_code == 200
+        assert "Word正文" in word_response.text
+        assert "sandbox" in word_response.headers["content-security-policy"]
+        assert (
+            client.get(
+                word_url, headers={"Authorization": f"Bearer {outsider['access_key']}"}
+            ).status_code
+            == 404
+        )
         pdf_download = client.get(
             f"/api/v1/orbit/attachments/{pdf_upload.json()['id']}",
             headers=owner_headers,

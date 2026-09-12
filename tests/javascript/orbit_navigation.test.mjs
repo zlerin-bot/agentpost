@@ -473,7 +473,7 @@ test("conversation identity and attachments expose clear safe actions", () => {
   assert.match(script, /"application\/json"/);
   assert.match(script, /\/api\/v1\/orbit\/attachments\/\$\{attachmentId\}/);
   assert.match(html, /id="attachment-preview-frame"[^>]*sandbox=""/);
-  assert.match(html, /附件以隔离、只读方式展示/);
+  assert.match(html, /直接在这里阅读/);
   assert.match(stylesheet, /\.attachment-preview-dialog iframe/);
   assert.match(stylesheet, /\.thread-attachment-action/);
   assert.match(stylesheet, /\.thread-attachment-action\.is-primary/);
@@ -832,4 +832,16 @@ test("stale work collapses without hiding questions or active execution", () => 
     { kind: "run_progress", created_at: "2026-09-11", metadata: { assignment_id: "a" } },
   ] }, old, now), false);
   assert.equal(historical({}, { ...old, updated_at: "2026-09-11" }, now), false);
+});
+
+
+test("Word and generic PDF files expose previews in both attachment locations", () => {
+  const source = script.slice(script.indexOf("function attachmentPreviewType("), script.indexOf("async function openTaskFileSource("));
+  const types = new Function("safeText", `${source}; return { attachmentPreviewType, taskFileTypeLabel };`)((value, fallback) => value || fallback);
+  assert.equal(types.taskFileTypeLabel("application/octet-stream", "报告.DOCX"), "Word");
+  assert.equal(types.taskFileTypeLabel("application/zip", "报告.docx"), "Word");
+  assert.equal(types.taskFileTypeLabel("application/octet-stream", "报告.doc"), "Word");
+  assert.equal(types.taskFileTypeLabel("application/octet-stream", "报告.pdf"), "PDF");
+  assert.equal(types.taskFileTypeLabel("application/octet-stream", "报告.docx.exe"), "其他");
+  assert.ok(script.slice(script.indexOf("const readableTypes = new Set(")).includes('"application/msword"'));
 });

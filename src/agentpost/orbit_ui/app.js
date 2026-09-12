@@ -1386,14 +1386,15 @@ function renderTaskAttention(project, ownerAccess) {
 
 function attachmentPreviewType(contentType, filename = "") {
   const declared = safeText(contentType, "").split(";", 1)[0].trim().toLowerCase();
+  if (["application/zip", "application/x-zip-compressed"].includes(declared) && String(filename).toLowerCase().endsWith(".docx")) return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
   if (declared === "application/x-zip-compressed") return "application/zip";
   const known = ["text/markdown", "text/x-markdown", "application/markdown", "text/html",
-    "application/json", "application/pdf", "application/zip"];
+    "application/json", "application/pdf", "application/zip", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"];
   if (known.includes(declared)) return declared;
   const suffix = String(filename).toLowerCase().match(/\.[^.\/]+$/)?.[0];
   return ({ ".md": "text/markdown", ".markdown": "text/markdown", ".txt": "text/plain",
     ".json": "application/json", ".html": "text/html", ".htm": "text/html",
-    ".zip": "application/zip" })[suffix] || declared;
+    ".zip": "application/zip", ".pdf": "application/pdf", ".doc": "application/msword", ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document" })[suffix] || declared;
 }
 
 function taskFileTypeLabel(contentType, filename = "") {
@@ -1402,6 +1403,7 @@ function taskFileTypeLabel(contentType, filename = "") {
   if (type === "application/json") return "JSON";
   if (type === "text/html") return "HTML";
   if (type === "application/pdf") return "PDF";
+  if (["application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"].includes(type)) return "Word";
   if (type === "application/zip") return "ZIP 压缩包";
   if (type.startsWith("text/")) return "文本";
   return type ? "其他" : "未知类型";
@@ -1488,7 +1490,7 @@ function renderTaskFiles(project) {
     const normalizedType = attachmentPreviewType(file.content_type, file.filename);
     const previewable = new Set([
       "application/json", "application/markdown", "application/pdf", "text/html", "application/zip",
-      "text/markdown", "text/plain", "text/x-markdown",
+      "text/markdown", "text/plain", "text/x-markdown", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ]).has(normalizedType);
     if (previewable) {
       const preview = document.createElement("button");
@@ -5636,6 +5638,8 @@ function appendThreadAttachments(message, body) {
     const downloadUrl = `/api/v1/orbit/attachments/${attachmentId}`;
     const previewUrl = `${downloadUrl}/preview`;
     const readableTypes = new Set([
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       "application/json",
       "application/markdown",
       "text/markdown",

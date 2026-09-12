@@ -15,6 +15,7 @@ from agentpost.accounts.usernames import HumanUsernameAlreadyRegisteredError
 from agentpost.api.dependencies import SessionDep, SettingsDep
 from agentpost.attachments.models import Attachment
 from agentpost.attachments.preview import preview_content_type, zip_directory
+from agentpost.attachments.word_preview import WORD_TYPES, word_preview
 from agentpost.control.auth import CurrentHumanDep, HumanAccessKeyDep
 from agentpost.control.human_security import (
     HUMAN_CSRF_HEADER,
@@ -781,7 +782,13 @@ def orbit_attachment_preview(
         attachment_id,
     )
     content_type = preview_content_type(attachment.content_type, attachment.filename)
-    supported_types = {"application/pdf", "text/html", "application/zip", *_TEXT_PREVIEW_TYPES}
+    supported_types = {
+        "application/pdf",
+        "text/html",
+        "application/zip",
+        *WORD_TYPES,
+        *_TEXT_PREVIEW_TYPES,
+    }
     if content_type not in supported_types:
         source.close()
         raise HTTPException(
@@ -793,8 +800,16 @@ def orbit_attachment_preview(
         )
     if content_type == "application/zip":
         source = io.BytesIO(zip_directory(source).encode("utf-8"))
-    if content_type in _TEXT_PREVIEW_TYPES or content_type == "application/zip":
-        preview = _text_attachment_preview(attachment, source)
+    if (
+        content_type in _TEXT_PREVIEW_TYPES
+        or content_type == "application/zip"
+        or content_type in WORD_TYPES
+    ):
+        preview = (
+            word_preview(source, attachment.filename, content_type)
+            if content_type in WORD_TYPES
+            else _text_attachment_preview(attachment, source)
+        )
         return Response(
             content=preview,
             media_type="text/html",

@@ -6,7 +6,11 @@ from pathlib import PurePosixPath
 from typing import BinaryIO
 from zipfile import BadZipFile, ZipFile
 
+from agentpost.attachments.word_preview import DOC, DOCX
+
 _PREVIEW_TYPES = {
+    DOC,
+    DOCX,
     "text/markdown",
     "text/x-markdown",
     "application/markdown",
@@ -17,6 +21,9 @@ _PREVIEW_TYPES = {
     "application/zip",
 }
 _SUFFIX_TYPES = {
+    ".doc": DOC,
+    ".docx": DOCX,
+    ".pdf": "application/pdf",
     ".md": "text/markdown",
     ".markdown": "text/markdown",
     ".txt": "text/plain",
@@ -29,6 +36,11 @@ _SUFFIX_TYPES = {
 
 def preview_content_type(content_type: str, filename: str) -> str:
     declared = content_type.partition(";")[0].strip().lower()
+    if declared in {
+        "application/zip",
+        "application/x-zip-compressed",
+    } and filename.lower().endswith(".docx"):
+        return DOCX
     if declared == "application/x-zip-compressed":
         return "application/zip"
     if declared in _PREVIEW_TYPES and declared != "text/plain":

@@ -2,6 +2,8 @@
 
 ## 当前接续摘要
 
+- 2026-09-12 **主流文件站内阅读 local_verified，未部署**：新增DOCX正文/标题/表格与DOC文字预览；文件目录和讨论区均支持查看，PDF/DOC/DOCX增加后缀兜底，DOCX ZIP MIME按Word识别。预览窗口改用阅读提示、修正下载链接对比度。DOCX图片/批注/复杂排版、旧DOC原版排版不支持，界面明确说明。Linux生产DOC需要antiword，已纳入Docker/授权发布安装与后检；当前只验证macOS textutil真实DOC，Linux待部署验收。完整非PG551 passed、2 skipped、7 deselected；增加体积边界后聚焦37 passed，50前端测试通过。独立8783演示及权限/解析限制详见 `docs/FILE_PREVIEW_20260912.md`。产品原则：用户点击直接阅读、尽量减少操作，下载作为可选；已按用户要求记录偏好。生产仍0.1.68，自动任务暂停。
+
 - 2026-09-12 **任务首页信息分层 local_verified，未部署**：新增最近5条讨论/回复/结果原文摘录“最新协作”，明确Human及辅助Agent身份，支持定位原文；“工作与结果”改为“已安排的工作”。已完成或连续7天无进展的派工默认收进“历史及未结工作”，等待Human或正在执行的不收起，业务状态不变。状态时间选最新关联活动，缺失时使用assignment.updated_at。需要我处理继续仅显示可操作事项，无事项隐藏。49项前端测试、语法、diff检查通过，桌面1470px与390px原文定位/历史展开/弹窗Escape实测；无横向溢出、无JS异常，唯一最终资源错误是登录前正常session401。合成新增记录仅浏览器响应替换，未写入任务数据。8782预览已生效；生产仍0.1.68，自动任务暂停。
 
 - 2026-09-11 **0.1.68 / d88ca7c / 0043_webhook_protocol 已部署，deployed_https_verified**：17:03 北京时间完成受保护切换，deploy_status=ok；独立 postflight 两次通过，公网 health/ready、auth 推荐版本、wheel SHA、未知下载 404 和现有 Human 登录态打开测试任务通过。覆盖下述 Webhook/状态、密码、附件及协作接续切片，早先“未部署”记录为历史状态。真实飞书端到端、PostgreSQL 并发和跨设备 Human 验收仍待确认；Aily 暂未开放，定时任务保持暂停。

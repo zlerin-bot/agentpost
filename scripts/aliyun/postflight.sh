@@ -45,6 +45,7 @@ public_wheel="/opt/agentpost/public/downloads/${wheel_name}"
 [[ "$(systemctl cat agentpost --no-pager | grep -Fc "/opt/agentpost/venvs/${release_id}")" == "2" ]]
 [[ "$(systemctl cat agentpost-mcp --no-pager | grep -Fc "/opt/agentpost/venvs/${release_id}")" == "1" ]]
 nginx -t
+command -v antiword >/dev/null
 
 expected_health="{\"status\":\"ok\",\"version\":\"${version}\"}"
 expected_ready="{\"status\":\"ready\",\"version\":\"${version}\"}"

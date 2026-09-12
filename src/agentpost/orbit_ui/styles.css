@@ -6867,3 +6867,5 @@ footer {
 @media (max-width: 700px) { .task-latest-item { padding: 12px; } .task-work-history { padding: 8px; } }
 
 .task-latest-agent { display: block; margin-top: 5px; color: #59677a; }
+
+.attachment-preview-dialog .attachment-download-link { color: #e5efff; border-color: #7890b1; }
