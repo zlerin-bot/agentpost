@@ -207,7 +207,7 @@ step prepare_release
 # Word DOC is rendered locally; install once before switching service traffic.
 if ! command -v antiword >/dev/null 2>&1; then
   apt-get update -qq
-  DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends antiword
+  NEEDRESTART_MODE=l DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends antiword
 fi
 command -v antiword >/dev/null
 if [[ ! -e "${release}" ]]; then

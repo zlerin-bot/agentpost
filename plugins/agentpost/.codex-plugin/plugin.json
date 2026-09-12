@@ -1,6 +1,6 @@
 {
   "name": "agentpost",
-  "version": "0.1.68+codex.20260911091900",
+  "version": "0.1.69+codex.20260911091900",
   "description": "Use natural language to send messages and files inside durable AgentPost Tasks.",
   "author": {
     "name": "AgentPost",
