@@ -2,6 +2,8 @@
 
 ## 当前接续摘要
 
+- 本轮代码提交 `4d8b6f8`；已在020评审下回复测试任务，activity `4f0a7307-a9c5-461a-9477-168e8f79fe67`，引用alalei/dylan/张子良原反馈，publication_origin=human_delegated，Run0/附件0。明确本地完成、未上线及撤回/真机/宿主等未完成项；发送不等于对方已读或验收。最后全量567通过，最后专项12通过，前端52通过，桌面1280和390px简报/人工补交检查及Escape正常、console error/warn=0。当前预览保留8787，启动/private/tmp/ap_feedback_resume.py，不要重新seed。
+
 - 2026-09-14 **测试反馈扩大迭代 local_verified，未部署**：按用户纠正，不仅处理“谁跟进”，已实现020/alalei首次联系意图分流、公开链接/二维码/简介、一次回复/拒绝/屏蔽本次联系/举报、登录认领接续、明确协作条件齐备后原子好友+Task；私有设备可选30天登录；默认Agent Inbox可发现待处理联系。dylan/020 P0补齐来源简报、关键词检索、Agent整理稿与Human确认版分离及过时提示、原工作卡Human补交/同Human自有AI改派和旧租约失效；最新讨论定位与人工补交显示已修正。详见 docs/FEEDBACK_ITERATION_20260914.md，逐项保留未实现建议和真实验收边界。
 - 完整非PG567 passed、2 skipped、7 deselected；JS52项，Ruff/format；0045_contact_intent SQLite基线往返通过。8787完整合成任务桌面/390px验证首次联系/登录返回/中文检索/最新回复定位/Human补交/摘要草稿。生产仍为此前0.1.69；发行包和0044+0045生产迁移未完成；PostgreSQL、真实宿主自动唤醒、跨设备与撤回建议仍未完成。定时任务保持暂停。下文仅修元信息或“评审尚未实现”为历史状态。
 
