@@ -258,6 +258,8 @@ class MessageResponse(StrictModel):
 
 
 class InboxResponse(StrictModel):
+    pending_contact_count: int = 0
+    contact_requests_endpoint: str = "/api/v1/agent/contact-requests"
     items: list[MessageResponse]
     next_cursor: str | None
     has_more: bool

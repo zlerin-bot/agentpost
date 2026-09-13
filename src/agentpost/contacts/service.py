@@ -1,13 +1,13 @@
 from datetime import UTC
 
 from fastapi import HTTPException
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from agentpost.contacts.models import ContactRequest
 from agentpost.control.models import HumanUser
 from agentpost.identity.models import utc_now
-from agentpost.tasks.models import Task, TaskAgentParticipant, TaskMembership
+from agentpost.tasks.models import Friendship, Task, TaskAgentParticipant, TaskMembership
 from agentpost.tasks.service import _add_activity, _human_agent, _queue_collaboration_assignment
 
 
@@ -36,13 +36,22 @@ def contact_status(item):
         return "declined"
     if expired(item):
         return "expired"
+    if item.reply_body and item.intent == "greeting":
+        return "replied"
     if item.decision == "pending":
         return "waiting_recipient"
     return "waiting_registration" if not item.sender_id else "waiting_agents"
 
 
 def continue_contact(session: Session, item: ContactRequest):
-    if item.task_id or item.decision != "accepted" or not item.sender_id or expired(item):
+    if (
+        item.task_id
+        or item.intent != "collaboration"
+        or item.blocked
+        or item.decision != "accepted"
+        or not item.sender_id
+        or expired(item)
+    ):
         return
     receiver = session.get(HumanUser, item.recipient_id)
     sender = session.get(HumanUser, item.sender_id)
@@ -52,6 +61,24 @@ def continue_contact(session: Session, item: ContactRequest):
     agents = [_human_agent(session, human_id=p.id, agent_id=p.default_agent_id) for p in people]
     if not all(agents):
         return
+    # Serialize the unordered Human pair, including when no friendship row exists yet.
+    # No commits here: consent, friendship and Task become durable together.
+    from agentpost.tasks.service import _friendship_for, _pair
+
+    first, second = _pair(sender.id, receiver.id)
+    session.execute(
+        select(HumanUser.id)
+        .where(HumanUser.id.in_([first, second]))
+        .order_by(HumanUser.id)
+        .with_for_update()
+    )
+    friend = _friendship_for(session, first, second, lock=True)
+    if friend is None:
+        friend = Friendship(human_a_id=first, human_b_id=second, requested_by_human_id=sender.id)
+        session.add(friend)
+    friend.status = "accepted"
+    friend.responded_at = utc_now()
+    session.flush()
     task = Task(
         owner_human_user_id=receiver.id,
         coordinator_agent_id=agents[0].id,
@@ -108,6 +135,22 @@ def continue_contact(session: Session, item: ContactRequest):
             "submitted_at": item.created_at.isoformat(),
         },
     )
+    if item.reply_body:
+        _add_activity(
+            session,
+            task_id=task.id,
+            kind="task_message",
+            actor_type="human",
+            actor_human_id=receiver.id,
+            external=True,
+            metadata={
+                "body": item.reply_body,
+                "content_format": "text",
+                "contact_request_id": str(item.id),
+                "publication_origin": "human_direct",
+                "submitted_at": item.replied_at.isoformat(),
+            },
+        )
     for person, agent in zip(people, agents, strict=True):
         _queue_collaboration_assignment(
             session,

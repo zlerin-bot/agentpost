@@ -30,6 +30,7 @@ from agentpost.tasks.schemas import (
     TaskActivityReplyRelationCreate,
     TaskAssignmentBatchCreate,
     TaskAssignmentCreate,
+    TaskContextSummary,
     TaskCreate,
     TaskDetail,
     TaskFileList,
@@ -40,6 +41,7 @@ from agentpost.tasks.schemas import (
     TaskRunHumanResponse,
     TaskStatusUpdate,
     TaskSummary,
+    TaskWorkContinuation,
 )
 from agentpost.tasks.service import (
     AgentRunLeaseError,
@@ -412,6 +414,78 @@ def get_human_task(
         raise _not_found() from exc
 
 
+@router.post("/tasks/{task_id}/context-summary")
+def human_summary(
+    task_id: UUID,
+    payload: TaskContextSummary,
+    current_human: CurrentHumanDep,
+    csrf: HumanCsrfDep,
+    session: SessionDep,
+):
+    from agentpost.tasks.knowledge import publish_summary
+
+    try:
+        return publish_summary(session, task_id=task_id, user=current_human, payload=payload)
+    except TaskNotFoundError as exc:
+        raise _not_found() from exc
+    except TaskOwnerRequiredError as exc:
+        raise HTTPException(403, detail={"message": "只有任务负责人可以确认任务摘要"}) from exc
+
+
+@router.post("/agent/tasks/{task_id}/context-summary")
+def agent_summary(
+    task_id: UUID, payload: TaskContextSummary, current_agent: CurrentAgentDep, session: SessionDep
+):
+    from agentpost.tasks.knowledge import publish_summary
+
+    try:
+        return publish_summary(session, task_id=task_id, agent=current_agent, payload=payload)
+    except TaskNotFoundError as exc:
+        raise _not_found() from exc
+    except TaskOwnerRequiredError as exc:
+        raise HTTPException(403, detail={"message": "Agent只能提交待确认摘要"}) from exc
+
+
+@router.get("/tasks/{task_id}/context")
+def human_context(
+    task_id: UUID,
+    current_human: CurrentHumanDep,
+    session: SessionDep,
+    response: Response,
+    query: Annotated[str, Query(max_length=100)] = "",
+    before: UUID | None = None,
+):
+    from agentpost.tasks.knowledge import context_snapshot
+
+    try:
+        detail = get_task(session, user=current_human, task_id=task_id)
+        if detail.membership_status != "active":
+            raise TaskNotFoundError
+        response.headers["Cache-Control"] = "no-store"
+        return context_snapshot(session, detail, query.strip(), before)
+    except TaskNotFoundError as exc:
+        raise _not_found() from exc
+
+
+@router.get("/agent/tasks/{task_id}/context")
+def agent_context(
+    task_id: UUID,
+    current_agent: CurrentAgentDep,
+    session: SessionDep,
+    response: Response,
+    query: Annotated[str, Query(max_length=100)] = "",
+    before: UUID | None = None,
+):
+    from agentpost.tasks.knowledge import context_snapshot
+
+    try:
+        detail = get_task_for_agent(session, agent=current_agent, task_id=task_id)
+        response.headers["Cache-Control"] = "no-store"
+        return context_snapshot(session, detail, query.strip(), before)
+    except TaskNotFoundError as exc:
+        raise _not_found() from exc
+
+
 @router.get("/tasks/{task_id}/files", response_model=TaskFileList)
 def get_human_task_files(
     task_id: UUID,
@@ -643,6 +717,31 @@ def create_task_assignment_batch(
         raise _conflict() from exc
     except TaskMessageIdempotencyConflictError as exc:
         raise _conflict("idempotency_conflict") from exc
+
+
+@router.post("/tasks/{task_id}/assignments/{assignment_id}/continue", response_model=TaskDetail)
+def continue_human_work(
+    task_id: UUID,
+    assignment_id: UUID,
+    payload: TaskWorkContinuation,
+    current_human: CurrentHumanDep,
+    csrf: HumanCsrfDep,
+    session: SessionDep,
+):
+    from agentpost.tasks.continuation import continue_work
+
+    try:
+        return continue_work(
+            session,
+            user=current_human,
+            task_id=task_id,
+            assignment_id=assignment_id,
+            payload=payload,
+        )
+    except TaskNotFoundError as exc:
+        raise _not_found() from exc
+    except TaskStateConflictError as exc:
+        raise _conflict("work_already_changed") from exc
 
 
 @router.post("/tasks/{task_id}/assignments/{assignment_id}/cancel", response_model=TaskDetail)

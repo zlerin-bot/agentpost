@@ -56,10 +56,16 @@ def create_human_session(
     user: HumanUser,
     request_id: str,
     auth_method: str = "access_key",
+    remember_me: bool = False,
     mfa_authenticated: bool = False,
 ) -> CreatedHumanSession:
     now = utc_now()
-    expires_at = now + timedelta(seconds=settings.human_session_ttl_seconds)
+    ttl = (
+        settings.human_remembered_session_ttl_seconds
+        if remember_me
+        else settings.human_session_ttl_seconds
+    )
+    expires_at = now + timedelta(seconds=ttl)
     raw_token = generate_human_session_token()
     raw_csrf_token = generate_human_csrf_token()
     browser_session = HumanSession(

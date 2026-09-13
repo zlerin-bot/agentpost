@@ -825,10 +825,11 @@ test("latest collaboration includes replies without heartbeat noise and leaves s
   const activities = [
     { activity_id: "old", kind: "task_message", created_at: "2026-09-01" },
     { activity_id: "beat", kind: "run_progress", created_at: "2026-09-12" },
+    { activity_id: "human", kind: "human_work_continued", created_at: "2026-09-13" },
     { activity_id: "reply", kind: "task_message", created_at: "2026-09-11", metadata: { reply_to_activity_id: "old" } },
     { activity_id: "result", kind: "assignment_result", created_at: "2026-09-10" },
   ];
-  assert.deepEqual(latest({ activities }).map(x => x.activity_id), ["reply", "result", "old"]);
+  assert.deepEqual(latest({ activities }).map(x => x.activity_id), ["human", "reply", "result", "old"]);
   assert.equal(activities[0].activity_id, "old");
 });
 
@@ -857,4 +858,27 @@ test("Word and generic PDF files expose previews in both attachment locations", 
   assert.equal(types.taskFileTypeLabel("application/octet-stream", "报告.pdf"), "PDF");
   assert.equal(types.taskFileTypeLabel("application/octet-stream", "报告.docx.exe"), "其他");
   assert.ok(script.slice(script.indexOf("const readableTypes = new Set(")).includes('"application/msword"'));
+});
+
+test("stale explicitly assigned work offers recovery only to responsible Human or owner", () => {
+  const source = script.slice(script.indexOf("function taskHumanActions("), script.indexOf("function renderTaskAttention("));
+  const actions = new Function("visibleTaskAssignments", "plainTaskExcerpt", "checkpointHumanPrompt",
+    `${source}; return taskHumanActions;`)((p) => p.assignments, (s) => s, (c) => c.question);
+  const now=Date.parse("2026-09-14T08:00:00Z");
+  const project={status:"active",owner_human_user_id:"owner",assignments:[
+    {assignment_id:"work",assignment_kind:"human_directed",status:"queued",run_status:"queued",
+      responsible_human_user_id:"member",instruction:"补充测试",updated_at:"2026-09-14T07:00:00Z"}
+  ]};
+  assert.equal(actions(project,"member",now)[0].target,"task-work-work");
+  assert.equal(actions(project,"stranger",now).length,0);
+  project.assignments[0].status="completed";
+  assert.equal(actions(project,"member",now).length,0);
+});
+
+
+test("Human continuation completion takes precedence over cancelled old AI run", () => {
+  const source=script.slice(script.indexOf("function taskAssignmentStatusLabel("),script.indexOf("function taskAgentDisplayName("));
+  const label=new Function("taskExecutionStatusLabel",`${source}; return taskAssignmentStatusLabel;`)(x=>x);
+  assert.equal(label({status:"completed",run_status:"cancelled",cancellation_reason:"human_completed"}),"Human 已补交结果");
+  assert.equal(label({status:"queued",run_status:"queued"}),"queued");
 });

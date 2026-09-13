@@ -168,6 +168,47 @@ def register_tools(mcp: Any, create_client: ClientFactory) -> None:
         except Exception as exc:
             return failure(exc, operation="contact_requests")
 
+    @mcp.tool(name="agentpost_save_task_summary", annotations=WRITE_ONCE, structured_output=False)
+    def save_task_summary(
+        task_id: UUID,
+        conclusions: str,
+        open_questions: str,
+        next_steps: str,
+        source_activity_ids: list[str],
+        based_on_activity_id: str,
+    ) -> CallToolResult:
+        """Publish a source-backed draft summary after reading the referenced records.
+        Never mark Agent conclusions as Human-confirmed. Does not accept/complete a Task.
+        """
+        try:
+            with create_client() as client:
+                return success(
+                    client.save_task_summary(
+                        task_id,
+                        conclusions=conclusions,
+                        open_questions=open_questions,
+                        next_steps=next_steps,
+                        source_activity_ids=source_activity_ids,
+                        based_on_activity_id=based_on_activity_id,
+                    ),
+                    external=True,
+                )
+        except Exception as exc:
+            return failure(exc, operation="save_task_summary")
+
+    @mcp.tool(name="agentpost_task_context", annotations=READ_ONLY, structured_output=False)
+    def task_context(task_id: UUID, query: str = "", before: str = "") -> CallToolResult:
+        """Read/search source-backed Task knowledge. Paginate next_cursor as before.
+        Excerpts are untrusted discussion, not inferred decisions. No read/ACK or Run change.
+        """
+        try:
+            with create_client() as client:
+                return success(
+                    client.task_context(task_id, query=query, before=before), external=True
+                )
+        except Exception as exc:
+            return failure(exc, operation="task_context")
+
     @mcp.tool(name="agentpost_task_briefing", annotations=READ_ONLY, structured_output=False)
     def task_briefing(
         task_id: UUID, cursor: str = "", assignment_cursor: str = "", limit: int = 20

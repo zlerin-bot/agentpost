@@ -539,3 +539,27 @@ class AgentRunResult(TaskModel):
         default_factory=dict,
         validation_alias=AliasChoices("checkpoint", "output"),
     )
+
+
+class TaskContextSummary(TaskModel):
+    conclusions: str = Field(default="", max_length=5000)
+    open_questions: str = Field(default="", max_length=5000)
+    next_steps: str = Field(default="", max_length=5000)
+    source_activity_ids: list[UUID] = Field(min_length=1, max_length=100)
+    based_on_activity_id: UUID
+    confirmed: bool = False
+
+    @model_validator(mode="after")
+    def meaningful_summary(self):
+        if not any(
+            value.strip() for value in (self.conclusions, self.open_questions, self.next_steps)
+        ):
+            raise ValueError("请至少填写一项摘要内容")
+        return self
+
+
+class TaskWorkContinuation(TaskModel):
+    action: Literal["complete", "reassign"]
+    body: str = Field(min_length=1, max_length=10000)
+    agent_id: UUID | None = None
+    operation_id: UUID

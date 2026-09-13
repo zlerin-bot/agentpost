@@ -1,7 +1,9 @@
 from datetime import UTC, timedelta
 from hashlib import sha256
+from io import BytesIO
 from pathlib import Path
 from typing import Annotated, Literal
+from urllib.parse import quote
 from uuid import UUID
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request, Response
@@ -40,6 +42,7 @@ class Introduction(BaseModel):
     sender_name: str = Field(min_length=1, max_length=100)
     subject: str = Field(min_length=1, max_length=200)
     body: str = Field(min_length=1, max_length=10000)
+    intent: Literal["greeting", "collaboration"] = "greeting"
 
 
 class Claim(BaseModel):
@@ -48,10 +51,14 @@ class Claim(BaseModel):
 
 class Preference(BaseModel):
     enabled: bool
+    introduction: str = Field(default="", max_length=280)
 
 
 class Decision(BaseModel):
-    action: Literal["accept", "decline", "continue"]
+    action: Literal[
+        "accept", "decline", "continue", "reply", "block", "report", "request_collaboration"
+    ]
+    body: str = Field(default="", max_length=10000)
 
 
 def digest(token):
@@ -111,6 +118,11 @@ def receipt(item):
         "expires_at": item.expires_at.replace(tzinfo=UTC),
         "delivery": "saved_for_recipient",
         "agent_execution": "not_triggered_by_guest_request",
+        "intent": item.intent,
+        "reply": item.reply_body
+        if not item.sender_id and not expired(item) and not item.blocked
+        else None,
+        "security_label": "external_agent_content",
     }
 
 
@@ -129,6 +141,10 @@ def view(item, session, user):
         "request_id": str(item.id),
         "status": contact_status(item),
         "decision": item.decision,
+        "intent": item.intent,
+        "reply": item.reply_body,
+        "blocked": item.blocked,
+        "reported": item.reported,
         "incoming": item.recipient_id == user.id,
         "sender_name": sender.display_name if sender else item.sender_name,
         "sender_verified": bool(sender),
@@ -139,6 +155,20 @@ def view(item, session, user):
         "expires_at": item.expires_at.replace(tzinfo=UTC),
         "security_label": "external_agent_content",
         "task_id": None,
+        "next_action": (
+            "none"
+            if item.blocked or item.decision == "declined" or expired(item)
+            else "review"
+            if item.recipient_id == user.id and item.decision == "pending"
+            else "request_collaboration"
+            if item.sender_id == user.id and item.intent == "greeting"
+            else "setup_agent"
+            if item.sender_id
+            and item.decision == "accepted"
+            and not item.task_id
+            and not _human_agent(session, human_id=user.id, agent_id=user.default_agent_id)
+            else "wait"
+        ),
     }
     if item.task_id:
         from agentpost.tasks.models import TaskMembership
@@ -154,7 +184,7 @@ def view(item, session, user):
 def contract(settings: SettingsDep):
     return {
         "name": "AgentPost first contact",
-        "version": "1",
+        "version": "2",
         "base_url": settings.public_base_url,
         "discovery": "GET /api/v1/public/contact/resolve?username=<exact public username>",
         "submit": "POST /api/v1/public/contact/requests",
@@ -164,7 +194,20 @@ def contract(settings: SettingsDep):
             "padding. Send as Authorization: Bearer. Reuse EXACT token and payload "
             "when retrying. One token, one request; store securely. "
         ),
-        "fields": ["username", "sender_name", "subject", "body"],
+        "fields": ["username", "sender_name", "subject", "body", "intent"],
+        "intent": (
+            "Default greeting: one reply, no friendship or Task. Use collaboration only "
+            "when Human explicitly requests friendship and a Task; recipient must "
+            "accept. "
+        ),
+        "reuse_content": (
+            "Use content already supplied by Human; do not ask again. Never infer "
+            "collaboration consent from a greeting. "
+        ),
+        "reply": (
+            "Receipt returns at most one reply before claim/expiry; no guest follow-up "
+            "writes. Register/login to claim and explicitly request collaboration. "
+        ),
         "registration": (
             "Open /contact#claim=<guest token> to register/login and claim. Fragment "
             "stays client-side and is removed immediately. Never publish this link to "
@@ -175,7 +218,9 @@ def contract(settings: SettingsDep):
         "semantics": (
             "Saved request is not read, accepted or executed. Recipient must opt in "
             "and accept. Sender claims after registering and chooses a default Agent; "
-            "both defaults must be active before a task can be created. "
+            "both defaults must be active before an explicitly requested and accepted "
+            "collaboration creates friendship and one Task. Greeting/reply/registration "
+            "alone never create either. "
         ),
         "fallback_url": f"{settings.public_base_url.rstrip('/')}/contact",
         "safety": (
@@ -187,6 +232,28 @@ def contract(settings: SettingsDep):
         "attachments": False,
         "fuzzy_matching": False,
     }
+
+
+def contact_url(settings, username):
+    return f"{settings.public_base_url.rstrip('/')}/contact?to={quote(username, safe='')}"
+
+
+@router.get("/api/v1/public/contact/qr")
+def contact_qr(
+    request: Request,
+    session: SessionDep,
+    settings: SettingsDep,
+    username: Annotated[str, Query(min_length=1, max_length=32)],
+):
+    import segno
+
+    limit(request, session, settings, "qr", 30, 3600)
+    person = public_target(session, username.strip())
+    output = BytesIO()
+    segno.make_qr(contact_url(settings, person.username)).save(output, kind="svg", scale=6)
+    return Response(
+        output.getvalue(), media_type="image/svg+xml", headers={"Cache-Control": "no-store"}
+    )
 
 
 @router.get("/api/v1/public/contact/resolve")
@@ -203,6 +270,8 @@ def resolve(
     return {
         "username": person.username,
         "display_name": person.display_name,
+        "introduction": session.get(ContactPreference, person.id).introduction,
+        "contact_url": contact_url(settings, person.username),
         "match": "exact",
         "accepts_first_contact": True,
     }
@@ -245,6 +314,7 @@ def submit(
         sender_name=payload.sender_name,
         subject=payload.subject,
         body=payload.body,
+        intent=payload.intent,
         expires_at=utc_now() + timedelta(days=7),
     )
     session.add(item)
@@ -286,7 +356,11 @@ def get_receipt(
 def preferences(user: CurrentHumanDep, session: SessionDep, response: Response):
     response.headers["Cache-Control"] = "no-store"
     pref = session.get(ContactPreference, user.id)
-    return {"enabled": bool(pref and pref.enabled), "username": user.username}
+    return {
+        "enabled": bool(pref and pref.enabled),
+        "username": user.username,
+        "introduction": pref.introduction if pref else "",
+    }
 
 
 @router.put("/api/v1/contacts/preferences")
@@ -304,6 +378,7 @@ def save_preferences(
         pref = ContactPreference(human_id=user.id)
         session.add(pref)
     pref.enabled = payload.enabled
+    pref.introduction = payload.introduction.strip()
     session.commit()
     return {"enabled": pref.enabled}
 
@@ -341,7 +416,12 @@ def pending_guest_session(request: Request, response: Response, session: Session
     item = session.scalar(
         select(ContactRequest).where(ContactRequest.token_digest == digest(proof))
     )
-    return {"pending_claim": bool(item and not item.sender_id and not expired(item))}
+    available = bool(item and not item.sender_id and not expired(item))
+    return {
+        "pending_claim": available,
+        "expired": bool(item and expired(item)),
+        "receipt": receipt(item) if available else None,
+    }
 
 
 @router.get("/api/v1/contacts/summary")
@@ -493,17 +573,55 @@ def decide(
     if not existing or user.id not in (existing.recipient_id, existing.sender_id):
         raise unavailable()
     item = lock_contact(session, contact_id)
-    if payload.action != "continue" and user.id != item.recipient_id:
+    sender_action = payload.action == "request_collaboration"
+    if (sender_action and user.id != item.sender_id) or (
+        payload.action not in ("continue", "request_collaboration") and user.id != item.recipient_id
+    ):
         raise unavailable()
     if expired(item) and not item.task_id:
         raise HTTPException(409, detail={"code": "contact_expired", "message": "联系请求已过期"})
-    wanted = {"accept": "accepted", "decline": "declined"}.get(payload.action)
-    if wanted:
-        if item.decision not in ("pending", wanted):
+    if item.blocked or (
+        item.decision == "declined" and payload.action not in ("decline", "block", "report")
+    ):
+        raise HTTPException(409, detail={"code": "contact_closed", "message": "本次联系已结束"})
+    if sender_action:
+        if item.intent != "collaboration":
+            item.intent = "collaboration"
+            item.decision = "pending"
+    elif payload.action == "reply":
+        if not payload.body.strip():
+            raise HTTPException(422, detail={"message": "请输入回复内容"})
+        if item.reply_body and item.reply_body != payload.body.strip():
             raise HTTPException(
-                409, detail={"code": "contact_decided", "message": "联系请求已处理"}
+                409,
+                detail={
+                    "code": "reply_already_sent",
+                    "message": "已回复一次，请在正式任务中继续沟通",
+                },
             )
-        item.decision = wanted
+        item.reply_body = payload.body.strip()
+        item.replied_at = item.replied_at or utc_now()
+    elif payload.action in ("block", "report"):
+        item.blocked = True
+        item.reported = item.reported or payload.action == "report"
+        if not item.task_id:
+            item.decision = "declined"
+    else:
+        if payload.action == "accept" and item.intent != "collaboration":
+            raise HTTPException(
+                409,
+                detail={
+                    "code": "collaboration_not_requested",
+                    "message": "这是一条普通问候，可回复一次；对方申请协作后再接受",
+                },
+            )
+        wanted = {"accept": "accepted", "decline": "declined"}.get(payload.action)
+        if wanted:
+            if item.decision not in ("pending", wanted):
+                raise HTTPException(
+                    409, detail={"code": "contact_decided", "message": "联系请求已处理"}
+                )
+            item.decision = wanted
     continue_contact(session, item)
     add_human_action_audit(
         session,

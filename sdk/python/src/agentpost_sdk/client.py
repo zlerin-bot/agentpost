@@ -761,6 +761,37 @@ class AgentPost:
         except PydanticValidationError as exc:
             raise self._protocol_error("Malformed task context response", exc) from exc
 
+    def save_task_summary(
+        self,
+        task_id: UUID | str,
+        *,
+        conclusions: str,
+        open_questions: str,
+        next_steps: str,
+        source_activity_ids: list[str],
+        based_on_activity_id: str,
+    ) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            f"/agent/tasks/{UUID(str(task_id))}/context-summary",
+            json={
+                "conclusions": conclusions,
+                "open_questions": open_questions,
+                "next_steps": next_steps,
+                "source_activity_ids": [str(UUID(x)) for x in source_activity_ids],
+                "based_on_activity_id": str(UUID(based_on_activity_id)),
+                "confirmed": False,
+            },
+        )
+
+    def task_context(
+        self, task_id: UUID | str, *, query: str = "", before: str = ""
+    ) -> dict[str, Any]:
+        params = {"query": query}
+        if before:
+            params["before"] = str(UUID(before))
+        return self._request("GET", f"/agent/tasks/{UUID(str(task_id))}/context", params=params)
+
     def task_briefing(
         self, task_id: UUID | str, *, cursor: str = "", assignment_cursor: str = "", limit: int = 20
     ) -> dict[str, Any]:

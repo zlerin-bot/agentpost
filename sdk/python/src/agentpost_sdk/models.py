@@ -97,6 +97,8 @@ class Message(APIModel):
 
 
 class InboxPage(APIModel):
+    pending_contact_count: int = 0
+    contact_requests_endpoint: str = "/api/v1/agent/contact-requests"
     items: list[Message]
     next_cursor: str | None = None
     has_more: bool = False

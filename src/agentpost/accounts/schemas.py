@@ -62,6 +62,7 @@ class RegistrationComplete(AccountModel):
 
 
 class HumanLogin(AccountModel):
+    remember_me: bool = False
     email: str = Field(min_length=3, max_length=320)
     password: SecretStr
     totp_code: str | None = Field(default=None, pattern=r"^[0-9]{6}$")

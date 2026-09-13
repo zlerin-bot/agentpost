@@ -94,6 +94,7 @@ class Settings(BaseSettings):
         le=3650 * 24 * 60 * 60,
     )
     max_attachment_bytes: int = Field(default=10 * 1024 * 1024, ge=1)
+    human_remembered_session_ttl_seconds: int = Field(default=30 * 86400, ge=300, le=30 * 86400)
     human_session_ttl_seconds: int = Field(default=12 * 60 * 60, ge=300, le=7 * 24 * 60 * 60)
     human_confirmation_ttl_seconds: int = Field(default=5 * 60, ge=60, le=15 * 60)
     approval_default_ttl_seconds: int = Field(

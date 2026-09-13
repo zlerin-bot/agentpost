@@ -24,10 +24,11 @@ def setup_receiver(client, username="receiver"):
     return person, agent, headers
 
 
-def send(client, name="receiver", token=None):
+def send(client, name="receiver", token=None, intent="collaboration"):
     token = token or "gc_" + secrets.token_urlsafe(32)
     payload = {
         "username": name,
+        "intent": intent,
         "sender_name": "Guest",
         "subject": "首次咨询",
         "body": "<script>alert(1)</script>\n具体情况",
@@ -44,6 +45,8 @@ def test_guest_contact_full_claim_accept_and_task_boundary(settings, database):
         assert client.get("/api/v1/public/contact/resolve?username=receiver").json() == {
             "username": "receiver",
             "display_name": "receiver",
+            "introduction": "",
+            "contact_url": f"{_runtime(settings).public_base_url.rstrip('/')}/contact?to=receiver",
             "match": "exact",
             "accepts_first_contact": True,
         }
@@ -317,3 +320,342 @@ def test_agent_contact_pages_are_scoped_and_complete(settings, database):
         )
         with database.session_factory() as session:
             assert session.scalar(select(func.count()).select_from(AgentRun)) == 0
+
+
+def test_greeting_reply_claim_never_creates_task_or_friendship(settings, database):
+    from agentpost.tasks.models import Friendship
+
+    with TestClient(create_app(settings=_runtime(settings), database=database)) as client:
+        _, _, headers = setup_receiver(client)
+        item, token, guest, payload = send(client, intent="greeting")
+        cid = item["request_id"]
+        endpoint = f"/api/v1/contacts/{cid}/decision"
+        assert client.post(endpoint, headers=headers, json={"action": "accept"}).status_code == 409
+        reply = {"action": "reply", "body": "欢迎，先补充协作目标。"}
+        assert client.post(endpoint, headers=headers, json=reply).status_code == 200
+        assert client.post(endpoint, headers=headers, json=reply).status_code == 200
+        assert (
+            client.post(endpoint, headers=headers, json={**reply, "body": "第二条"}).status_code
+            == 409
+        )
+        result = client.get(f"/api/v1/public/contact/requests/{cid}", headers=guest).json()
+        assert result["reply"] == reply["body"] and result["status"] == "replied"
+        assert "task_id" not in result
+        sender, _, sender_headers = setup_receiver(client, "greeting-sender")
+        claim = client.post("/api/v1/contacts/claim", headers=sender_headers, json={"token": token})
+        assert claim.json()["next_action"] == "request_collaboration"
+        assert (
+            client.get(f"/api/v1/public/contact/requests/{cid}", headers=guest).json()["reply"]
+            is None
+        )
+        with database.session_factory() as session:
+            assert session.scalar(select(func.count()).select_from(Task)) == 0
+            assert session.scalar(select(func.count()).select_from(Friendship)) == 0
+        assert (
+            client.post(
+                endpoint, headers=sender_headers, json={"action": "request_collaboration"}
+            ).status_code
+            == 200
+        )
+        receiver_headers = {"X-CSRF-Token": _login(client, "receiver")}
+        result = client.post(endpoint, headers=receiver_headers, json={"action": "accept"})
+        assert result.json()["task_id"]
+        with database.session_factory() as session:
+            assert session.scalar(select(func.count()).select_from(Friendship)) == 1
+            assert session.scalar(select(func.count()).select_from(Task)) == 1
+            assert (
+                session.scalar(
+                    select(func.count())
+                    .select_from(TaskActivity)
+                    .where(TaskActivity.activity_type == "task_message")
+                )
+                == 2
+            )
+
+
+def test_contact_report_blocks_followups_and_qr_matches_public_link(
+    settings, database, monkeypatch
+):
+    import segno
+
+    with TestClient(create_app(settings=_runtime(settings), database=database)) as client:
+        _, _, headers = setup_receiver(client)
+        client.put(
+            "/api/v1/contacts/preferences",
+            headers=headers,
+            json={"enabled": True, "introduction": "欢迎交流"},
+        ).raise_for_status()
+        target = client.get("/api/v1/public/contact/resolve?username=receiver").json()
+        assert target["introduction"] == "欢迎交流"
+        encoded = []
+        original = segno.make_qr
+
+        def record(value):
+            encoded.append(value)
+            return original(value)
+
+        monkeypatch.setattr(segno, "make_qr", record)
+        qr = client.get("/api/v1/public/contact/qr?username=receiver")
+        assert qr.status_code == 200 and "<svg" in qr.text
+        assert encoded == [target["contact_url"]]
+        item, token, guest, _ = send(client, intent="greeting")
+        endpoint = f"/api/v1/contacts/{item['request_id']}/decision"
+        assert client.post(endpoint, headers=headers, json={"action": "report"}).json()["reported"]
+        assert (
+            client.post(
+                endpoint, headers=headers, json={"action": "reply", "body": "later"}
+            ).status_code
+            == 409
+        )
+        assert (
+            client.get(
+                f"/api/v1/public/contact/requests/{item['request_id']}", headers=guest
+            ).json()["status"]
+            == "declined"
+        )
+        client.put(
+            "/api/v1/contacts/preferences", headers=headers, json={"enabled": False}
+        ).raise_for_status()
+        assert client.get("/api/v1/public/contact/qr?username=receiver").status_code == 404
+
+
+def test_expired_guest_cannot_read_reply_and_recipient_cannot_request_on_sender_behalf(
+    settings, database
+):
+    with TestClient(create_app(settings=_runtime(settings), database=database)) as client:
+        _, _, headers = setup_receiver(client)
+        item, token, guest, _ = send(client, intent="greeting")
+        cid = item["request_id"]
+        endpoint = f"/api/v1/contacts/{cid}/decision"
+        assert (
+            client.post(
+                endpoint, headers=headers, json={"action": "request_collaboration"}
+            ).status_code
+            == 404
+        )
+        client.post(
+            endpoint, headers=headers, json={"action": "reply", "body": "private reply"}
+        ).raise_for_status()
+        with database.session_factory() as session:
+            session.get(ContactRequest, UUID(cid)).expires_at = utc_now() - timedelta(seconds=1)
+            session.commit()
+        receipt = client.get(f"/api/v1/public/contact/requests/{cid}", headers=guest).json()
+        assert receipt["status"] == "expired" and receipt["reply"] is None
+
+
+def test_context_search_and_inbox_discovery_remain_readonly_and_scoped(settings, database):
+    from agentpost.tasks.models import Friendship
+
+    with TestClient(create_app(settings=_runtime(settings), database=database)) as client:
+        receiver, agent, headers = setup_receiver(client)
+        item, token, guest, _ = send(client)
+        inbox = client.get("/api/v1/inbox", headers={"Authorization": f"Bearer {agent['api_key']}"})
+        assert inbox.status_code == 200, inbox.text
+        assert inbox.json()["pending_contact_count"] == 1
+        endpoint = f"/api/v1/contacts/{item['request_id']}/decision"
+        client.post(endpoint, headers=headers, json={"action": "accept"}).raise_for_status()
+        _, sender_agent, sender_headers = setup_receiver(client, "search-sender")
+        claimed = client.post(
+            "/api/v1/contacts/claim", headers=sender_headers, json={"token": token}
+        ).json()
+        task_id = claimed["task_id"]
+        context = client.get(f"/api/v1/tasks/{task_id}/context", params={"query": "具体情况"})
+        assert context.status_code == 200, context.text
+        data = context.json()
+        assert len(data["sources"]) == 1 and data["sources"][0]["excerpt"].startswith("<script>")
+        assert data["sources"][0]["activity_id"] in data["sources"][0]["source_url"]
+        assert (
+            client.get(f"/api/v1/tasks/{task_id}/context", params={"query": "%"}).json()["sources"]
+            == []
+        )
+        assert (
+            client.get(
+                f"/api/v1/tasks/{task_id}/context", params={"before": str(uuid4())}
+            ).status_code
+            == 404
+        )
+        via_agent = client.get(
+            f"/api/v1/agent/tasks/{task_id}/context",
+            headers={"Authorization": f"Bearer {sender_agent['api_key']}"},
+        )
+        assert via_agent.status_code == 200
+        _register(client, "context-outsider")
+        _login(client, "context-outsider")
+        assert client.get(f"/api/v1/tasks/{task_id}/context").status_code == 404
+        with database.session_factory() as session:
+            assert session.scalar(select(func.count()).select_from(Friendship)) == 1
+            assert session.scalar(select(func.count()).select_from(AgentRun)) == 2
+
+
+def test_summary_provenance_review_and_human_continuation_revoke_old_lease(settings, database):
+    from agentpost.tasks.models import TaskAssignment
+
+    with TestClient(create_app(settings=_runtime(settings), database=database)) as client:
+        _, agent, headers = setup_receiver(client)
+        item, token, _, _ = send(client)
+        client.post(
+            f"/api/v1/contacts/{item['request_id']}/decision",
+            headers=headers,
+            json={"action": "accept"},
+        ).raise_for_status()
+        _, _, sender_headers = setup_receiver(client, "summary-sender")
+        task_id = client.post(
+            "/api/v1/contacts/claim", headers=sender_headers, json={"token": token}
+        ).json()["task_id"]
+        data = client.get(f"/api/v1/tasks/{task_id}/context").json()
+        source = data["sources"][0]["activity_id"]
+        payload = {
+            "conclusions": "附件可直接阅读",
+            "open_questions": "手机待复测",
+            "next_steps": "完成手机测试",
+            "source_activity_ids": [source],
+            "based_on_activity_id": source,
+            "confirmed": True,
+        }
+        assert (
+            client.post(
+                f"/api/v1/tasks/{task_id}/context-summary", headers=sender_headers, json=payload
+            ).status_code
+            == 403
+        )
+        agent_headers = {"Authorization": f"Bearer {agent['api_key']}"}
+        assert (
+            client.post(
+                f"/api/v1/agent/tasks/{task_id}/context-summary",
+                headers=agent_headers,
+                json=payload,
+            ).status_code
+            == 403
+        )
+        draft = client.post(
+            f"/api/v1/agent/tasks/{task_id}/context-summary",
+            headers=agent_headers,
+            json={**payload, "confirmed": False},
+        )
+        assert draft.status_code == 200, draft.text
+        headers = {"X-CSRF-Token": _login(client, "receiver")}
+        assert (
+            client.post(
+                f"/api/v1/tasks/{task_id}/context-summary",
+                headers=headers,
+                json={**payload, "source_activity_ids": [str(uuid4())]},
+            ).status_code
+            == 404
+        )
+        assert (
+            client.post(
+                f"/api/v1/tasks/{task_id}/context-summary", headers=headers, json=payload
+            ).status_code
+            == 200
+        )
+        assert client.get(f"/api/v1/tasks/{task_id}/context").json()["summary"]["confirmed"]
+        client.post(
+            f"/api/v1/agent/tasks/{task_id}/context-summary",
+            headers=agent_headers,
+            json={**payload, "confirmed": False, "conclusions": "新增待确认想法"},
+        ).raise_for_status()
+        summaries = client.get(f"/api/v1/tasks/{task_id}/context").json()
+        assert not summaries["summary"]["confirmed"]
+        assert summaries["confirmed_summary"]["conclusions"] == "附件可直接阅读"
+        assert (
+            client.post(
+                f"/api/v1/tasks/{task_id}/context-summary",
+                headers=headers,
+                json={**payload, "conclusions": " ", "open_questions": "", "next_steps": ""},
+            ).status_code
+            == 422
+        )
+        claim = client.post(
+            "/api/v1/task-runs/claim", headers=agent_headers, json={"task_id": task_id}
+        )
+        assert claim.status_code == 200, claim.text
+        run = claim.json()
+        operation = {
+            "action": "complete",
+            "body": "Human 已补交结果，等待整项任务正式提交验收。",
+            "operation_id": str(uuid4()),
+        }
+        endpoint = f"/api/v1/tasks/{task_id}/assignments/{run['assignment_id']}/continue"
+        result = client.post(endpoint, headers=headers, json=operation)
+        assert result.status_code == 200, result.text
+        assert client.post(endpoint, headers=headers, json=operation).status_code == 200
+        assert (
+            client.post(
+                endpoint, headers=headers, json={**operation, "body": "改写重放"}
+            ).status_code
+            == 409
+        )
+        stale = client.post(
+            f"/api/v1/task-runs/{run['run_id']}/heartbeat",
+            headers=agent_headers,
+            json={"lease_token": run["lease_token"], "status": "running"},
+        )
+        assert stale.status_code == 404, stale.text
+        assert client.get(f"/api/v1/tasks/{task_id}/context").json()["summary"]["stale"]
+        with database.session_factory() as session:
+            work = session.get(TaskAssignment, UUID(run["assignment_id"]))
+            assert work.status == "completed" and work.result_status is None
+            assert session.get(Task, UUID(task_id)).status == "active"
+
+
+def test_work_reassignment_keeps_human_and_invalidates_old_run(settings, database):
+    from agentpost.tasks.models import TaskAgentParticipant, TaskAssignment
+
+    with TestClient(create_app(settings=_runtime(settings), database=database)) as client:
+        person, agent, headers = setup_receiver(client)
+        item, token, _, _ = send(client)
+        client.post(
+            f"/api/v1/contacts/{item['request_id']}/decision",
+            headers=headers,
+            json={"action": "accept"},
+        ).raise_for_status()
+        _, _, other = setup_receiver(client, "switch-sender")
+        task_id = client.post(
+            "/api/v1/contacts/claim", headers=other, json={"token": token}
+        ).json()["task_id"]
+        replacement = _create_owned_agent(
+            client, human_id=person["user"]["id"], handle="replacement"
+        )
+        with database.session_factory() as session:
+            session.add(
+                TaskAgentParticipant(
+                    task_id=UUID(task_id),
+                    agent_id=UUID(replacement["agent"]["id"]),
+                    human_user_id=UUID(person["user"]["id"]),
+                    role="support",
+                )
+            )
+            session.commit()
+        headers = {"X-CSRF-Token": _login(client, "receiver")}
+        auth = {"Authorization": f"Bearer {agent['api_key']}"}
+        leased = client.post(
+            "/api/v1/task-runs/claim", headers=auth, json={"task_id": task_id}
+        ).json()
+        payload = {
+            "action": "reassign",
+            "agent_id": replacement["agent"]["id"],
+            "body": "从原进展接续",
+            "operation_id": str(uuid4()),
+        }
+        endpoint = f"/api/v1/tasks/{task_id}/assignments/{leased['assignment_id']}/continue"
+        result = client.post(endpoint, headers=headers, json=payload)
+        assert result.status_code == 200, result.text
+        assert client.post(endpoint, headers=headers, json=payload).status_code == 200
+        with database.session_factory() as session:
+            work = session.get(TaskAssignment, UUID(leased["assignment_id"]))
+            assert str(work.responsible_human_user_id) == person["user"]["id"]
+            assert str(work.assignee_agent_id) == replacement["agent"]["id"]
+            assert (
+                len(
+                    list(session.scalars(select(AgentRun).where(AgentRun.assignment_id == work.id)))
+                )
+                == 2
+            )
+        assert (
+            client.post(
+                f"/api/v1/task-runs/{leased['run_id']}/heartbeat",
+                headers=auth,
+                json={"lease_token": leased["lease_token"], "status": "running"},
+            ).status_code
+            == 404
+        )

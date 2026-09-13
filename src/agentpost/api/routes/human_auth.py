@@ -84,11 +84,15 @@ def human_auth_config(settings: SettingsDep) -> HumanAuthConfig:
     )
 
 
-def _set_session_cookie(response: Response, settings: SettingsDep, raw_token: str) -> None:
+def _set_session_cookie(
+    response: Response, settings: SettingsDep, raw_token: str, *, remember_me: bool = False
+) -> None:
     response.set_cookie(
         key=HUMAN_SESSION_COOKIE,
         value=raw_token,
-        max_age=settings.human_session_ttl_seconds,
+        max_age=settings.human_remembered_session_ttl_seconds
+        if remember_me
+        else settings.human_session_ttl_seconds,
         path="/api/v1",
         secure=settings.is_production,
         httponly=True,
@@ -107,8 +111,9 @@ def _authentication_response(
     expires_at,
     auth_method: str,
     mfa_authenticated: bool,
+    remember_me: bool = False,
 ) -> BrowserAuthenticationResponse:
-    _set_session_cookie(response, settings, raw_token)
+    _set_session_cookie(response, settings, raw_token, remember_me=remember_me)
     return BrowserAuthenticationResponse(
         user=user,
         csrf_token=raw_csrf_token,
@@ -340,6 +345,7 @@ def login_human(
         request_id=request.state.request_id,
         auth_method="email_password",
         mfa_authenticated=mfa_authenticated,
+        remember_me=payload.remember_me,
     )
     return _authentication_response(
         response,
@@ -350,6 +356,7 @@ def login_human(
         expires_at=created.expires_at,
         auth_method="email_password",
         mfa_authenticated=mfa_authenticated,
+        remember_me=payload.remember_me,
     )
 
 

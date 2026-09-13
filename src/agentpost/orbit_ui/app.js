@@ -829,6 +829,8 @@ function activityText(activity) {
     run_waiting_human: "正在等待 Human 决策",
     human_run_response: "回复了 AI 的协作问题并继续执行",
     assignment_result: "提交了协同结果",
+    human_work_continued: "由 Human 接续了工作",
+    context_summary: "更新了任务摘要",
     run_claimed: "开始执行",
     run_updated: "更新了执行进度",
     result_submitted: "提交了执行结果",
@@ -1001,13 +1003,17 @@ function taskExecutionStatusLabel(status) {
   })[status] || status || "状态待确认";
 }
 
+function taskAssignmentStatusLabel(assignment) {
+  return assignment.cancellation_reason === "human_completed" ? "Human 已补交结果" : taskExecutionStatusLabel(assignment.run_status || assignment.status);
+}
+
 function taskAgentDisplayName(agent) {
   return safeText(agent?.display_name, agent?.handle || agent?.address || "AI");
 }
 
 function assignmentStatusChangedAt(project, assignment) {
   const statusKinds = new Set([
-    "run_leased", "run_progress", "run_waiting_human", "assignment_result", "human_run_response",
+    "run_leased", "run_progress", "run_waiting_human", "assignment_result", "human_run_response", "human_work_continued",
   ]);
   const activity = (project.activities || []).filter((item) => (
     statusKinds.has(item.kind)
@@ -1024,7 +1030,7 @@ function historicalTaskWork(project, assignment, now = Date.now()) {
 }
 
 function latestTaskCollaboration(project) {
-  const kinds = new Set(["task_message", "assignment_result", "final_submitted", "accepted", "changes_requested"]);
+  const kinds = new Set(["task_message", "human_work_continued", "assignment_result", "final_submitted", "accepted", "changes_requested"]);
   return [...(project.activities || [])].filter((item) => kinds.has(item.kind))
     .sort((a, b) => Number(b.task_sequence || 0) - Number(a.task_sequence || 0)
       || String(b.created_at).localeCompare(String(a.created_at))).slice(0, 5);
@@ -1057,7 +1063,7 @@ function renderLatestTaskCollaboration(project) {
     byline.append(who, time);
     const meta = activity.metadata || {};
     const title = document.createElement("strong");
-    const kind = activity.kind === "task_message" ? (meta.reply_to_activity_id ? "回复" : "发起讨论") : ({ assignment_result: "AI 提交结果", final_submitted: "提交任务验收", accepted: "Human 已验收", changes_requested: "要求修改" })[activity.kind];
+    const kind = activity.kind === "task_message" ? (meta.reply_to_activity_id ? "回复" : "发起讨论") : ({ human_work_continued: meta.action === "complete" ? "Human 补交结果" : "Human 更换执行 AI", assignment_result: "AI 提交结果", final_submitted: "提交任务验收", accepted: "Human 已验收", changes_requested: "要求修改" })[activity.kind];
     title.textContent = `${kind} · ${meta.subject || "任务更新"}`;
     const text = document.createElement("p");
     const body = meta.body ?? meta.result_summary ?? meta.summary ?? meta.note ?? "请查看原记录。";
@@ -1152,6 +1158,96 @@ async function decideTaskReplyRelation(childActivityId, parentActivityId, decisi
     state.selectedProject = updated;
     renderProjectDetail();
   }
+}
+
+async function openTaskContext(project) {
+  const dialog=document.createElement("dialog");
+  dialog.className="task-context-dialog";
+  const heading=document.createElement("h2");heading.textContent="协作简报与检索";
+  const close=document.createElement("button");close.textContent="关闭";close.onclick=()=>dialog.close();
+  const form=document.createElement("form");
+  const label=document.createElement("label");label.textContent="搜索讨论关键词";
+  const input=document.createElement("input");input.maxLength=100;input.type="search";label.append(input);
+  const search=document.createElement("button");search.textContent="查找";form.append(label,search);
+  const content=document.createElement("div");
+  const status=document.createElement("p");status.setAttribute("role","status");
+  const copy=document.createElement("button");copy.textContent="复制简报";
+  const download=document.createElement("button");download.textContent="导出 Markdown";
+  const more=document.createElement("button");more.textContent="更多原文";more.hidden=true;
+  let cursor="", markdown="", busy=false, snapshot=null;
+  async function load(append=false) {
+    if(busy)return;
+    busy=true;search.disabled=true;more.disabled=true;status.textContent="正在读取…";
+    try {
+      const data=await requestJson(`/api/v1/tasks/${encodeURIComponent(project.task_id)}/context?query=${encodeURIComponent(input.value.trim())}${append && cursor ? `&before=${encodeURIComponent(cursor)}` : ""}`);
+      snapshot=data;
+      if(!append) {
+        content.replaceChildren();
+        for (const saved of [data.confirmed_summary, data.summary].filter((item, index, items)=>item && items.findIndex(x=>x?.activity_id===item.activity_id)===index)) {
+          const box=document.createElement("article");
+          const title=document.createElement("h3");title.textContent=`${saved.confirmed ? "Human 已确认摘要" : "待确认整理稿"}${saved.stale ? " · 来源之后有新记录，请复核" : ""}`;
+          box.append(title);
+          for(const [key,label] of [["conclusions","结论"],["open_questions","开放问题"],["next_steps","下一步"]]) {
+            const p=document.createElement("p");p.className="content";p.textContent=`${label}：${saved[key] || "未填写"}`;box.append(p);
+          }
+          saved.source_activity_ids.forEach((id,index)=>{const link=document.createElement("button");link.textContent=`来源 ${index+1}`;link.onclick=()=>{dialog.close();openTaskFileSource(id,"all");};box.append(link);});content.append(box);
+        }
+        markdown=`# ${data.title}
+
+任务：${data.task_id}
+
+目标：${data.goal}
+
+预期产出：${data.expected_output}
+
+状态：${projectStatusLabel(data)}
+
+${data.guidance}
+
+`;
+        if(data.summary) markdown+=`摘要：${data.summary.confirmed?"Human 已确认":"待确认整理稿"}${data.summary.stale?"（需复核新记录）":""}\n结论：${data.summary.conclusions}\n开放问题：${data.summary.open_questions}\n下一步：${data.summary.next_steps}\n\n`;
+        const summary=document.createElement("p");summary.className="content";summary.textContent=`${data.title}\n目标：${data.goal}\n预期产出：${data.expected_output}\n状态：${projectStatusLabel(data)}\n${data.guidance}`;content.append(summary);
+        data.work.forEach(work=>{const p=document.createElement("p");p.textContent=`${work.responsible_human} · ${taskExecutionStatusLabel(work.status)} · ${work.instruction}`;content.append(p);markdown+=p.textContent+"\n\n";});
+      }
+      data.sources.forEach(source=>{
+        const article=document.createElement("article");
+        const text=document.createElement("p");text.className="content";text.textContent=`${source.author} · ${source.subject || activityText({kind:source.kind})} · ${dateText(source.created_at)}
+${source.excerpt}${source.truncated ? "（摘录，查看原文继续）" : ""}`;
+        const link=document.createElement("a");link.href=source.source_url;link.textContent="查看原文";
+        link.onclick=async(event)=>{event.preventDefault();dialog.close();await openTaskFileSource(source.activity_id, "all");};
+        article.append(text,link);content.append(article);
+        markdown+=`## ${source.subject || activityText({kind:source.kind})}
+
+${source.excerpt}
+
+[原文](${location.origin}${source.source_url})
+
+`;
+      });
+      cursor=data.next_cursor || "";more.hidden=!cursor;
+      status.textContent=cursor?"当前为部分记录，可继续加载；导出包含已加载记录。":"当前检索结果已加载完毕。";
+    } catch(error) {status.textContent=error.message;} finally {busy=false;search.disabled=false;more.disabled=false;}
+  }
+  form.onsubmit=event=>{event.preventDefault();load();};
+  more.onclick=()=>load(true);
+  copy.onclick=async()=>{try{await navigator.clipboard.writeText(markdown);status.textContent="简报已复制。";}catch{status.textContent="复制未完成，请使用导出 Markdown。";}};
+  download.onclick=()=>{const url=URL.createObjectURL(new Blob([markdown],{type:"text/markdown;charset=utf-8"}));const a=document.createElement("a");a.href=url;a.download="AgentPost-协作简报.md";a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
+  const edit=document.createElement("details");const editTitle=document.createElement("summary");editTitle.textContent="整理或更新摘要";edit.append(editTitle);
+  const editForm=document.createElement("form");const fields={};
+  for(const [key,name] of [["conclusions","结论"],["open_questions","开放问题"],["next_steps","下一步"]]) {
+    const label=document.createElement("label");label.textContent=name;const input=document.createElement("textarea");input.maxLength=5000;label.append(input);fields[key]=input;editForm.append(label);
+  }
+  const confirmLabel=document.createElement("label");const confirm=document.createElement("input");confirm.type="checkbox";confirm.disabled=project.membership_role!=="owner";confirmLabel.append(confirm,document.createTextNode("作为任务负责人确认以上摘要（不代表验收任务）"));editForm.append(confirmLabel);
+  const instruction=document.createElement("p");instruction.textContent="摘要引用当前这页检索结果；请先查找并核对原文。未勾选确认则保存为整理稿。";
+  const save=document.createElement("button");save.textContent="保存摘要";editForm.append(instruction,save);
+  editForm.onsubmit=async(event)=>{event.preventDefault();if(!snapshot?.sources.length){status.textContent="请先检索到可引用的原文。";return;}save.disabled=true;try{
+    await requestJson(`/api/v1/tasks/${project.task_id}/context-summary`,{method:"POST",headers:{"Content-Type":"application/json","X-CSRF-Token":state.csrfToken},body:JSON.stringify({conclusions:fields.conclusions.value,open_questions:fields.open_questions.value,next_steps:fields.next_steps.value,confirmed:confirm.checked,source_activity_ids:snapshot.sources.map(x=>x.activity_id),based_on_activity_id:snapshot.sources[0].activity_id})});
+    edit.open=false;await load();
+  }catch(error){status.textContent=error.message;}finally{save.disabled=false;}};
+  edit.append(editForm);
+  dialog.append(heading,close,form,status,copy,download,content,more,edit);
+  dialog.addEventListener("close",()=>dialog.remove(),{once:true});
+  document.body.append(dialog);dialog.showModal();await load();
 }
 
 function revealTaskRecord(activityId) {
@@ -1308,7 +1404,7 @@ function taskSubmissionBlockers(project) {
   return (project.assignments || []).filter((item) => !["completed", "cancelled"].includes(item.status));
 }
 
-function taskHumanActions(project, userId) {
+function taskHumanActions(project, userId, now = Date.now()) {
   const owner = String(project.owner_human_user_id) === String(userId);
   const actions = visibleTaskAssignments(project)
     .filter((item) => item.run_status === "waiting_human"
@@ -1321,6 +1417,15 @@ function taskHumanActions(project, userId) {
       reason: plainTaskExcerpt(checkpointHumanPrompt(item.run_checkpoint), 240),
       target: `task-work-${item.assignment_id}`,
     }));
+  if(project.status==="active") visibleTaskAssignments(project).filter(item=>
+    item.assignment_kind==="human_directed" && item.status==="queued" && item.run_status==="queued"
+    && (owner || String(item.responsible_human_user_id)===String(userId))
+    && now-Date.parse(item.updated_at || item.created_at)>=30*60*1000
+  ).forEach(item=>actions.push({
+    label:"查看接续方式",title:plainTaskExcerpt(item.instruction,100) || "工作等待接续",
+    reason:"这项工作已等待领取超过30分钟，可在原工作卡补交结果或更换已授权AI。",
+    target:`task-work-${item.assignment_id}`,
+  }));
   if (owner && project.status === "awaiting_acceptance") actions.push({
     label: "查看并验收", title: "任务成果等待你确认",
     reason: "查看提交的成果，选择接受或要求修改。", target: "task-review-controls",
@@ -1364,7 +1469,7 @@ function renderTaskAttention(project, ownerAccess) {
     details.append(summary, note);
     pending.forEach((item) => {
       const row = document.createElement("p");
-      row.textContent = `${item.responsible_human_display_name} · ${item.assignment_kind === "participant_start" ? "参与准备" : "工作"} · ${taskExecutionStatusLabel(item.run_status || item.status)}\n${taskProgressSummary(item).text}`;
+      row.textContent = `${item.responsible_human_display_name} · ${item.assignment_kind === "participant_start" ? "参与准备" : "工作"} · ${taskAssignmentStatusLabel(item)}\n${taskProgressSummary(item).text}`;
       appendTaskRecordLink(row, taskRecordTarget(project, item), "查看相关记录", "all");
       details.append(row);
     });
@@ -1406,7 +1511,7 @@ function taskFileTypeLabel(contentType, filename = "") {
   return type ? "其他" : "未知类型";
 }
 
-async function openTaskFileSource(activityId) {
+async function openTaskFileSource(activityId, filter = "discussion") {
   let project = currentTaskForAction();
   if (!project) return;
   const loaded = () => (project.activities || []).some(
@@ -1418,7 +1523,7 @@ async function openTaskFileSource(activityId) {
     project = currentTaskForAction();
   }
   if (project && loaded()) {
-    openTaskRecord(activityId, "discussion");
+    openTaskRecord(activityId, filter);
   } else {
     elements.projectActionResult.textContent = "来源记录较早，当前页面未能定位；文件仍可直接预览或下载。";
   }
@@ -1723,10 +1828,10 @@ function renderProjectDetail() {
     const time = document.createElement("time");
     time.textContent = `状态变化 ${dateText(assignmentStatusChangedAt(project, assignment))}`;
     const status = document.createElement("span");
-    status.textContent = taskExecutionStatusLabel(assignment.run_status || assignment.status);
+    status.textContent = taskAssignmentStatusLabel(assignment);
     heading.append(name, time, status);
     const agent = document.createElement("small");
-    agent.textContent = "执行 AI：" + assignment.assignee_agent_display_name;
+    agent.textContent = (assignment.cancellation_reason === "human_completed" ? "原执行 AI：" : "执行 AI：") + assignment.assignee_agent_display_name;
     const route = document.createElement("small");
     const priorityLabels = { low: "低", normal: "普通", high: "高", urgent: "紧急" };
     const wakeLabels = {
@@ -1745,7 +1850,7 @@ function renderProjectDetail() {
     };
     route.textContent = `工作来源：${sourceLabels[assignment.source_kind] || "任务创建"} · `
       + `优先级 ${priorityLabels[assignment.priority] || assignment.priority} · `
-      + `${wakeLabels[assignment.wake_stage] || assignment.wake_stage}`;
+      + `${assignment.cancellation_reason === "human_completed" ? "Human 已补交，原执行已停止" : wakeLabels[assignment.wake_stage] || assignment.wake_stage}`;
     const heartbeat = document.createElement("small");
     heartbeat.className = "project-progress-heartbeat";
     heartbeat.textContent = assignment.run_last_heartbeat_at
@@ -1753,7 +1858,9 @@ function renderProjectDetail() {
       : "本次执行尝试：尚未上报心跳";
     const summary = document.createElement("p");
     const progress = taskProgressSummary(assignment);
-    if (assignment.run_status === "waiting_human") {
+    if (assignment.cancellation_reason === "human_completed") {
+      summary.textContent = `Human 补交结果：${assignment.result_summary || "请查看原始记录"}`;
+    } else if (assignment.run_status === "waiting_human") {
       summary.textContent = `AI 需要 Human 确认：${checkpointHumanPrompt(assignment.run_checkpoint)}`;
     } else if (assignment.run_status === "queued" && assignment.run_checkpoint?.human_response) {
       summary.textContent = `Human 已回复：${String(assignment.run_checkpoint.human_response)}\n等待 AI 重新领取。`;
@@ -1774,6 +1881,26 @@ function renderProjectDetail() {
     identity.textContent = `所属任务：${project.title} · 工作 ID：${assignment.assignment_id}`;
     technical.append(technicalLabel, identity, route, heartbeat);
     copy.append(heading, workTitle, agent, summary, technical);
+    if (project.status==="active" && !["completed","cancelled"].includes(assignment.status)
+        && [project.owner_human_user_id,assignment.responsible_human_user_id].map(String).includes(String(currentUserId))) {
+      const recovery=document.createElement("details");const title=document.createElement("summary");title.textContent="由我补交结果／更换执行 AI";
+      const form=document.createElement("form");const label=document.createElement("label");label.textContent="补交结果或接续说明";
+      const body=document.createElement("textarea");body.required=true;body.maxLength=10000;label.append(body);
+      const selectLabel=document.createElement("label");selectLabel.textContent="处理方式";
+      const select=document.createElement("select");select.append(new Option("由我补交工作结果","complete"));
+      const member=project.members.find(m=>String(m.human_user_id)===String(assignment.responsible_human_user_id));
+      (member?.agents || []).forEach(a=>{if(a.agent_id!==assignment.assignee_agent_id)select.append(new Option(`改由 ${a.display_name} 接续`,a.agent_id));});selectLabel.append(select);
+      const note=document.createElement("p");note.textContent="提交后旧执行租约失效；已经发生的外部操作无法撤销。补交结果不等于整项任务验收。";
+      const submit=document.createElement("button");submit.textContent="确认并接续";
+      const feedback=document.createElement("p");feedback.setAttribute("role","status");
+      let operationId=crypto.randomUUID(),previousDraft="";
+      form.onsubmit=async(event)=>{event.preventDefault();submit.disabled=true;try{
+        const draft=JSON.stringify([select.value,body.value]);if(previousDraft && previousDraft!==draft)operationId=crypto.randomUUID();previousDraft=draft;
+        const updated=await requestJson(`/api/v1/tasks/${project.task_id}/assignments/${assignment.assignment_id}/continue`,{method:"POST",headers:{"Content-Type":"application/json","X-CSRF-Token":state.csrfToken},body:JSON.stringify({action:select.value==="complete"?"complete":"reassign",agent_id:select.value==="complete"?null:select.value,body:body.value,operation_id:operationId})});
+        state.selectedProject=updated;renderProjectDetail();
+      }catch(error){feedback.textContent=error.message;}finally{submit.disabled=false;}};
+      form.append(label,selectLabel,note,submit,feedback);recovery.append(title,form);copy.append(recovery);
+    }
     if (project.membership_role === "owner" && assignment.status === "queued") {
       const cancelWork = document.createElement("button");
       cancelWork.type = "button";
@@ -1841,7 +1968,7 @@ function renderProjectDetail() {
       const history = document.createElement("details");
       history.className = "task-earlier-work";
       const label = document.createElement("summary");
-      label.textContent = `${targetHuman} · ${taskExecutionStatusLabel(assignment.run_status || assignment.status)} · ${plainTaskExcerpt(assignment.instruction, 80)} · ${dateText(assignment.created_at)}`;
+      label.textContent = `${targetHuman} · ${taskAssignmentStatusLabel(assignment)} · ${plainTaskExcerpt(assignment.instruction, 80)} · ${dateText(assignment.created_at)}`;
       history.append(label, row);
       workHistory.append(history);
       historyCount += 1;
@@ -1878,7 +2005,7 @@ function renderProjectDetail() {
     const agent = document.createElement("span");
     agent.textContent = assignment.assignee_agent_display_name;
     const status = document.createElement("span");
-    status.textContent = `${assignment.assignment_kind === "participant_start" ? "参与协同" : "明确工作"} · ${taskExecutionStatusLabel(assignment.run_status || assignment.status)}`;
+    status.textContent = `${assignment.assignment_kind === "participant_start" ? "参与协同" : "明确工作"} · ${taskAssignmentStatusLabel(assignment)}`;
     const heartbeat = document.createElement("time");
     heartbeat.textContent = assignment.run_last_heartbeat_at
       ? `心跳 ${dateText(assignment.run_last_heartbeat_at)}`
@@ -1950,7 +2077,7 @@ function renderProjectDetail() {
   const discussionKinds = new Set(["task_message"]);
   const workKinds = new Set([
     "assignment_created", "assignment_cancelled", "run_leased", "run_progress", "run_waiting_human",
-    "human_run_response", "assignment_result", "final_submitted", "accepted",
+    "human_run_response", "human_work_continued", "assignment_result", "final_submitted", "accepted",
     "changes_requested",
   ]);
   const recordActivities = state.taskRecordFilter === "relations"
@@ -1964,7 +2091,10 @@ function renderProjectDetail() {
           !discussionKinds.has(activity.kind) && !workKinds.has(activity.kind)
         ))
         : currentActivities));
-  const latestActivity = currentActivities.find((activity) => discussionKinds.has(activity.kind));
+  const latestActivity = [...currentActivities].filter((activity) => discussionKinds.has(activity.kind))
+    .sort((a,b) => String(b.created_at).localeCompare(String(a.created_at))
+      || String(b.activity_id).localeCompare(String(a.activity_id)))[0];
+  document.querySelector("#task-context-open").onclick = () => openTaskContext(project);
   const latestButton = document.querySelector("#task-jump-latest");
   latestButton.hidden = !latestActivity;
   latestButton.textContent = project.unread_count > 0
@@ -2102,10 +2232,10 @@ function renderProjectDetail() {
       instruction.textContent = `工作要求：${String(activity.metadata.instruction)}`;
       copy.append(instruction);
     }
-    if (activity.kind === "assignment_result" && activity.metadata?.summary) {
+    if (["assignment_result", "human_work_continued"].includes(activity.kind) && activity.metadata?.summary) {
       const result = document.createElement("p");
       result.className = "task-activity-text-body";
-      result.textContent = `AI 反馈：${String(activity.metadata.summary)}`;
+      result.textContent = `${activity.kind === "human_work_continued" ? "Human 接续说明" : "AI 反馈"}：${String(activity.metadata.summary)}`;
       copy.append(result);
     }
     if (activity.kind === "run_waiting_human" && activity.metadata?.checkpoint) {
@@ -2235,7 +2365,7 @@ function renderProjectDetail() {
     container.append(row);
   });
   const lifecycleKinds = new Set([
-    "run_leased", "run_progress", "run_waiting_human", "assignment_result", "human_run_response",
+    "run_leased", "run_progress", "run_waiting_human", "assignment_result", "human_run_response", "human_work_continued",
   ]);
   const lifecycleGroups = new Map();
   recordActivities.forEach((activity) => {
@@ -6172,6 +6302,12 @@ async function loadAuthConfig() {
   }
 }
 
+function resumeContactAfterLogin() {
+  if (new URLSearchParams(location.search).get("return") !== "contact") return false;
+  location.assign("/contact");
+  return true;
+}
+
 async function loginHuman(event) {
   event.preventDefault();
   const submit = elements.loginForm.querySelector("button[type='submit']");
@@ -6184,11 +6320,12 @@ async function loginHuman(event) {
     const browserSession = await requestJson("/api/v1/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password, ...proof }),
+      body: JSON.stringify({ email, password, ...proof, remember_me: document.querySelector("#login-remember").checked }),
     });
     state.csrfToken = browserSession.csrf_token;
     elements.loginPassword.value = "";
     elements.loginMfa.value = "";
+    if (resumeContactAfterLogin()) return;
     await loadDashboard();
     setFormStatus("身份验证成功，敏感输入已从页面清除。", "success");
   } catch (error) {
@@ -6281,6 +6418,7 @@ async function registerHuman(event) {
     });
     state.csrfToken = browserSession.csrf_token;
     closeRegisterDialog();
+    if (resumeContactAfterLogin()) return;
     await loadDashboard();
     setFormStatus("账户已创建。建议现在开启双重验证。", "success");
   } catch (error) {

@@ -148,7 +148,7 @@ def read_inbox(
                 detail={"code": "invalid_agent_address", "message": str(exc)},
             ) from exc
     try:
-        return list_inbox(
+        result = list_inbox(
             session,
             recipient=current_agent,
             filters=InboxFilters(
@@ -162,6 +162,27 @@ def read_inbox(
             cursor_token=cursor,
             cursor_secret=settings.cursor_secret,
         )
+        from sqlalchemy import func, select
+
+        from agentpost.contacts.models import ContactRequest
+        from agentpost.control.models import HumanUser
+        from agentpost.identity.models import utc_now
+
+        result.pending_contact_count = (
+            session.scalar(
+                select(func.count())
+                .select_from(ContactRequest)
+                .join(HumanUser, HumanUser.id == ContactRequest.recipient_id)
+                .where(
+                    HumanUser.default_agent_id == current_agent.id,
+                    HumanUser.status == "active",
+                    ContactRequest.decision == "pending",
+                    ContactRequest.expires_at > utc_now(),
+                )
+            )
+            or 0
+        )
+        return result
     except InvalidCursorError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

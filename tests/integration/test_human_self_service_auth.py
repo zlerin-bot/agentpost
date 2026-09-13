@@ -451,3 +451,25 @@ def test_self_service_human_can_pair_without_a_human_key(
             session.scalar(select(HumanAccessKey).where(HumanAccessKey.human_user_id == user.id))
             is None
         )
+
+
+def test_remember_device_is_opt_in_and_logout_revokes_it(settings, database):
+    from datetime import datetime
+
+    runtime = _settings(settings)
+    with TestClient(create_app(settings=runtime, database=database)) as client:
+        _register(client)
+        credentials = {"email": "owner@example.com", "password": "correct horse battery staple"}
+        normal = client.post("/api/v1/auth/login", json=credentials)
+        remembered = client.post("/api/v1/auth/login", json={**credentials, "remember_me": True})
+        assert normal.status_code == remembered.status_code == 200
+        assert f"Max-Age={runtime.human_session_ttl_seconds}" in normal.headers["set-cookie"]
+        assert (
+            f"Max-Age={runtime.human_remembered_session_ttl_seconds}"
+            in remembered.headers["set-cookie"]
+        )
+        assert datetime.fromisoformat(
+            remembered.json()["expires_at"].replace("Z", "+00:00")
+        ) > datetime.fromisoformat(normal.json()["expires_at"].replace("Z", "+00:00"))
+        _logout(client, remembered.json()["csrf_token"])
+        assert client.get("/api/v1/orbit/session").status_code == 401

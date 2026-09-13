@@ -299,6 +299,18 @@ def build_agent_integration_contract(settings: Settings) -> AgentIntegrationCont
             ),
             EndpointContract(
                 method="GET",
+                path="/api/v1/agent/tasks/{task_id}/context",
+                purpose="read/search source-backed task knowledge; paginate next_cursor as before",
+                changes_state=False,
+            ),
+            EndpointContract(
+                method="POST",
+                path="/api/v1/agent/tasks/{task_id}/context-summary",
+                purpose="publish a source-backed draft, never Human-confirmed or task acceptance",
+                changes_state=True,
+            ),
+            EndpointContract(
+                method="GET",
                 path="/api/v1/agent/tasks/{task_id}/briefing",
                 purpose=(
                     "read bounded resumption context: task goal, own unfinished work and source "

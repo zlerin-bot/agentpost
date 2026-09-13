@@ -81,6 +81,7 @@
             <label for="login-mfa">双重验证验证码（已开启时填写）</label>
             <input id="login-mfa" type="text" autocomplete="one-time-code" spellcheck="false" aria-describedby="login-mfa-help" placeholder="6 位验证码或一次性恢复码">
             <p id="login-mfa-help" class="field-help">通常填写认证器 App 中的 6 位验证码；无法使用认证器时，可填写一枚尚未使用的恢复码。</p>
+            <label class="choice"><input id="login-remember" type="checkbox"> 在此私人设备保持登录 30 天</label>
             <button type="submit" class="entry-submit">进入 AgentPost</button>
           </form>
           <div class="entry-links">
@@ -88,7 +89,7 @@
             <button id="open-recovery" type="button" class="text-button">找回账户</button>
           </div>
           <p id="access-result" class="form-status" role="status">
-            登录信息只用于本次安全访问，页面不会长期保存。
+            页面不会保存你的密码；登录有效期由上方选项决定。
           </p>
           <div class="security-note">
             <strong>安全提示</strong>
@@ -531,6 +532,7 @@
               <p id="project-action-result" class="form-status" role="status"></p>
               <nav id="task-jump-nav" class="task-jump-nav" aria-label="当前任务内容">
                 <button type="button" data-task-target="task-latest">最新协作</button>
+                <button id="task-context-open" type="button">协作简报与检索</button>
                 <button id="task-jump-latest" type="button">最新讨论</button>
                 <button type="button" data-task-target="task-progress">已安排的工作</button>
                 <button type="button" data-task-target="task-files">文件与交付</button>

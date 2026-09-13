@@ -6861,3 +6861,15 @@ footer {
 .task-latest-agent { display: block; margin-top: 5px; color: #59677a; }
 
 .attachment-preview-dialog .attachment-download-link { color: #e5efff; border-color: #7890b1; }
+
+.task-context-dialog { width: min(900px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto; box-sizing: border-box; border: 1px solid #a8bdd8; border-radius: 14px; padding: 18px; }
+.task-context-dialog .content { white-space: pre-wrap; overflow-wrap: anywhere; }
+.task-context-dialog article { padding: 14px; margin: 12px 0; background: #edf5ff; border: 1px solid #b4cdee; border-radius: 10px; }
+.task-context-dialog input { max-width: 100%; box-sizing: border-box; }
+.task-context-dialog button { font: inherit; color: #175fb7; background: #fff; border: 1px solid #aec3dd; border-radius: 8px; padding: 9px 13px; margin: 4px 6px 4px 0; cursor: pointer; }
+.task-context-dialog label { display: block; margin: 12px 0; }
+.task-context-dialog input:not([type="checkbox"]), .task-context-dialog textarea { display: block; width: 100%; font: inherit; border: 1px solid #aec3dd; border-radius: 8px; padding: 9px; box-sizing: border-box; }
+.task-context-dialog textarea { min-height: 90px; }
+.task-context-dialog input[type="checkbox"] { width: auto; }
+.task-context-dialog summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+.task-context-dialog button:focus-visible, .task-context-dialog input:focus-visible, .task-context-dialog textarea:focus-visible { outline: 3px solid #da8600; outline-offset: 2px; }

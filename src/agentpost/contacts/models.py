@@ -14,6 +14,7 @@ class ContactPreference(Base):
         Uuid, ForeignKey("human_users.id", ondelete="CASCADE"), primary_key=True
     )
     enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    introduction: Mapped[str] = mapped_column(String(280), default="")
 
 
 class ContactRequest(Base):
@@ -33,6 +34,11 @@ class ContactRequest(Base):
     sender_name: Mapped[str] = mapped_column(String(100))
     subject: Mapped[str] = mapped_column(String(200))
     body: Mapped[str] = mapped_column(Text)
+    intent: Mapped[str] = mapped_column(String(20), default="greeting")
+    reply_body: Mapped[str | None] = mapped_column(Text)
+    replied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    blocked: Mapped[bool] = mapped_column(Boolean, default=False)
+    reported: Mapped[bool] = mapped_column(Boolean, default=False)
     decision: Mapped[str] = mapped_column(String(16), default="pending")
     task_id: Mapped[UUID | None] = mapped_column(Uuid, ForeignKey("tasks.id"), unique=True)
     revision: Mapped[int] = mapped_column(Integer, default=0)
