@@ -2,6 +2,8 @@
 
 ## 当前接续摘要
 
+- 2026-09-14 **0.1.70发布准备完成，等待阿里云登录**：用户已明确授权“部署并发送测试任务”，无需再次询问部署权限。版本提交`5845378`，schema0045_contact_intent；59项Python发行专项、8项TypeScript、Ruff/format、uv lock --check和发布shell语法通过。单上传包已生成：dist/0.1.70/agentpost-0.1.70-aliyun-upload.tar.gz，SHA256 ab01a3c9b15f400cc60f856b4574931329f4d172a05d82fd333c7f1e51879916；source SHA040b0f60d3242dff6f7bf1f517801a98dc646d48564d10432d0bf68fe67baaa4；wheel SHA f65e6e41e13c13f134645045f33b8511359b75b07e1c060aad83eb9a9d2baa3e。复用该包，勿重复构建上传。命令文件dist/0.1.70/workbench-commands-0.1.70.txt。公网health仍0.1.69；未上传、未切换、未发上线通知。Chrome现有阿里云控制台远程连接返回ConsoleNeedLogin，已打开登录页并请Human恢复。登录后按唯一Workbench单包路径→只读生产基线→staging→受保护switch（含0043→0045 PostgreSQL演练/备份）→postflight→公网/登录态验证→测试任务通知；定时任务暂停不变。
+
 - 本轮代码提交 `4d8b6f8`；已在020评审下回复测试任务，activity `4f0a7307-a9c5-461a-9477-168e8f79fe67`，引用alalei/dylan/张子良原反馈，publication_origin=human_delegated，Run0/附件0。明确本地完成、未上线及撤回/真机/宿主等未完成项；发送不等于对方已读或验收。最后全量567通过，最后专项12通过，前端52通过，桌面1280和390px简报/人工补交检查及Escape正常、console error/warn=0。当前预览保留8787，启动/private/tmp/ap_feedback_resume.py，不要重新seed。
 
 - 2026-09-14 **测试反馈扩大迭代 local_verified，未部署**：按用户纠正，不仅处理“谁跟进”，已实现020/alalei首次联系意图分流、公开链接/二维码/简介、一次回复/拒绝/屏蔽本次联系/举报、登录认领接续、明确协作条件齐备后原子好友+Task；私有设备可选30天登录；默认Agent Inbox可发现待处理联系。dylan/020 P0补齐来源简报、关键词检索、Agent整理稿与Human确认版分离及过时提示、原工作卡Human补交/同Human自有AI改派和旧租约失效；最新讨论定位与人工补交显示已修正。详见 docs/FEEDBACK_ITERATION_20260914.md，逐项保留未实现建议和真实验收边界。
