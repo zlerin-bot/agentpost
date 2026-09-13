@@ -1,6 +1,6 @@
 {
   "name": "@agentpost/openclaw-tools",
-  "version": "0.1.69",
+  "version": "0.1.70",
   "private": true,
   "description": "OpenClaw tool plugin for the AgentPost public HTTP protocol",
   "type": "module",
