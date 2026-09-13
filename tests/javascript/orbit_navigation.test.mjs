@@ -28,10 +28,13 @@ test("task recipient summaries count Humans and preserve nonstandard states", ()
   assert.match(script, /查看接收状态 · \$\{taskMessageRecipientSummary/);
 });
 
-test("three-level task discussions state actor, reason, audience, content, and follow-up", () => {
+test("discussion metadata separates topic and sharing from work responsibility", () => {
   const source = script.slice(script.indexOf("function taskMessageAudienceLabel("),
     script.indexOf("function syncTaskPrimaryAgentOptions("));
-  const labels = new Function(`${source}; return { taskMessageAudienceLabel, taskMessageFollowUpLabel };`)();
+  const labels = new Function("plainTaskExcerpt", "taskContentTitle",
+    `${source}; return { taskMessageAudienceLabel, taskMessageTopic };`)(
+    (text, limit) => text.slice(0, limit), (activity) => activity.metadata.subject,
+  );
   const project = { members: [
     { human_user_id: "one", display_name: "020" },
     { human_user_id: "two", display_name: "张子良" },
@@ -40,10 +43,20 @@ test("three-level task discussions state actor, reason, audience, content, and f
     { human_user_id: "one" }, { human_user_id: "two" },
   ] } };
   assert.equal(labels.taskMessageAudienceLabel(project, activity), "020、张子良");
-  assert.equal(labels.taskMessageFollowUpLabel(project, activity), "未指定；需要执行时请安排明确工作");
-  assert.match(script, /appendTaskMessageFact\(context, "因为什么"/);
-  assert.match(script, /appendTaskMessageFact\(context, "面向谁"/);
-  assert.match(script, /appendTaskMessageFact\(context, "谁跟进"/);
+  assert.equal(labels.taskMessageTopic(project, activity), null);
+  assert.deepEqual(labels.taskMessageTopic(project, { metadata: { subject: "附件预览" } }),
+    { label: "讨论主题", value: "附件预览" });
+  project.activities = [{ activity_id: "root", actor_display_name: "020",
+    metadata: { subject: "附件预览" } }];
+  assert.deepEqual(labels.taskMessageTopic(project, { metadata: { reply_to_activity_id: "root" } }),
+    { label: "回应对象", value: "020 的「附件预览」" });
+  assert.deepEqual(labels.taskMessageTopic(project, { metadata: { reply_to_activity_id: "missing" } }),
+    { label: "回应对象", value: "较早的任务消息（原记录暂不可用）" });
+  assert.equal(labels.taskMessageAudienceLabel(project, { metadata: {} }),
+    "任务成员（具体范围待确认）");
+  assert.doesNotMatch(script, /follow_up_human_user_ids|taskMessageFollowUpLabel|谁跟进|未指定；需要执行/);
+  assert.match(script, /appendTaskMessageContext\(context, project, activity\)/);
+  assert.match(script, /appendTaskMessageFact\(container, "共享范围"/);
   assert.match(script, /name\.textContent = "说了什么"/);
   assert.match(stylesheet, /\.task-discussion-facts/);
   assert.match(stylesheet, /\.task-message-context/);

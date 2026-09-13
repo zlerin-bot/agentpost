@@ -1221,28 +1221,25 @@ function taskMessageAudienceLabel(project, activity) {
   return `${names.slice(0, 2).join("、")}等 ${names.length} 位任务成员`;
 }
 
-function taskMessageReasonLabel(project, activity) {
+function taskMessageTopic(project, activity) {
   const parentId = activity.metadata?.reply_to_activity_id;
   if (parentId) {
     const original = (project.activities || []).find((item) => item.activity_id === parentId);
-    return original
-      ? `回应 ${original.actor_display_name || "任务成员"} 的「${taskContentTitle(original)}」`
-      : "回应一条较早的任务消息（原记录暂不可用）";
+    return {
+      label: "回应对象",
+      value: original
+        ? `${original.actor_display_name || "任务成员"} 的「${taskContentTitle(original)}」`
+        : "较早的任务消息（原记录暂不可用）",
+    };
   }
   const subject = plainTaskExcerpt(activity.metadata?.subject || "", 64);
-  return subject ? `发起讨论「${subject}」` : "发起一项任务讨论";
+  return subject ? { label: "讨论主题", value: subject } : null;
 }
 
-function taskMessageFollowUpLabel(project, activity) {
-  const followUpIds = Array.isArray(activity.metadata?.follow_up_human_user_ids)
-    ? activity.metadata.follow_up_human_user_ids
-    : [];
-  const names = followUpIds.map((id) => (
-    (project.members || []).find((member) => String(member.human_user_id) === String(id))?.display_name
-  )).filter(Boolean);
-  return names.length
-    ? names.join("、")
-    : "未指定；需要执行时请安排明确工作";
+function appendTaskMessageContext(container, project, activity) {
+  const topic = taskMessageTopic(project, activity);
+  if (topic) appendTaskMessageFact(container, topic.label, topic.value, "reason");
+  appendTaskMessageFact(container, "共享范围", taskMessageAudienceLabel(project, activity), "audience");
 }
 
 function appendTaskMessageFact(container, label, value, className = "") {
@@ -2047,9 +2044,7 @@ function renderProjectDetail() {
     if (activity.kind === "task_message") {
       const context = document.createElement("div");
       context.className = "task-message-context";
-      appendTaskMessageFact(context, "因为什么", taskMessageReasonLabel(project, activity), "reason");
-      appendTaskMessageFact(context, "面向谁", taskMessageAudienceLabel(project, activity), "audience");
-      appendTaskMessageFact(context, "谁跟进", taskMessageFollowUpLabel(project, activity), "follow-up");
+      appendTaskMessageContext(context, project, activity);
       copy.append(context);
     } else copy.append(textNode);
     const suggestedParent = ownerAccess && state.taskRecordFilter === "relations"
@@ -2281,9 +2276,8 @@ function renderProjectDetail() {
       const facts = document.createElement("span");
       facts.className = "task-discussion-facts";
       appendTaskMessageFact(facts, "发起", root.actor_display_name || "Human 待确认");
-      appendTaskMessageFact(facts, "面向", taskMessageAudienceLabel(project, root));
+      appendTaskMessageFact(facts, "共享范围", taskMessageAudienceLabel(project, root));
       appendTaskMessageFact(facts, "回复", `${discussion.length - 1} 条`);
-      appendTaskMessageFact(facts, "跟进", taskMessageFollowUpLabel(project, latest), "follow-up");
       const preview = document.createElement("p");
       preview.textContent = `最新回复 · ${latest.actor_display_name || "Human 待确认"}：${plainTaskExcerpt(latest.metadata?.body || activityText(latest), 120)}`;
       const list = document.createElement("div");

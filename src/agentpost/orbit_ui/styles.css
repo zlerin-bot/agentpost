@@ -6413,9 +6413,6 @@ footer {
   color: #5f6368;
   font-weight: 700;
 }
-.task-message-fact.follow-up {
-  color: #8a4b08;
-}
 .task-discussion > div {
   display: grid;
   gap: 10px;
@@ -6444,8 +6441,7 @@ footer {
   background: #fff4dd;
   padding: 9px 11px;
 }
-.task-message-context .task-message-fact.reason,
-.task-message-context .task-message-fact.follow-up {
+.task-message-context .task-message-fact {
   grid-column: 1 / -1;
 }
 .task-message-body {
@@ -6603,10 +6599,6 @@ footer {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 5px 10px;
-  }
-
-  .task-discussion-facts .task-message-fact.follow-up {
-    grid-column: 1 / -1;
   }
 
   .task-discussion > div {
