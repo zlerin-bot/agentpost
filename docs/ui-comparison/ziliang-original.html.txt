@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="referrer" content="no-referrer">
+    <link rel="icon" href="data:,">
+    <title>AgentPost · 任务</title>
+    <link rel="stylesheet" href="../src/agentpost/orbit_ui/styles.css">
+    <style>
+      /* 仅作用于任务进展区；顶栏、一级导航、上下文栏继续使用现有 styles.css。 */
+      .wbs-task-panel { display: grid; gap: 18px; }
+      .wbs-task-hero { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; border-bottom: 1px solid var(--line); padding-bottom: 18px; }
+      .wbs-task-hero h3 { margin: 5px 0 0; font-size: clamp(1.25rem, 2.2vw, 1.75rem); }
+      .wbs-task-hero p:last-child { max-width: 680px; margin: 9px 0 0; color: #5f6368; font-size: .76rem; line-height: 1.65; }
+      .wbs-task-badge { flex: 0 0 auto; border: 1px solid #ceead6; border-radius: 999px; background: #e6f4ea; color: #137333; padding: 7px 11px; font-size: .68rem; white-space: nowrap; }
+      .wbs-summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+      .wbs-summary-card { display: grid; gap: 5px; min-height: 84px; border: 1px solid var(--line); border-radius: 14px; background: #f8fafd; padding: 13px 14px; }
+      .wbs-summary-card span { color: #70757a; font-size: .65rem; }
+      .wbs-summary-card strong { color: #202124; font-size: 1.2rem; font-weight: 620; }
+      .wbs-summary-card small { color: #5f6368; font-size: .62rem; }
+      .wbs-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+      .wbs-toolbar-copy { color: #5f6368; font-size: .72rem; }
+      .wbs-task-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      .wbs-task-jump-nav { display: flex; flex-wrap: wrap; gap: 8px; }
+      .wbs-task-jump-nav button { border: 1px solid #d9e2ef; border-radius: 20px; background: #fff; color: #24549a; padding: 8px 12px; font: inherit; font-size: .68rem; cursor: pointer; }
+      .wbs-task-jump-nav button:hover { border-color: #a8c7fa; background: #f8fbff; }
+      .wbs-filter { display: inline-flex; gap: 4px; border: 1px solid var(--line); border-radius: 999px; background: #f8fafd; padding: 3px; }
+      .wbs-filter button { border: 0; border-radius: 999px; background: transparent; color: #5f6368; padding: 7px 11px; font: inherit; font-size: .67rem; cursor: pointer; }
+      .wbs-filter button:hover, .wbs-filter button.active { background: #e8f0fe; color: #1a73e8; }
+      .wbs-board { display: grid; grid-template-columns: minmax(0, 1.18fr) minmax(290px, .82fr); gap: 14px; align-items: start; }
+      .wbs-board-card { min-width: 0; }
+      .wbs-board-card .prototype-card-heading { margin-bottom: 13px; }
+      .wbs-board-card .prototype-card-heading h3 { font-size: 1rem; }
+      .wbs-tree { display: grid; gap: 9px; }
+      .wbs-workstream { overflow: hidden; border: 1px solid #e3e7ed; border-radius: 14px; background: #fff; }
+      .wbs-workstream-head { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: 9px; width: 100%; border: 0; background: #fff; color: #202124; padding: 12px; text-align: left; font: inherit; cursor: pointer; }
+      .wbs-workstream-head:hover, .wbs-workstream.open .wbs-workstream-head { background: #f8fafd; }
+      .wbs-toggle { display: grid; width: 24px; height: 24px; place-items: center; border: 1px solid #d2e3fc; border-radius: 8px; color: #1a73e8; font-size: .9rem; }
+      .wbs-workstream.open .wbs-toggle { transform: rotate(90deg); }
+      .wbs-workstream-copy { display: grid; min-width: 0; gap: 3px; }
+      .wbs-workstream-copy strong { overflow-wrap: anywhere; font-size: .78rem; }
+      .wbs-workstream-copy small { color: #70757a; font-size: .64rem; }
+      .wbs-workstream-meta { display: inline-flex; align-items: center; gap: 7px; color: #70757a; font-size: .64rem; white-space: nowrap; }
+      .wbs-workstream-meta .wbs-state { display: inline-flex; border-radius: 999px; padding: 4px 7px; }
+      .wbs-state.attention { background: #fef7e0; color: #b06000; }
+      .wbs-state.partial { background: #e8f0fe; color: #185abc; }
+      .wbs-state.done { background: #e6f4ea; color: #137333; }
+      .wbs-children { display: none; border-top: 1px solid #edf0f4; padding: 8px 10px 10px 49px; }
+      .wbs-workstream.open .wbs-children { display: grid; gap: 7px; }
+      .wbs-node { display: grid; grid-template-columns: 9px minmax(0, 1fr) auto; align-items: start; gap: 9px; border-left: 2px solid #d2e3fc; border-radius: 0 10px 10px 0; background: #f8fafd; padding: 9px 10px; cursor: pointer; }
+      .wbs-node:hover, .wbs-node.selected { border-left-color: #1a73e8; background: #e8f0fe; }
+      .wbs-node-dot { width: 7px; height: 7px; margin-top: 4px; border-radius: 50%; background: #f9ab00; box-shadow: 0 0 0 3px #fef7e0; }
+      .wbs-node.done .wbs-node-dot { background: #188038; box-shadow: 0 0 0 3px #e6f4ea; }
+      .wbs-node.partial .wbs-node-dot { background: #1a73e8; box-shadow: 0 0 0 3px #e8f0fe; }
+      .wbs-node-copy { display: grid; min-width: 0; gap: 3px; }
+      .wbs-node-copy strong { overflow-wrap: anywhere; color: #202124; font-size: .72rem; }
+      .wbs-node-copy small { overflow-wrap: anywhere; color: #70757a; font-size: .62rem; line-height: 1.45; }
+      .wbs-node-copy .wbs-node-route { color: #5f6368; }
+      .wbs-node-copy .wbs-node-effect { color: #3c4043; }
+      .wbs-node-status { align-self: center; border: 1px solid var(--line); border-radius: 999px; background: #fff; color: #5f6368; padding: 3px 6px; font-size: .6rem; white-space: nowrap; }
+      .wbs-node-status.attention { border-color: #fde293; background: #fef7e0; color: #b06000; }
+      .wbs-node-status.partial { border-color: #d2e3fc; background: #e8f0fe; color: #185abc; }
+      .wbs-node-status.done { border-color: #ceead6; background: #e6f4ea; color: #137333; }
+      .wbs-detail { display: grid; gap: 13px; }
+      .wbs-detail-title { display: grid; gap: 4px; }
+      .wbs-detail-title h4 { margin: 0; color: #202124; font-size: 1rem; line-height: 1.4; }
+      .wbs-detail-title p { margin: 0; color: #70757a; font-size: .66rem; line-height: 1.5; }
+      .wbs-detail-status { width: max-content; border-radius: 999px; padding: 5px 8px; font-size: .62rem; }
+      .wbs-detail-status.attention { background: #fef7e0; color: #b06000; }
+      .wbs-detail-status.partial { background: #e8f0fe; color: #185abc; }
+      .wbs-detail-status.done { background: #e6f4ea; color: #137333; }
+      .wbs-detail-list { display: grid; gap: 8px; margin: 0; }
+      .wbs-detail-list div { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 10px; border-bottom: 1px solid #edf0f4; padding-bottom: 8px; }
+      .wbs-detail-list .wbs-effect-row { border-bottom: 0; border-radius: 9px; background: #f8fafd; padding: 9px 10px; }
+      .wbs-detail-list dt { color: #70757a; font-size: .64rem; }
+      .wbs-detail-list dd { margin: 0; color: #3c4043; font-size: .68rem; line-height: 1.55; overflow-wrap: anywhere; }
+      .wbs-detail-note { margin: 0; border-left: 2px solid #f9ab00; background: #fef7e0; color: #7a4f01; padding: 9px 11px; font-size: .66rem; line-height: 1.55; }
+      .wbs-footer-note { margin: 0; color: #70757a; font-size: .65rem; line-height: 1.55; }
+      @media (max-width: 1080px) { .wbs-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .wbs-task-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .wbs-board { grid-template-columns: 1fr; } }
+      @media (max-width: 700px) { .wbs-task-hero { flex-direction: column; } .wbs-summary-grid { grid-template-columns: 1fr 1fr; } }
+    </style>
+  </head>
+  <body>
+    <div class="sky-glow sky-glow-one" aria-hidden="true"></div>
+    <div class="sky-glow sky-glow-two" aria-hidden="true"></div>
+
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="星云驿首页">
+        <svg class="brand-mark" viewBox="0 0 40 40" aria-hidden="true" focusable="false"><defs><linearGradient id="brand-mark-gradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1a73e8"></stop><stop offset="1" stop-color="#6d5ce7"></stop></linearGradient></defs><rect width="40" height="40" rx="12" fill="url(#brand-mark-gradient)"></rect><path d="M11 25c6-13 13-14 18-7M12 28c7-5 13-4 18 1M13 13l3 5 5-7 3 6 5-2"></path></svg>
+        <span class="brand-copy"><strong>AgentPost</strong><small>任务</small></span>
+      </a>
+      <div class="topbar-account"><div class="connection" role="status"><span class="connection-dot" aria-hidden="true"></span><span class="connection-label-full">等待进入 AgentPost</span><span class="connection-label-compact">等待进入</span></div><div class="top-human" aria-label="当前 Human"><span class="top-human-avatar" aria-hidden="true">我</span><span class="top-human-copy"><strong>—</strong><small>Human</small></span></div></div>
+    </header>
+
+    <main>
+      <section class="workspace" aria-label="星云驿工作台">
+        <aside class="workspace-sidebar" aria-label="一级导航">
+          <div class="person-card"><span class="avatar" aria-hidden="true">张</span><div><strong>张子良</strong><span>zhangziliang@example.com</span></div></div>
+          <nav class="primary-navigation" aria-label="AgentPost 一级入口">
+            <button type="button" class="primary-nav-item active" aria-current="page"><span class="primary-nav-icon projects-icon" aria-hidden="true"><img src="../src/agentpost/orbit_ui/project-icon.svg" alt=""></span><span><strong>任务</strong><small>Human 与 AI 协作</small></span></button>
+            <button type="button" class="primary-nav-item"><span class="primary-nav-icon friends-icon" aria-hidden="true"><img src="../src/agentpost/orbit_ui/friends-icon.svg" alt=""></span><span><strong>好友</strong><small>联系人与协作邀请</small></span></button>
+            <button type="button" class="primary-nav-item"><span class="primary-nav-icon relay-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="7" cy="8" r="2.4"/><circle cx="17" cy="7" r="2.4"/><circle cx="12" cy="17" r="2.4"/><path d="m9 9.2 2.1 5.4m4-5.8-2.1 5.8M9.4 7.8h5.2"/></svg></span><span><strong>AI</strong><small>身份与连接</small></span></button>
+            <button type="button" class="primary-nav-item"><span class="primary-nav-icon settings-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3.5v2M12 18.5v2M3.5 12h2M18.5 12h2m-14.5-6 1.4 1.4m9.2 9.2L18 18m0-12-1.4 1.4m-9.2 9.2L6 18"/></svg></span><span><strong>设置</strong><small>账户与平台</small></span></button>
+          </nav>
+          <div class="sidebar-actions"><a href="#" class="quiet-button">首次联系</a><button type="button" class="quiet-button">刷新数据</button><button type="button" class="quiet-button danger">安全退出</button></div>
+        </aside>
+
+        <aside class="context-sidebar" aria-label="当前模块目录">
+          <div class="context-heading" hidden><p>任务</p><h2>我的任务</h2><p>查看任务、参与者和协作进展。</p></div>
+          <nav class="orbit-mobile-shortcuts" hidden aria-label="任务快捷筛选"><button type="button" class="context-nav-item orbit-mobile-shortcut"><span><strong>待处理</strong></span><span class="orbit-mobile-shortcut-count alert">0</span></button><button type="button" class="context-nav-item orbit-mobile-shortcut active"><span><strong>任务</strong></span><span class="orbit-mobile-shortcut-count">1</span></button></nav>
+          <nav class="context-navigation" aria-label="当前模块页面"><div data-context-module="projects" hidden></div></nav>
+          <section class="prototype-browser" aria-label="任务列表">
+            <div class="prototype-browser-heading"><div><span>Human 与 AI 协作</span><strong>我的任务</strong></div><span class="count-pill">1 个</span></div>
+            <label class="thread-search" for="preview-task-search"><span>搜索任务</span><input id="preview-task-search" type="search" placeholder="任务名称、成员或状态"></label>
+            <div class="prototype-filter" aria-label="任务筛选"><button type="button" class="active">进行中</button><button type="button">全部</button><button type="button">待验收</button><button type="button">已完成</button><button type="button">我的归档</button><button type="button">已删除</button></div>
+            <button type="button" class="primary-action prototype-browser-new">创建任务</button>
+            <div class="prototype-browser-list"><button type="button" class="prototype-list-item active"><span class="prototype-list-avatar">测</span><span class="prototype-list-copy"><strong>测试任务</strong><small>进行中 · 7 个 WBS 节点</small></span><span class="prototype-list-badge">部分通过</span></button></div>
+          </section>
+        </aside>
+
+        <div class="workspace-content" tabindex="-1">
+          <section id="project-board" class="content-section module-view prototype-module" data-module="projects" data-section="board">
+            <div class="prototype-detail">
+              <div class="prototype-detail-heading"><div><p class="section-tag">任务 · 多人任务</p><h2>测试任务</h2><div class="task-id-row"><span>任务 ID</span><code>bd3c05dc-d67c-44d1-a4fc-0692a1d415f6</code><button type="button" class="text-button">复制</button></div><p class="section-intro">对 AgentPost 版本进行功能、协同通信和 Human 可见效果测试，并记录复现证据与验收边界。</p></div><div class="prototype-detail-actions"><span class="prototype-status">进行中</span><button type="button" class="quiet-button">邀请好友</button><details class="task-personal-menu"><summary>任务选项</summary></details></div></div>
+              <div class="prototype-metrics wbs-task-metrics" aria-label="任务概况"><article><span>任务负责人</span><strong>张子良</strong></article><article><span>参与 Human</span><strong>3 人</strong></article><article><span>计划完成</span><strong>待定</strong></article><article><span>结果验收</span><strong>未提交</strong></article></div>
+              <nav class="task-jump-nav wbs-task-jump-nav" aria-label="当前任务内容"><button type="button" data-wbs-target="wbs-tree">工作树</button><button type="button" data-wbs-target="wbs-detail">当前节点</button><button type="button" data-wbs-target="wbs-tree" data-wbs-filter="attention">待处理</button><button type="button" data-wbs-target="wbs-tree" data-wbs-filter="done">已完成</button></nav>
+            <div class="wbs-task-panel">
+              <header class="wbs-task-hero"><div><p class="section-tag">任务工作结构 · WBS</p><h3>AgentPost 版本测试与协作验证</h3><p>把同一任务下的版本测试、连接稳定性和 Human 验收拆成可追踪的工作流；讨论作为节点挂在对应工作流下，避免多个讨论分散在列表中。</p></div><span class="wbs-task-badge">进行中 · 部分通过</span></header>
+              <div class="wbs-summary-grid" aria-label="任务摘要"><article class="wbs-summary-card"><span>当前阶段</span><strong>复测</strong><small>0.1.61 生产版本</small></article><article class="wbs-summary-card"><span>工作流</span><strong>3</strong><small>按 WBS 分组</small></article><article class="wbs-summary-card"><span>已完成</span><strong>4</strong><small>证据已记录</small></article><article class="wbs-summary-card"><span>需关注</span><strong>3</strong><small>待补测或需修复</small></article></div>
+              <div class="wbs-toolbar"><span class="wbs-toolbar-copy">选择左侧节点查看复现证据、当前结论与下一步。</span><div class="wbs-filter" aria-label="节点筛选"><button type="button" class="active" data-filter="all">全部</button><button type="button" data-filter="attention">需关注</button><button type="button" data-filter="done">已完成</button></div></div>
+              <div class="wbs-board">
+                <section class="prototype-card wbs-board-card"><div class="prototype-card-heading"><div><span>Work Breakdown Structure</span><h3>任务工作树</h3></div><span class="count-pill">7 个节点</span></div><div class="wbs-tree" id="wbs-tree" aria-live="polite"></div><p class="wbs-footer-note">节点状态与讨论、附件和 Agent Run 关联；本页为本地测试原型，不连接生产任务。</p></section>
+                <aside class="prototype-card wbs-board-card" aria-live="polite"><div class="prototype-card-heading"><div><span>当前节点</span><h3>验证详情</h3></div></div><div id="wbs-detail" class="wbs-detail"></div></aside>
+              </div>
+            </div>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <footer><span>AgentPost · Human 与 AI 一起完成任务</span><span class="footer-meta"><span>任务 · 好友 · AI · 设置</span><span class="filing-record">本地测试页面</span></span></footer>
+
+    <script>
+      const workstreams = [
+        { id: 'release', title: '版本测试与升级稳定性', summary: '生产版本、运行时、重连与历史读取', state: 'partial', stateLabel: '部分通过', open: true, children: [
+          { id: 'release-codex', title: 'Codex 0.1.61 读取与附件校验', status: 'done', statusLabel: '已完成', owner: 'Codex · 本机', publishedAt: '2026-09-07 22:00', publisher: '张子良', recipient: 'Codex（本机）', completedBy: 'Codex', completedAt: '2026-09-07 23:00', effect: '完成 218 条活动读取和 Markdown 附件完整性校验，结果可复核。', evidence: '读取 218 条活动；Markdown 附件大小与 SHA-256 一致。', next: '继续观察并发新事件、迟到事件与自动唤醒。' },
+          { id: 'release-openclaw', title: 'OpenClaw 升级后身份是否复用', status: 'attention', statusLabel: '需关注', owner: 'OpenClaw · 真实宿主待复测', publishedAt: '2026-09-08 10:20', publisher: 'Mars', recipient: 'OpenClaw', completedBy: '—', completedAt: '—', effect: '尚未形成通过结论；升级后出现 -001 变 -002，旧连接断开。', evidence: '升级后曾从 zhangziliang910-openclaw-001 变为 -002，旧连接断开。', next: '按原 Agent 身份执行升级复测，保留旧地址与运行日志。' },
+          { id: 'release-legacy', title: '旧读信接口与任务活动兼容', status: 'attention', statusLabel: '需关注', owner: '跨接口对照', publishedAt: '2026-09-07 23:10', publisher: '020', recipient: 'Codex 与旧 read_message', completedBy: 'Codex', completedAt: '2026-09-07 23:20', effect: '活动正文可读，但旧接口五组均返回 404，兼容边界仍未明确。', evidence: '五组任务活动可读，但 source_message_id 走旧 read_message 均 404。', next: '明确替代读取路径或返回迁移提示。' }
+        ]},
+        { id: 'agent', title: '接入与默认 Agent', summary: '首次链接、已有身份关联与宿主入口', state: 'attention', stateLabel: '需补测', open: true, children: [
+          { id: 'agent-default', title: '默认 Agent 与其他 Agent 切换', status: 'done', statusLabel: '已完成', owner: '星轨 · 本机入口', publishedAt: '2026-09-10 09:30', publisher: '张子良', recipient: 'AgentPost 任务入口', completedBy: '张子良', completedAt: '2026-09-10 09:40', effect: '确认默认 AI 入口存在，任务可保留并切换其他已连接 Agent。', evidence: '默认 AI 入口存在，可选择其他已连接 Agent。', next: '继续验证派工时默认值和切换后的可追踪性。' },
+          { id: 'agent-workbuddy', title: 'WorkBuddy 首次链接与手机配对入口', status: 'attention', statusLabel: '需关注', owner: 'WorkBuddy · Windows/手机入口', publishedAt: '2026-09-10 10:00', publisher: '张子良', recipient: 'WorkBuddy', completedBy: '张子良', completedAt: '部分完成', effect: 'Windows 首次链接仍需复制网页命令；手机配对入口需要手动复制网址。', evidence: '首次链接需从网页复制命令；手机小程序不能直接跳转配对页，需手动复制网址。', next: '补充 Windows 桌面端入口检查；手机端按当前范围不纳入本机验收。' }
+        ]},
+        { id: 'governance', title: '任务、讨论与 Human 可读性', summary: '统一任务主线、讨论节点和验收状态', state: 'partial', stateLabel: '进行中', open: false, children: [
+          { id: 'governance-wbs', title: '讨论挂载到任务工作树', status: 'done', statusLabel: '已完成', owner: 'Human · 展示原型', publishedAt: '2026-09-14 11:00', publisher: '张子良', recipient: 'Mars 与任务成员', completedBy: 'Codex', completedAt: '2026-09-14 12:00', effect: '把讨论、工作节点和证据放回同一任务主线，减少列表分散。', evidence: '按主任务 → 工作流 → 节点 → 讨论/证据组织，任务 ID 与 activity_id 分层显示。', next: '根据实际使用反馈调整节点摘要密度。' },
+          { id: 'governance-acceptance', title: 'Agent 结果与 Human 验收分离', status: 'attention', statusLabel: '需关注', owner: '星云驿 · 待验收', publishedAt: '2026-09-14 12:10', publisher: 'Mars', recipient: '任务 Human', completedBy: '—', completedAt: '—', effect: '原型已预留结果与验收分区，但真实状态流转还未接入。', evidence: '结果、附件和验收状态分别展示，不把 Agent Result 当作 Human 已验收。', next: '补齐状态变更时间与操作者记录。' }
+        ]}
+      ];
+      const tree = document.querySelector('#wbs-tree');
+      const detail = document.querySelector('#wbs-detail');
+      const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+      function renderDetail(node) {
+        if (!node) { detail.innerHTML = '<p class="prototype-inline-empty">选择左侧节点后，这里显示负责人、证据、预期与下一步。</p>'; return; }
+        detail.innerHTML = `<div class="wbs-detail-title"><span class="wbs-detail-status ${node.status}">${escapeHtml(node.statusLabel)}</span><h4>${escapeHtml(node.title)}</h4><p>${escapeHtml(node.owner)}</p></div><dl class="wbs-detail-list"><div><dt>发布时间</dt><dd>${escapeHtml(node.publishedAt)}</dd></div><div><dt>发布人</dt><dd>${escapeHtml(node.publisher)}</dd></div><div><dt>发布给</dt><dd>${escapeHtml(node.recipient)}</dd></div><div><dt>完成者</dt><dd>${escapeHtml(node.completedBy)}</dd></div><div><dt>完成时间</dt><dd>${escapeHtml(node.completedAt)}</dd></div><div class="wbs-effect-row"><dt>执行效果</dt><dd>${escapeHtml(node.effect)}</dd></div><div><dt>实际结果</dt><dd>${escapeHtml(node.evidence)}</dd></div><div><dt>下一步</dt><dd>${escapeHtml(node.next)}</dd></div><div><dt>验收边界</dt><dd>仅记录本节点已验证范围，不从局部通过推断其他宿主或完整任务通过。</dd></div></dl><p class="wbs-detail-note">本地展示数据，不会调用 Agent 工具、发送消息或修改星云驿任务。</p>`;
+      }
+      function render(filter = 'all') {
+        tree.innerHTML = workstreams.map((stream) => {
+          const children = stream.children.filter((node) => filter === 'all' || (filter === 'attention' ? node.status !== 'done' : node.status === 'done'));
+          if (!children.length) return '';
+          return `<article class="wbs-workstream ${stream.open ? 'open' : ''}" data-stream="${stream.id}"><button type="button" class="wbs-workstream-head" aria-expanded="${stream.open}"><span class="wbs-toggle" aria-hidden="true">›</span><span class="wbs-workstream-copy"><strong>${escapeHtml(stream.title)}</strong><small>${escapeHtml(stream.summary)}</small></span><span class="wbs-workstream-meta"><span class="wbs-state ${stream.state}">${escapeHtml(stream.stateLabel)}</span><span>${children.length} 项</span></span></button><div class="wbs-children">${children.map((node) => `<button type="button" class="wbs-node ${node.status}" data-node="${node.id}"><span class="wbs-node-dot" aria-hidden="true"></span><span class="wbs-node-copy"><strong>${escapeHtml(node.title)}</strong><small>${escapeHtml(node.owner)} · 发布 ${escapeHtml(node.publishedAt)}</small><small class="wbs-node-route">${escapeHtml(node.publisher)} → ${escapeHtml(node.recipient)} · 完成：${escapeHtml(node.completedBy)}${node.completedAt === '—' ? '' : ` · ${escapeHtml(node.completedAt)}`}</small><small class="wbs-node-effect">效果：${escapeHtml(node.effect)}</small></span><span class="wbs-node-status ${node.status}">${escapeHtml(node.statusLabel)}</span></button>`).join('')}</div></article>`;
+        }).join('');
+        tree.querySelectorAll('.wbs-workstream-head').forEach((button) => button.addEventListener('click', () => { const parent = button.closest('.wbs-workstream'); parent.classList.toggle('open'); button.setAttribute('aria-expanded', parent.classList.contains('open')); }));
+        tree.querySelectorAll('.wbs-node').forEach((button) => button.addEventListener('click', () => { tree.querySelectorAll('.wbs-node').forEach((node) => node.classList.remove('selected')); button.classList.add('selected'); const node = workstreams.flatMap((stream) => stream.children).find((item) => item.id === button.dataset.node); renderDetail(node); }));
+      }
+      document.querySelectorAll('.wbs-filter button').forEach((button) => button.addEventListener('click', () => { document.querySelectorAll('.wbs-filter button').forEach((item) => item.classList.remove('active')); button.classList.add('active'); render(button.dataset.filter); }));
+      document.querySelectorAll('[data-wbs-target]').forEach((button) => button.addEventListener('click', () => { if (button.dataset.wbsFilter) document.querySelector(`.wbs-filter button[data-filter="${button.dataset.wbsFilter}"]`).click(); document.getElementById(button.dataset.wbsTarget).scrollIntoView({ behavior: 'smooth', block: 'start' }); }));
+      render();
+      renderDetail(null);
+    </script>
+  </body>
+</html>
