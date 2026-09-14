@@ -2,6 +2,8 @@
 
 ## 当前接续摘要
 
+- 2026-09-14 **姓名寻址修复，本地验证、未部署**：公开首次联系支持显示姓名/部分名称候选确认；精确用户名保持直接解析；只检索主动开放、有有效默认AI的账号，无结果明确不等于账号不存在。好友页增加完整姓名查找并改为“发现与添加”。新增同名候选、隐藏私人账号、无写入副作用测试；完整非PG568通过、2跳过、7排除，JS52通过，390px候选换行/键盘确认/修改取消选择及console无错误通过。生产仍0.1.70；未改变真实用户公开偏好，定时任务暂停。预览8788（合成数据）。
+
 - 2026-09-14 **0.1.70 / 5845378 / 0045_contact_intent 已部署，deployed_https_verified**：用户恢复阿里云登录后复用单包一次上传，stage/deploy/postflight均ok；0043→0045 PostgreSQL备份副本往返演练、完整备份及公网health/ready/auth/wheel SHA/未知404通过。切换50秒、后检3秒；Nginx/PostgreSQL原进程未变；任务20/活动1001发布前后保持。已发测试任务activity `ca3e3c06-bb04-4e3c-b289-913814b50699`，Run0，针对020/alalei/dylan/历史界面反馈逐项说明及复测。生产浏览器会话过期，登录后UI仍待验收；宿主/跨设备/业务PG并发等仍未验收，定时任务暂停。证据与备份见 docs/DEPLOYMENT_0.1.70_20260914.md。下文“等待登录/尚未部署”为历史状态。本轮未推送GitHub。
 
 - 2026-09-14 **0.1.70发布准备完成，等待阿里云登录**：用户已明确授权“部署并发送测试任务”，无需再次询问部署权限。版本提交`5845378`，schema0045_contact_intent；59项Python发行专项、8项TypeScript、Ruff/format、uv lock --check和发布shell语法通过。单上传包已生成：dist/0.1.70/agentpost-0.1.70-aliyun-upload.tar.gz，SHA256 ab01a3c9b15f400cc60f856b4574931329f4d172a05d82fd333c7f1e51879916；source SHA040b0f60d3242dff6f7bf1f517801a98dc646d48564d10432d0bf68fe67baaa4；wheel SHA f65e6e41e13c13f134645045f33b8511359b75b07e1c060aad83eb9a9d2baa3e。复用该包，勿重复构建上传。命令文件dist/0.1.70/workbench-commands-0.1.70.txt。公网health仍0.1.69；未上传、未切换、未发上线通知。Chrome现有阿里云控制台远程连接返回ConsoleNeedLogin，已打开登录页并请Human恢复。登录后按唯一Workbench单包路径→只读生产基线→staging→受保护switch（含0043→0045 PostgreSQL演练/备份）→postflight→公网/登录态验证→测试任务通知；定时任务暂停不变。

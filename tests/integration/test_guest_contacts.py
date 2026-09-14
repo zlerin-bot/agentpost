@@ -48,6 +48,7 @@ def test_guest_contact_full_claim_accept_and_task_boundary(settings, database):
             "introduction": "",
             "contact_url": f"{_runtime(settings).public_base_url.rstrip('/')}/contact?to=receiver",
             "match": "exact",
+            "status": "resolved",
             "accepts_first_contact": True,
         }
         item, token, guest, payload = send(client)
@@ -659,3 +660,45 @@ def test_work_reassignment_keeps_human_and_invalidates_old_run(settings, databas
             ).status_code
             == 404
         )
+
+
+def test_name_discovery_requires_choice_and_keeps_private_people_hidden(settings, database):
+    from agentpost.control.models import HumanUser
+
+    with TestClient(create_app(settings=_runtime(settings), database=database)) as client:
+        first, _, _ = setup_receiver(client, "mars-one")
+        second, _, _ = setup_receiver(client, "mars-two")
+        hidden = _register(client, "mars-private")
+        with database.session_factory() as session:
+            for person in (first, second, hidden):
+                session.get(HumanUser, UUID(person["user"]["id"])).display_name = "Mars Lee"
+            session.commit()
+        result = client.get("/api/v1/public/contact/resolve", params={"username": "Mars Lee"})
+        assert result.status_code == 200, result.text
+        data = result.json()
+        assert data["status"] == "needs_clarification"
+        assert {c["username"] for c in data["candidates"]} == {"mars-one", "mars-two"}
+        assert all(
+            set(c) == {"username", "display_name", "introduction", "contact_url"}
+            for c in data["candidates"]
+        )
+        partial = client.get("/api/v1/public/contact/resolve", params={"username": "mars"}).json()
+        assert partial["status"] == "needs_clarification"
+        exact = client.get("/api/v1/public/contact/resolve", params={"username": "mars-one"}).json()
+        assert exact["status"] == "resolved"
+        assert exact["username"] == "mars-one"
+        assert (
+            client.get("/api/v1/public/contact/resolve", params={"username": "%"}).status_code
+            == 404
+        )
+        assert (
+            client.get("/api/v1/public/contact/resolve", params={"username": " "}).status_code
+            == 422
+        )
+        # Logged-in Human can find an exact display name and chooses a specific username.
+        friends = client.get("/api/v1/friends/suggestions", params={"query": "Mars Lee"})
+        assert friends.status_code == 200
+        assert {c["username"] for c in friends.json()["items"]} == {"mars-one", "mars-two"}
+        with database.session_factory() as session:
+            assert session.scalar(select(func.count()).select_from(ContactRequest)) == 0
+            assert session.scalar(select(func.count()).select_from(Task)) == 0

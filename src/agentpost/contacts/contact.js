@@ -34,10 +34,27 @@ async function session() {
 async function mutate(url, body, method="POST") { await session(); return api(url, method, body, {"X-CSRF-Token":csrf}); }
 function run(fn) { return async (event) => { event?.preventDefault(); try { await fn(); } catch (error) { notify(error.message); } }; }
 $("username").addEventListener("input", () => { matched=""; $("send").disabled=true; $("target").textContent=""; });
+let lookupGeneration=0;
+$("username").addEventListener("input",()=>{lookupGeneration++;});
 $("resolve").onclick=run(async()=>{
+  const generation=++lookupGeneration;
+  matched="";$("send").disabled=true;$("target").replaceChildren();
   const result=await api(`/api/v1/public/contact/resolve?username=${encodeURIComponent($("username").value.trim())}`);
-  matched=result.username; $("target").textContent=`收件人：${result.display_name}（@${matched}） ${result.introduction || ""}`;
-  $("send").disabled=false;
+  if(generation!==lookupGeneration)return;
+  const choose=(person)=>{
+    if(generation!==lookupGeneration)return;
+    matched=person.username;
+    $("target").textContent=`收件人：${person.display_name}（@${matched}） ${person.introduction || ""}`;
+    $("send").disabled=false;
+  };
+  if(result.status!=="needs_clarification") {choose(result);return;}
+  $("target").textContent="请选择要联系的人：";
+  result.candidates.forEach(person=>{
+    const button=document.createElement("button");button.type="button";button.className="contact-candidate";
+    button.textContent=`${person.display_name}（@${person.username}）${person.introduction ? " · "+person.introduction : ""}`;
+    button.onclick=()=>choose(person);$("target").append(button);
+  });
+  if(result.has_more)$("target").append(document.createTextNode("还有匹配结果，请输入更完整的姓名。"));
 });
 $("intro").onsubmit=run(async()=>{
   if (!matched) throw new Error("请先查找并确认收件人。");

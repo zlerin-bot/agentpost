@@ -27,8 +27,8 @@ from agentpost.control.human_security import (
     add_human_action_audit,
     human_session_id_from_request,
 )
-from agentpost.control.models import HumanUser
-from agentpost.identity.models import utc_now
+from agentpost.control.models import AgentOwnership, HumanUser
+from agentpost.identity.models import Agent, utc_now
 from agentpost.security.rate_limit import client_rate_limit_subject, enforce_http_rate_limit
 from agentpost.tasks.service import _human_agent
 
@@ -104,7 +104,9 @@ def public_target(session, username):
             404,
             detail={
                 "code": "public_contact_unavailable",
-                "message": "未找到可联系的公开用户名，请核对拼写，或请对方开启首次联系。",
+                "message": (
+                    "暂无可用的公开联系入口，不代表对方没有账号；请核对用户名或请对方开启首次联系。"
+                ),
             },
         )
     return person
@@ -186,7 +188,7 @@ def contract(settings: SettingsDep):
         "name": "AgentPost first contact",
         "version": "2",
         "base_url": settings.public_base_url,
-        "discovery": "GET /api/v1/public/contact/resolve?username=<exact public username>",
+        "discovery": "GET /api/v1/public/contact/resolve?username=<name or username>",
         "submit": "POST /api/v1/public/contact/requests",
         "receipt": "GET /api/v1/public/contact/requests/{request_id}",
         "authentication": (
@@ -214,7 +216,11 @@ def contract(settings: SettingsDep):
             "recipients or third parties. "
         ),
         "expiry_days": 7,
-        "matching": "exact public username only; no match does not prove user absence",
+        "matching": (
+            "Exact username resolves directly. Names/partial matches return "
+            "needs_clarification and public candidates; Human must select one before sending. "
+            "Never infer account absence from unavailable."
+        ),
         "semantics": (
             "Saved request is not read, accepted or executed. Recipient must opt in "
             "and accept. Sender claims after registering and chooses a default Agent; "
@@ -230,7 +236,8 @@ def contract(settings: SettingsDep):
         ),
         "automatic_agent_setup": False,
         "attachments": False,
-        "fuzzy_matching": False,
+        "fuzzy_matching": True,
+        "matching_method": "case_insensitive_name_or_username_substring; no typo correction",
     }
 
 
@@ -262,18 +269,85 @@ def resolve(
     response: Response,
     session: SessionDep,
     settings: SettingsDep,
-    username: Annotated[str, Query(min_length=1, max_length=32)],
+    username: Annotated[str, Query(min_length=1, max_length=100)],
 ):
     response.headers["Cache-Control"] = "no-store"
     limit(request, session, settings, "resolve", 30, 3600)
-    person = public_target(session, username.strip())
+    term = " ".join(username.strip().split()).casefold()
+    if not term:
+        raise HTTPException(422, detail={"message": "请输入对方的姓名或用户名"})
+    statement = (
+        select(HumanUser)
+        .join(ContactPreference, ContactPreference.human_id == HumanUser.id)
+        .where(
+            HumanUser.status == "active",
+            ContactPreference.enabled.is_(True),
+            select(Agent.id)
+            .join(AgentOwnership, AgentOwnership.agent_id == Agent.id)
+            .where(
+                Agent.id == HumanUser.default_agent_id,
+                Agent.status == "active",
+                AgentOwnership.human_user_id == HumanUser.id,
+            )
+            .exists(),
+        )
+    )
+
+    def candidate(person):
+        return {
+            "username": person.username,
+            "display_name": person.display_name,
+            "introduction": session.get(ContactPreference, person.id).introduction,
+            "contact_url": contact_url(settings, person.username),
+        }
+
+    exact = session.scalar(statement.where(func.lower(HumanUser.username) == term))
+    if exact and _human_agent(session, human_id=exact.id, agent_id=exact.default_agent_id):
+        return {
+            **candidate(exact),
+            "status": "resolved",
+            "match": "exact",
+            "accepts_first_contact": True,
+        }
+    # Names are discovery hints, never a send address. Require an explicit choice,
+    # even for one fuzzy candidate. Only opted-in public profiles may appear here.
+    matches = or_(
+        func.lower(HumanUser.display_name) == term, func.lower(HumanUser.username) == term
+    )
+    if len(term) >= 2:
+        matches = or_(
+            func.lower(HumanUser.display_name).contains(term, autoescape=True),
+            func.lower(HumanUser.username).contains(term, autoescape=True),
+        )
+    people = session.scalars(
+        statement.where(matches)
+        .order_by(
+            (func.lower(HumanUser.display_name) == term).desc(), HumanUser.username, HumanUser.id
+        )
+        .limit(21)
+    )
+    candidates = [
+        candidate(p)
+        for p in people
+        if _human_agent(session, human_id=p.id, agent_id=p.default_agent_id)
+    ]
+    if not candidates:
+        raise HTTPException(
+            404,
+            detail={
+                "code": "public_contact_unavailable",
+                "message": (
+                    "暂无可公开联系的匹配结果；不代表对方没有账号。"
+                    "请核对姓名，或请对方分享并开启首次联系链接。"
+                ),
+            },
+        )
     return {
-        "username": person.username,
-        "display_name": person.display_name,
-        "introduction": session.get(ContactPreference, person.id).introduction,
-        "contact_url": contact_url(settings, person.username),
-        "match": "exact",
-        "accepts_first_contact": True,
+        "status": "needs_clarification",
+        "match": "name_or_partial",
+        "candidates": candidates[:20],
+        "has_more": len(candidates) > 20,
+        "message": "请确认收件人，使用所选候选的username发送；不要根据姓名猜测地址。",
     }
 
 

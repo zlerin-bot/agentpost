@@ -184,7 +184,10 @@ def list_friend_suggestions(
             session.scalars(
                 select(HumanUser.id).where(
                     HumanUser.status == "active",
-                    func.lower(HumanUser.username) == normalized,
+                    or_(
+                        func.lower(HumanUser.username) == normalized,
+                        func.lower(HumanUser.display_name) == normalized,
+                    ),
                 )
             )
         )

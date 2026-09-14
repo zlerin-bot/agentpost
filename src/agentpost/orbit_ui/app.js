@@ -2471,7 +2471,7 @@ function renderFriendBrowser() {
   if (!friends.length) {
     const empty = document.createElement("p");
     empty.className = "prototype-inline-empty";
-    empty.textContent = state.friendQuery ? "没有匹配的好友，请调整搜索条件。"
+    empty.textContent = state.friendQuery ? "暂无匹配结果。添加新好友可输入完整姓名或用户名，并查看“发现与添加”。"
       : state.friendFilter === "pending_incoming" ? "暂无待你确认的好友申请。"
         : state.friendFilter === "pending_outgoing" ? "暂无已发出的好友申请。"
           : "当前列表暂无好友。";
@@ -2526,7 +2526,7 @@ function renderFriendDetail() {
     accepted: "正式好友",
     pending_incoming: "等待你确认",
     pending_outgoing: "等待对方确认",
-    suggested: "沟通过，可申请好友",
+    suggested: "可申请好友",
   };
   elements.friendDetailRelation.textContent = relationLabels[friend.relation_status] || "协作联系";
   elements.friendDetailName.textContent = friend.display_name;
@@ -2535,7 +2535,7 @@ function renderFriendDetail() {
   elements.friendDetailOnline.classList.remove("online", "offline");
   elements.friendDetailNote.textContent = friend.relation_status === "accepted"
     ? "双方已经明确确认好友关系，可以互相邀请加入任务。"
-    : "历史沟通不自动成为好友，必须由双方明确确认。";
+    : "核对姓名和 @用户名后申请；对方接受后成为好友。";
   const actionLabels = {
     accepted: "发起任务",
     pending_incoming: "接受好友申请",

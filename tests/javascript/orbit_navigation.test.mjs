@@ -205,7 +205,7 @@ test("friends use one clear hierarchy and explicit relationship states", () => {
   assert.match(html, /data-friend-filter="accepted"[^>]*>好友</);
   assert.match(html, /data-friend-filter="pending_incoming"[^>]*>待你确认</);
   assert.match(html, /data-friend-filter="pending_outgoing"[^>]*>已发申请</);
-  assert.match(html, /data-friend-filter="suggested"[^>]*>联系过的人</);
+  assert.match(html, /data-friend-filter="suggested"[^>]*>发现与添加</);
   assert.match(script, /accepted: "已成为好友"/);
   assert.match(script, /pending_incoming: "待你确认"/);
   assert.match(script, /badge: friendRelationLabel\(friend\)/);
