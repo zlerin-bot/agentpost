@@ -916,40 +916,27 @@ function createSafeTaskReading(body) {
 }
 
 function createTaskActivityAttachment(activity, format, body) {
+  const raw = typeof body === "string" ? body : JSON.stringify(body ?? "", null, 2);
+  const readable = format === "markdown" || format === "text";
+  if (readable && raw.length <= 300) return createSafeTaskReading(raw);
   const details = document.createElement("details");
-  details.className = `task-activity-attachment format-${format}`;
+  details.className = `task-activity-attachment compact-message-reading format-${format}`;
   const summary = document.createElement("summary");
-  const icon = document.createElement("span");
-  icon.className = "task-activity-attachment-icon";
-  icon.textContent = format === "json" ? "{}" : "⌑";
-  const copy = document.createElement("span");
-  const name = document.createElement("strong");
-  name.textContent = "说了什么";
-  const hint = document.createElement("small");
-  const updateReadingHint = () => {
-    hint.textContent = details.open ? "收起正文" : "展开阅读";
-  };
+  const excerpt = document.createElement("div");
+  excerpt.className = "compact-message-excerpt";
+  if (readable) excerpt.append(createSafeTaskReading(raw.slice(0, 600)));
+  else excerpt.textContent = raw.slice(0, 600);
+  const hint = document.createElement("span");
+  hint.className = "compact-message-toggle";
+  const updateReadingHint = () => { hint.textContent = details.open ? "收起全文" : "展开全文"; };
   details.addEventListener("toggle", updateReadingHint);
   updateReadingHint();
-  const excerpt = document.createElement("span");
-  excerpt.className = "task-activity-attachment-excerpt";
-  const excerptBody = typeof body === "string" ? body : JSON.stringify(body ?? "");
-  excerpt.textContent = excerptBody.replace(/\s+/g, " ").trim().slice(0, 180);
-  if (excerptBody.replace(/\s+/g, " ").trim().length > 180) excerpt.textContent += "…";
-  copy.append(name, hint, excerpt);
-  summary.append(icon, copy);
+  summary.append(excerpt, hint);
   const preview = document.createElement("pre");
   preview.className = "task-activity-attachment-preview";
-  preview.textContent = format === "json" && typeof body !== "string"
-    ? JSON.stringify(body, null, 2)
-    : String(body ?? "");
-  const original = document.createElement("details");
-  original.className = "task-original-source";
-  const originalLabel = document.createElement("summary");
-  originalLabel.textContent = "查看原始正文";
-  original.append(originalLabel, preview);
+  preview.textContent = raw;
   details.append(summary);
-  if (format === "markdown" || format === "text") details.append(createSafeTaskReading(body), original);
+  if (readable) details.append(createSafeTaskReading(raw));
   else details.append(preview);
   return details;
 }
@@ -2117,6 +2104,8 @@ function renderProjectDetail() {
     avatar.textContent = (activity.actor_display_name || "系").slice(0, 1);
     const copy = document.createElement("div");
     copy.className = "project-activity-copy";
+    const footer = document.createElement("div");
+    footer.className = "task-message-footer";
     const parentId = activity.metadata?.reply_to_activity_id;
     const referenceIds = [...new Set([parentId, ...(activity.metadata?.referenced_activity_ids || [])].filter(Boolean))];
     referenceIds.forEach((id) => {
@@ -2159,16 +2148,18 @@ function renderProjectDetail() {
     const textNode = document.createElement("p");
     textNode.className = "project-activity-action";
     textNode.textContent = activityText(activity);
-    copy.append(heading);
+    copy.prepend(heading);
     if (activity.kind === "task_message" && actorAgent) {
-      const agent = document.createElement("small");
-      agent.className = "project-activity-agent";
+      const agent = document.createElement("details");
+      agent.className = "project-activity-agent compact-agent-source";
+      const brief = document.createElement("summary");
+      const shortName = actorAgent.split(/\s+on\s+/i)[0];
       const origin = activity.metadata?.publication_origin;
-      agent.textContent = origin === "human_delegated"
-        ? `由 ${actorAgent} 代为发布`
-        : (origin === "agent_autonomous"
-          ? `其 ${actorAgent} 主动发布`
-          : `通过 ${actorAgent} 发布`);
+      const attribution = origin === "human_delegated" ? "代为发布" : origin === "agent_autonomous" ? "主动发布" : "发布";
+      brief.textContent = `通过 ${shortName} ${attribution}`;
+      const full = document.createElement("span");
+      full.textContent = actorAgent;
+      agent.append(brief, full);
       copy.append(agent);
     } else if (activity.actor_agent_display_name
       && !["task_created", "created"].includes(activity.kind)) {
@@ -2178,10 +2169,14 @@ function renderProjectDetail() {
       copy.append(agent);
     }
     if (activity.kind === "task_message") {
-      const context = document.createElement("div");
-      context.className = "task-message-context";
-      appendTaskMessageContext(context, project, activity);
-      copy.append(context);
+      const subject = activity.metadata?.subject;
+      const parent = project.activities.find(item => item.activity_id === parentId);
+      if (subject && (!parentId || String(subject).replace(/^Re:\s*/i, "") !== String(parent?.metadata?.subject || "").replace(/^Re:\s*/i, ""))) {
+        const title = document.createElement("h4");
+        title.className = "task-message-title";
+        title.textContent = subject;
+        copy.append(title);
+      }
     } else copy.append(textNode);
     const suggestedParent = ownerAccess && state.taskRecordFilter === "relations"
       ? suggestedTaskReplyParent(project, activity) : null;
@@ -2262,32 +2257,30 @@ function renderProjectDetail() {
       const recipients = document.createElement("details");
       recipients.className = "project-activity-recipients";
       const summary = document.createElement("summary");
-      summary.textContent = `查看接收状态 · ${taskMessageRecipientSummary(activity.metadata.recipient_statuses)}`;
+      summary.textContent = `共享给 ${taskMessageAudienceLabel(project, activity)} · 查看接收状态`;
       recipients.append(summary);
       activity.metadata.recipient_statuses.forEach((item) => {
         const recipient = document.createElement("div");
         recipient.textContent = taskMessageRecipientLabel(project, item);
         recipients.append(recipient);
       });
-      copy.append(recipients);
+      footer.append(recipients);
     }
     if (activity.kind === "task_message" && activity.metadata?.body !== undefined) {
       const format = String(activity.metadata.content_format || "text").toLowerCase();
       if (["markdown", "json", "html"].includes(format)) {
         copy.append(createTaskActivityAttachment(activity, format, activity.metadata.body));
-      } else if (String(activity.metadata.body).length > 600 || /^\s*#{1,6}\s/m.test(String(activity.metadata.body))) {
+      } else if (String(activity.metadata.body).length > 300 || /^\s*#{1,6}\s/m.test(String(activity.metadata.body))) {
         copy.append(createTaskActivityAttachment(activity, "text", activity.metadata.body));
       } else {
         const message = document.createElement("section");
         message.className = "task-message-body";
-        const label = document.createElement("strong");
-        label.textContent = "说了什么";
         const body = document.createElement("p");
         body.className = "task-activity-text-body";
         body.textContent = typeof activity.metadata.body === "string"
           ? activity.metadata.body
           : JSON.stringify(activity.metadata.body);
-        message.append(label, body);
+        message.append(body);
         copy.append(message);
       }
     }
@@ -2366,8 +2359,14 @@ function renderProjectDetail() {
       });
       form.append(context, quote, input, actions, feedback);
       reply.append(replyLabel, form);
-      copy.append(reply);
+      footer.append(reply);
     }
+    if (activity.kind === "task_message" && !activity.metadata?.recipient_statuses?.length) {
+      const audience = document.createElement("span");
+      audience.textContent = `共享给 ${taskMessageAudienceLabel(project, activity)}`;
+      footer.prepend(audience);
+    }
+    if (footer.childNodes.length) copy.append(footer);
     container.append(row);
   });
   const lifecycleKinds = new Set([

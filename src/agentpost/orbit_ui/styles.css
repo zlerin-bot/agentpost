@@ -6916,3 +6916,29 @@ footer {
   cursor: pointer;
 }
 .task-discussion-order:focus-visible { outline: 2px solid #1a73e8; outline-offset: 2px; }
+
+/* A message is one card: title, body, then sharing and reply controls. */
+.project-activity-copy .task-message-title { margin: 5px 0; font-size: var(--font-item-title); overflow-wrap: anywhere; }
+.project-activity-copy .task-message-body,
+.project-activity-copy .compact-message-reading {
+  border: 0; border-radius: 0; background: transparent; padding: 0; margin: 4px 0;
+}
+.project-activity-copy .compact-message-reading > summary {
+  display: block; padding: 0; border: 0; background: transparent;
+}
+.compact-message-excerpt { display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; white-space: pre-wrap; }
+.compact-message-reading[open] .compact-message-excerpt { display: none; }
+.compact-message-toggle { display: block; color: #185abc; font-size: var(--font-meta); margin: 5px 0; }
+.project-activity-copy > .task-readable-body { margin: 4px 0; }
+.project-activity-copy .task-readable-body { padding: 0; border: 0; background: transparent; }
+.project-activity-copy .task-readable-body > :first-child { margin-top: 0; }
+.project-activity-copy .task-readable-body > :last-child { margin-bottom: 0; }
+.task-message-footer { display: flex; flex-wrap: wrap; align-items: start; gap: 8px 16px; border-top: 1px solid #d6dfe8; padding-top: 8px; margin-top: 8px; font-size: var(--font-meta); color: #5f6368; }
+.task-message-footer > .project-activity-recipients { flex: 1 1 220px; min-width: 0; margin: 0; }
+.project-activity-copy .task-message-footer > .project-activity-recipients > summary {
+  display: block; border: 0; background: transparent; padding: 0; color: #526174; border-radius: 0; font-size: var(--font-meta); white-space: normal;
+}
+.task-message-footer > .task-record-reply { margin: 0; }
+.task-message-footer > .task-record-reply[open] { flex-basis: 100%; }
+.compact-agent-source { color: #70757a; font-size: var(--font-caption); overflow-wrap: anywhere; }
+.compact-agent-source > summary { cursor: pointer; }

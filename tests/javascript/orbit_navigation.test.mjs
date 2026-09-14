@@ -25,7 +25,7 @@ test("task recipient summaries count Humans and preserve nonstandard states", ()
     "共享给 3 人 · 1 个 AI 兼容投递");
   assert.equal(summary([{ status: "failed" }]), "共享范围：1 个 AI · 1 个状态待确认");
   assert.doesNotMatch(script, /任务上下文可用，无需逐条回复/);
-  assert.match(script, /查看接收状态 · \$\{taskMessageRecipientSummary/);
+  assert.match(script, /共享给 \$\{taskMessageAudienceLabel\(project, activity\)\} · 查看接收状态/);
 });
 
 test("discussion metadata separates topic and sharing from work responsibility", () => {
@@ -55,9 +55,9 @@ test("discussion metadata separates topic and sharing from work responsibility",
   assert.equal(labels.taskMessageAudienceLabel(project, { metadata: {} }),
     "任务成员（具体范围待确认）");
   assert.doesNotMatch(script, /follow_up_human_user_ids|taskMessageFollowUpLabel|谁跟进|未指定；需要执行/);
-  assert.match(script, /appendTaskMessageContext\(context, project, activity\)/);
+  assert.match(script, /task-message-title/);
   assert.match(script, /appendTaskMessageFact\(container, "共享范围"/);
-  assert.match(script, /name\.textContent = "说了什么"/);
+  assert.doesNotMatch(script, /textContent = "说了什么"/);
   assert.match(stylesheet, /\.task-discussion-facts/);
   assert.match(stylesheet, /\.task-message-context/);
   assert.match(stylesheet, /\.task-message-body/);
