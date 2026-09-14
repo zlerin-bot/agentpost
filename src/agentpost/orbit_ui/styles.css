@@ -6873,3 +6873,25 @@ footer {
 .task-context-dialog input[type="checkbox"] { width: auto; }
 .task-context-dialog summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
 .task-context-dialog button:focus-visible, .task-context-dialog input:focus-visible, .task-context-dialog textarea:focus-visible { outline: 3px solid #da8600; outline-offset: 2px; }
+
+/* Keep the opening excerpt only while collapsed, without repeating the body. */
+.task-activity-attachment-excerpt {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  color: #526174;
+  font-size: var(--font-meta);
+  line-height: 1.55;
+  margin-top: 6px;
+}
+.task-activity-attachment[open] .task-activity-attachment-excerpt { display: none; }
+.project-activity-copy > .task-activity-source-reference {
+  display: block;
+  font-size: var(--font-caption);
+  line-height: 1.5;
+  color: #526174;
+  overflow-wrap: anywhere;
+}

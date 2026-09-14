@@ -931,7 +931,12 @@ function createTaskActivityAttachment(activity, format, body) {
   };
   details.addEventListener("toggle", updateReadingHint);
   updateReadingHint();
-  copy.append(name, hint);
+  const excerpt = document.createElement("span");
+  excerpt.className = "task-activity-attachment-excerpt";
+  const excerptBody = typeof body === "string" ? body : JSON.stringify(body ?? "");
+  excerpt.textContent = excerptBody.replace(/\s+/g, " ").trim().slice(0, 180);
+  if (excerptBody.replace(/\s+/g, " ").trim().length > 180) excerpt.textContent += "…";
+  copy.append(name, hint, excerpt);
   summary.append(icon, copy);
   const preview = document.createElement("pre");
   preview.className = "task-activity-attachment-preview";
@@ -2117,6 +2122,7 @@ function renderProjectDetail() {
     referenceIds.forEach((id) => {
       const original = project.activities.find((item) => item.activity_id === id);
       const link = document.createElement("a");
+      link.className = "task-activity-source-reference";
       link.href = `#task-activity-${id}`;
       link.textContent = original
         ? `${id === parentId ? "回复" : "引用"} ${original.actor_display_name} · ${dateText(original.created_at)}`
