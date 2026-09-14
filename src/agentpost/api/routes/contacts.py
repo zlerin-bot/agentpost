@@ -90,11 +90,11 @@ def limit(request, session, settings, scope, amount, seconds, subject=None):
 def public_target(session, username):
     person = session.scalar(
         select(HumanUser)
-        .join(ContactPreference, ContactPreference.human_id == HumanUser.id)
+        .outerjoin(ContactPreference, ContactPreference.human_id == HumanUser.id)
         .where(
             HumanUser.username == username.lower(),
             HumanUser.status == "active",
-            ContactPreference.enabled.is_(True),
+            or_(ContactPreference.human_id.is_(None), ContactPreference.enabled.is_(True)),
         )
     )
     if not person or not _human_agent(
@@ -222,7 +222,8 @@ def contract(settings: SettingsDep):
             "Never infer account absence from unavailable."
         ),
         "semantics": (
-            "Saved request is not read, accepted or executed. Recipient must opt in "
+            "Saved request is not read, accepted or executed. First contact is enabled "
+            "by default; explicitly disabled recipients cannot be contacted. Recipient must review "
             "and accept. Sender claims after registering and chooses a default Agent; "
             "both defaults must be active before an explicitly requested and accepted "
             "collaboration creates friendship and one Task. Greeting/reply/registration "
@@ -278,10 +279,10 @@ def resolve(
         raise HTTPException(422, detail={"message": "请输入对方的姓名或用户名"})
     statement = (
         select(HumanUser)
-        .join(ContactPreference, ContactPreference.human_id == HumanUser.id)
+        .outerjoin(ContactPreference, ContactPreference.human_id == HumanUser.id)
         .where(
             HumanUser.status == "active",
-            ContactPreference.enabled.is_(True),
+            or_(ContactPreference.human_id.is_(None), ContactPreference.enabled.is_(True)),
             select(Agent.id)
             .join(AgentOwnership, AgentOwnership.agent_id == Agent.id)
             .where(
@@ -297,7 +298,11 @@ def resolve(
         return {
             "username": person.username,
             "display_name": person.display_name,
-            "introduction": session.get(ContactPreference, person.id).introduction,
+            "introduction": (
+                session.get(ContactPreference, person.id).introduction
+                if session.get(ContactPreference, person.id)
+                else ""
+            ),
             "contact_url": contact_url(settings, person.username),
         }
 
@@ -310,7 +315,7 @@ def resolve(
             "accepts_first_contact": True,
         }
     # Names are discovery hints, never a send address. Require an explicit choice,
-    # even for one fuzzy candidate. Only opted-in public profiles may appear here.
+    # even for one fuzzy candidate. Explicitly disabled profiles remain private.
     matches = or_(
         func.lower(HumanUser.display_name) == term, func.lower(HumanUser.username) == term
     )
@@ -431,7 +436,7 @@ def preferences(user: CurrentHumanDep, session: SessionDep, response: Response):
     response.headers["Cache-Control"] = "no-store"
     pref = session.get(ContactPreference, user.id)
     return {
-        "enabled": bool(pref and pref.enabled),
+        "enabled": pref.enabled if pref else True,
         "username": user.username,
         "introduction": pref.introduction if pref else "",
     }

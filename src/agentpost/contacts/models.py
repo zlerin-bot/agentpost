@@ -13,7 +13,7 @@ class ContactPreference(Base):
     human_id: Mapped[UUID] = mapped_column(
         Uuid, ForeignKey("human_users.id", ondelete="CASCADE"), primary_key=True
     )
-    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     introduction: Mapped[str] = mapped_column(String(280), default="")
 
 

@@ -12,15 +12,16 @@ from agentpost.main import create_app
 from agentpost.tasks.models import AgentRun, Task, TaskActivity, TaskMembership
 
 
-def setup_receiver(client, username="receiver"):
+def setup_receiver(client, username="receiver", *, save_preference=True):
     person = _register(client, username)
     agent = _create_owned_agent(client, human_id=person["user"]["id"], handle=username)
     csrf = _login(client, username)
     headers = {"X-CSRF-Token": csrf}
     result = client.put(f"/api/v1/orbit/agents/{agent['agent']['id']}/default", headers=headers)
     assert result.status_code == 200, result.text
-    result = client.put("/api/v1/contacts/preferences", headers=headers, json={"enabled": True})
-    assert result.status_code == 200, result.text
+    if save_preference:
+        result = client.put("/api/v1/contacts/preferences", headers=headers, json={"enabled": True})
+        assert result.status_code == 200, result.text
     return person, agent, headers
 
 
@@ -702,3 +703,42 @@ def test_name_discovery_requires_choice_and_keeps_private_people_hidden(settings
         with database.session_factory() as session:
             assert session.scalar(select(func.count()).select_from(ContactRequest)) == 0
             assert session.scalar(select(func.count()).select_from(Task)) == 0
+
+
+def test_default_contact_enabled_without_preference_and_explicit_close_preserved(
+    settings, database
+):
+    from agentpost.contacts.models import ContactPreference
+
+    with TestClient(create_app(settings=_runtime(settings), database=database)) as client:
+        person, _, headers = setup_receiver(client, save_preference=False)
+        assert client.get("/api/v1/contacts/preferences").json()["enabled"] is True
+        assert client.get("/api/v1/public/contact/resolve?username=receiver").status_code == 200
+        assert (
+            client.get("/api/v1/public/contact/resolve?username=receiv").json()["status"]
+            == "needs_clarification"
+        )
+        send(client, intent="greeting")
+        with database.session_factory() as session:
+            assert session.get(ContactPreference, UUID(person["user"]["id"])) is None
+            assert session.scalar(select(func.count()).select_from(Task)) == 0
+            assert session.scalar(select(func.count()).select_from(AgentRun)) == 0
+        client.put(
+            "/api/v1/contacts/preferences", headers=headers, json={"enabled": False}
+        ).raise_for_status()
+        assert client.get("/api/v1/contacts/preferences").json()["enabled"] is False
+        assert client.get("/api/v1/public/contact/resolve?username=receiver").status_code == 404
+        assert client.get("/api/v1/public/contact/resolve?username=receiv").status_code == 404
+        response = client.post(
+            "/api/v1/public/contact/requests",
+            headers={"Authorization": "Bearer gc_" + secrets.token_urlsafe(32)},
+            json={
+                "username": "receiver",
+                "sender_name": "guest",
+                "subject": "hello",
+                "body": "hi",
+                "intent": "greeting",
+            },
+        )
+        assert response.status_code == 404
+        assert client.get("/api/v1/contacts/preferences").json()["enabled"] is False
