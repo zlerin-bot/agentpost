@@ -6895,3 +6895,24 @@ footer {
   color: #526174;
   overflow-wrap: anywhere;
 }
+
+.task-discussion > .task-discussion-order-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  color: #526174;
+  font-size: var(--font-meta);
+}
+.task-discussion-order {
+  font: inherit;
+  color: #185abc;
+  background: #fff;
+  border: 1px solid #a8bcd6;
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+.task-discussion-order:focus-visible { outline: 2px solid #1a73e8; outline-offset: 2px; }

@@ -167,8 +167,8 @@ test("task progress is Human-first and structured content stays collapsed as a s
   assert.match(script, /保存回答，等待 AI 继续/);
   assert.match(script, /查看完整任务记录/);
   assert.doesNotMatch(script, /近期协作更新/);
-  assert.match(script, /AI 执行状态/);
-  assert.match(script, /不等同于业务进展或 Human 验收/);
+  assert.match(script, /AI运行详情/);
+  assert.match(script, /不是你的待办清单/);
   assert.match(script, /\["human_directed", "revision"\]/);
   assert.match(script, /assignment\.assignment_kind === "participant_start"/);
   assert.match(script, /\["discussion", "讨论"\]/);
@@ -769,8 +769,8 @@ test("personal task filters isolate archives and recover deleted tasks", () => {
 
 test("Human actions exclude queued work and disappear after a response", () => {
   const source = script.slice(script.indexOf("function taskHumanActions("), script.indexOf("function renderTaskAttention("));
-  const actions = new Function("visibleTaskAssignments", "plainTaskExcerpt", "checkpointHumanPrompt",
-    `${source}; return taskHumanActions;`)((p) => p.assignments, (s) => s, (c) => c.question);
+  const actions = new Function("visibleTaskAssignments", "plainTaskExcerpt", "checkpointHumanPrompt", "dateText",
+    `${source}; return taskHumanActions;`)((p) => p.assignments, (s) => s, (c) => c.question, (d) => d || "时间待确认");
   const project = { owner_human_user_id: "owner", status: "active", assignments: [
     { assignment_id: "queued", run_status: "queued", responsible_human_user_id: "member" },
     { assignment_id: "question", run_status: "waiting_human", responsible_human_user_id: "member",
@@ -862,8 +862,8 @@ test("Word and generic PDF files expose previews in both attachment locations", 
 
 test("stale explicitly assigned work offers recovery only to responsible Human or owner", () => {
   const source = script.slice(script.indexOf("function taskHumanActions("), script.indexOf("function renderTaskAttention("));
-  const actions = new Function("visibleTaskAssignments", "plainTaskExcerpt", "checkpointHumanPrompt",
-    `${source}; return taskHumanActions;`)((p) => p.assignments, (s) => s, (c) => c.question);
+  const actions = new Function("visibleTaskAssignments", "plainTaskExcerpt", "checkpointHumanPrompt", "dateText",
+    `${source}; return taskHumanActions;`)((p) => p.assignments, (s) => s, (c) => c.question, (d) => d || "时间待确认");
   const now=Date.parse("2026-09-14T08:00:00Z");
   const project={status:"active",owner_human_user_id:"owner",assignments:[
     {assignment_id:"work",assignment_kind:"human_directed",status:"queued",run_status:"queued",

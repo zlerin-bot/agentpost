@@ -1427,8 +1427,8 @@ function taskHumanActions(project, userId, now = Date.now()) {
     && (owner || String(item.responsible_human_user_id)===String(userId))
     && now-Date.parse(item.updated_at || item.created_at)>=30*60*1000
   ).forEach(item=>actions.push({
-    label:"查看接续方式",title:plainTaskExcerpt(item.instruction,100) || "工作等待接续",
-    reason:"这项工作已等待领取超过30分钟，可在原工作卡补交结果或更换已授权AI。",
+    label:"查看原工作并处理",title:plainTaskExcerpt(item.instruction,100) || "工作等待接续",
+    reason:`原工作自 ${dateText(item.created_at)} 起仍在等待领取，已超过30分钟。请核对是否已完成：已完成可补交结果，需要继续可更换已授权 AI。群内回复不会自动结束原工作。`,
     target:`task-work-${item.assignment_id}`,
   }));
   if (owner && project.status === "awaiting_acceptance") actions.push({
@@ -1793,14 +1793,10 @@ function renderProjectDetail() {
 
   elements.projectCollaborationList.replaceChildren();
   renderLatestTaskCollaboration(project);
-  const workHistory = document.createElement("details");
-  workHistory.className = "task-work-history";
-  const historyLabel = document.createElement("summary");
-  workHistory.append(historyLabel);
-  const historyNote = document.createElement("p");
-  historyNote.textContent = "已完成或连续 7 天无进展的工作收在这里；仅调整展示，未结工作的状态不变。";
-  workHistory.append(historyNote);
-  let historyCount = 0;
+  const workBuckets = [
+    {title: "长期未推进", note: "连续 7 天没有状态更新且尚未结束的工作。请核对是否仍需继续；群内已有回复不会自动结束原工作。", rows: []},
+    {title: "已结束", note: "已完成的工作记录，保留原有结果和状态。", rows: []},
+  ];
   let currentCount = 0;
   const renderedWorkRequirements = new Set();
   visibleAssignments.sort((left, right) => Number(right.run_status === "waiting_human")
@@ -1969,14 +1965,14 @@ function renderProjectDetail() {
       copy.append(responseForm);
     }
     row.append(avatar, copy);
-    if ((historicalTaskWork(project, assignment) || repeatedRequirement) && assignment.run_status !== "waiting_human") {
+    if (historicalTaskWork(project, assignment) && assignment.run_status !== "waiting_human") {
       const history = document.createElement("details");
       history.className = "task-earlier-work";
       const label = document.createElement("summary");
       label.textContent = `${targetHuman} · ${taskAssignmentStatusLabel(assignment)} · ${plainTaskExcerpt(assignment.instruction, 80)} · ${dateText(assignment.created_at)}`;
       history.append(label, row);
-      workHistory.append(history);
-      historyCount += 1;
+      const ended = ["completed", "cancelled"].includes(assignment.status);
+      workBuckets[ended ? 1 : 0].rows.push(history);
     } else {
       elements.projectCollaborationList.append(row);
       currentCount += 1;
@@ -1988,19 +1984,23 @@ function renderProjectDetail() {
     empty.textContent = "暂无近期进行中的明确工作。最新交流请看上方“最新协作”。";
     elements.projectCollaborationList.append(empty);
   }
-  if (historyCount) {
-    historyLabel.textContent = `历史及未结工作 · ${historyCount} 项`;
-    elements.projectCollaborationList.append(workHistory);
-  }
+  workBuckets.forEach(({title, note, rows}) => {
+    if (!rows.length) return;
+    const section = document.createElement("details");
+    section.className = "task-work-history";
+    const label = document.createElement("summary");
+    label.textContent = `${title} · ${rows.length} 项`;
+    const explanation = document.createElement("p");
+    explanation.textContent = note;
+    section.append(label, explanation, ...rows);
+    elements.projectCollaborationList.append(section);
+  });
   const execution = document.createElement("details");
   execution.className = "task-execution-state";
   const executionSummary = document.createElement("summary");
-  const activeExecutionCount = operationalAssignments.filter(
-    (assignment) => !["completed", "cancelled"].includes(assignment.status),
-  ).length;
-  executionSummary.textContent = `AI 执行状态 · ${activeExecutionCount} 个未结束`;
+  executionSummary.textContent = "AI运行详情";
   const executionNote = document.createElement("p");
-  executionNote.textContent = "这里显示领取、唤醒和心跳等技术状态，不等同于业务进展或 Human 验收。";
+  executionNote.textContent = "连接与执行的技术记录，包含参与准备和明确工作。用于排查 AI 为什么没有响应，不是你的待办清单，也不代表 AI 正在执行。";
   execution.append(executionSummary, executionNote);
   operationalAssignments.forEach((assignment) => {
     const item = document.createElement("div");
@@ -2417,9 +2417,28 @@ function renderProjectDetail() {
       const preview = document.createElement("p");
       preview.textContent = `最新回复 · ${latest.actor_display_name || "Human 待确认"}：${plainTaskExcerpt(latest.metadata?.body || activityText(latest), 120)}`;
       const list = document.createElement("div");
-      renderActivitiesInto(discussion, list);
+      const order = document.createElement("button");
+      order.type = "button";
+      order.className = "task-discussion-order";
+      order.textContent = "从头阅读";
+      order.setAttribute("aria-pressed", "false");
+      const orderHint = document.createElement("span");
+      orderHint.textContent = "最新回复在上";
+      const toolbar = document.createElement("div");
+      toolbar.className = "task-discussion-order-bar";
+      toolbar.append(orderHint, order);
+      let chronological = false;
+      renderActivitiesInto([...discussion].reverse(), list);
+      order.addEventListener("click", () => {
+        chronological = !chronological;
+        order.textContent = chronological ? "最新在上" : "从头阅读";
+        order.setAttribute("aria-pressed", String(chronological));
+        orderHint.textContent = chronological ? "按时间从早到晚" : "最新回复在上";
+        // Move existing cards so open readers and unsent reply drafts survive.
+        [...list.children].reverse().forEach(card => list.append(card));
+      });
       summary.append(heading, facts, preview);
-      details.append(summary, list);
+      details.append(summary, toolbar, list);
       elements.projectActivityList.append(details);
       return;
     }
